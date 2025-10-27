@@ -247,3 +247,92 @@ input[type=number]::-webkit-outer-spin-button {
 .title-bar {
     z-index: 100000000;
 }
+
+/* --- ADDED: Custom Dialog Styles --- */
+.dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000; /* High z-index for main menu */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease-in-out;
+}
+.dialog-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.dialog-content {
+    background-color: #3c3c3c;
+    border: 1px solid #555;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    color: #fff;
+    font-size: 1rem; /* A bit larger for the main menu */
+    max-width: 450px;
+    width: 90%;
+    transform: scale(0.95);
+    opacity: 0;
+    transition: transform 0.25s ease-in-out, opacity 0.25s ease-in-out;
+    display: flex;
+    flex-direction: column;
+}
+.dialog-overlay.visible .dialog-content {
+    transform: scale(1);
+    opacity: 1;
+}
+.dialog-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #555;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+.dialog-body {
+    padding: 1.5rem;
+}
+.dialog-body p {
+    margin: 0 0 1rem 0;
+    line-height: 1.6;
+}
+.dialog-body p:last-child {
+    margin-bottom: 0;
+}
+.dialog-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #555;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+/* --- ADDED: Updater Progress Bar Styles --- */
+.progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: #2d2d2d;
+    border: 1px solid #555;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 1rem 0;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 0%; /* Initially 0 */
+    background-color: #007bff;
+    border-radius: 10px;
+    transition: width 0.2s ease-out;
+}
+
+.progress-text {
+    text-align: center;
+    color: #ccc;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}

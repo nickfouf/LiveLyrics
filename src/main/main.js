@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
+const { autoUpdater } = require('electron-updater'); // ADDED
+const log = require('electron-log'); // ADDED
 const path = require('path');
 const fs = require('fs');
 const url = require('url');
@@ -8,6 +10,12 @@ const crypto = require('crypto');
 const archiver = require('archiver');
 const extract = require('extract-zip');
 const { PlaybackManager } = require('./playbackManager'); // ADDED
+
+// --- ADDED: Configure auto-updater logging ---
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = 'info';
+log.info('App starting...');
+// ---
 
 // Define the path for the temporary project folder
 const projectTempPath = path.join(app.getPath('temp'), 'live-lyrics-project');
@@ -66,6 +74,11 @@ function createMainWindow() {
     });
 
     mainWindow.loadFile(htmlPath);
+
+    // ADDED: Check for updates once the window is ready
+    mainWindow.once('ready-to-show', () => {
+        autoUpdater.checkForUpdates();
+    });
 
     const sendMaximizedState = () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -299,6 +312,40 @@ app.whenReady().then(() => {
         sendDisplaysUpdate();
         updateAudienceWindows();
     });
+});
+
+// --- ADDED: Auto-updater event handlers and IPC ---
+
+autoUpdater.on('update-available', (info) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:update-available', info);
+    }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:download-progress', progressObj);
+    }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:update-downloaded', info);
+    }
+});
+
+autoUpdater.on('error', (err) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:error', err);
+    }
+});
+
+ipcMain.on('updater:start-download', () => {
+    autoUpdater.downloadUpdate();
+});
+
+ipcMain.on('updater:quit-and-install', () => {
+    autoUpdater.quitAndInstall();
 });
 
 ipcMain.handle('get-app-version', () => {

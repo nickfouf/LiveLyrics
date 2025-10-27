@@ -73,6 +73,58 @@
         <span id="app-version"></span>
     </div>
 </div>
+
+<!-- ADDED: Updater Dialogs -->
+<div id="updater-dialog-overlay" class="dialog-overlay">
+    <!-- "Update Available" Dialog -->
+    <div id="update-available-dialog" class="dialog-content" style="display: none;">
+        <div class="dialog-header">Update Available</div>
+        <div class="dialog-body">
+            <p>A new version of LiveLyrics is available!</p>
+            <p>Current version: <span id="current-version-span"></span></p>
+            <p>New version: <span id="new-version-span"></span></p>
+        </div>
+        <div class="dialog-footer">
+            <button id="update-later-btn" class="action-btn secondary-btn">Not Now</button>
+            <button id="update-download-btn" class="action-btn primary-btn">Download</button>
+        </div>
+    </div>
+
+    <!-- "Download Progress" Dialog -->
+    <div id="download-progress-dialog" class="dialog-content" style="display: none; max-width: 400px;">
+        <div class="dialog-header">Downloading Update</div>
+        <div class="dialog-body">
+            <p>Please wait while the new version is being downloaded...</p>
+            <div class="progress-bar-container">
+                <div id="download-progress-bar" class="progress-bar-fill"></div>
+            </div>
+            <div id="download-progress-text" class="progress-text"></div>
+        </div>
+    </div>
+
+    <!-- "Download Failed" Dialog -->
+    <div id="download-failed-dialog" class="dialog-content" style="display: none;">
+        <div class="dialog-header">Download Failed</div>
+        <div class="dialog-body">
+            <p>The update failed to download. Please check your internet connection and try again.</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="download-failed-ok-btn" class="action-btn primary-btn">OK</button>
+        </div>
+    </div>
+
+    <!-- "Download Succeeded" Dialog -->
+    <div id="update-ready-dialog" class="dialog-content" style="display: none;">
+        <div class="dialog-header">Update Ready to Install</div>
+        <div class="dialog-body">
+            <p>The new version has been downloaded. Restart the application to apply the update.</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="update-restart-later-btn" class="action-btn secondary-btn">Later</button>
+            <button id="update-restart-now-btn" class="action-btn primary-btn">Restart Now</button>
+        </div>
+    </div>
+</div>
 <script src="../js/renderer.js"></script>
 </body>
 </html>
