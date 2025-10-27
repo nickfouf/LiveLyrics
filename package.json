@@ -1,0 +1,58 @@
+{
+  "name": "livelyrics",
+  "version": "1.0.0",
+  "description": "A modern and responsive app for editing and displaying lyrics.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "release": "npm run dist -- --publish always"
+  },
+  "keywords": [
+    "electron",
+    "nodejs",
+    "lyrics"
+  ],
+  "author": "Your Name",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "dnm-font-manager": "^0.5.13",
+    "extract-zip": "^2.0.1"
+  },
+  "build": {
+    "appId": "com.yourname.livelyrics",
+    "productName": "LiveLyrics",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "src/renderer/assets/icon.png",
+      "target": "nsis"
+    },
+    "mac": {
+      "icon": "src/renderer/assets/icon.png",
+      "target": "dmg"
+    },
+    "linux": {
+      "icon": "src/renderer/assets/icon.png"
+    },
+    "fileAssociations": [
+      {
+        "ext": "lyx",
+        "name": "LiveLyrics Project",
+        "description": "A project file for the LiveLyrics application.",
+        "icon": "src/renderer/assets/icon.png",
+        "role": "Editor"
+      }
+    ]
+  }
+}

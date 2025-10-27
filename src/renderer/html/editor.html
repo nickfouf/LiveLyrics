@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Editor</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/editor.css">
+</head>
+<body class="no-selection">
+<!-- Custom Title Bar -->
+<div class="title-bar">
+    <div class="title-bar-left">
+        <img src="../assets/icon.png" alt="LiveLyrics Icon" class="icon">
+        <!-- The window title will now be displayed in this span -->
+        <span id="window-title" class="title">Editor</span>
+    </div>
+    <div class="title-bar-right">
+        <button id="minimize-btn" class="title-bar-btn">
+            <img src="../../icons/minimize.svg" alt="Minimize Icon" width="10" height="10">
+        </button>
+        <button id="maximize-btn" class="title-bar-btn is-maximized">
+            <img src="../../icons/maximize.svg" alt="Maximize" class="maximize-icon">
+            <img src="../../icons/restore.svg" alt="Restore" class="restore-icon">
+        </button>
+        <button id="close-btn" class="title-bar-btn">
+            <img src="../../icons/close.svg" alt="Close" class="close-icon">
+        </button>
+    </div>
+</div>
+<!-- Page Containers -->
+<div id="main-menu-page" class="page active">
+    <div class="centered-content">
+        <h1>LiveLyrics Editor</h1>
+        <div class="editor-menu">
+            <button id="new-song-btn" class="editor-menu-btn">New Song</button>
+            <button id="open-song-btn" class="editor-menu-btn">Open Song</button>
+            <button id="exit-btn" class="editor-menu-btn">Exit</button>
+        </div>
+    </div>
+</div>
+<div id="new-song-page" class="page">
+    <div class="centered-content">
+        <h1>Create a New Song</h1>
+        <div class="form-container">
+            <div class="form-group">
+                <label for="song-title">Title</label>
+                <input type="text" id="song-title" class="form-input" placeholder="Enter song title...">
+            </div>
+            <div class="form-group">
+                <label for="song-template">Template</label>
+                <select id="song-template" class="form-select">
+                    <option value="default">Default</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button id="back-to-menu-btn" class="action-btn secondary-btn">Back</button>
+                <button id="create-song-btn" class="action-btn primary-btn" disabled>Create Song</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="editor-page" class="page">
+    <!-- Editor Header Menu -->
+    <div class="editor-header">
+        <div class="header-actions">
+            <div class="menubar">
+                <div class="menu-item">
+                    <button class="menu-btn">File</button>
+                    <div class="dropdown-menu">
+                        <a href="#" class="dropdown-item">
+                            <img src="../../icons/new-file.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">New Song...</span>
+                            <span class="dropdown-item-shortcut">Ctrl+N</span>
+                        </a>
+                        <a href="#" class="dropdown-item" id="open-song-menu-btn">
+                            <img src="../../icons/open-folder.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Open Song...</span>
+                            <span class="dropdown-item-shortcut">Ctrl+O</span>
+                        </a>
+                        <hr class="dropdown-divider">
+                        <a href="#" class="dropdown-item" id="save-btn">
+                            <img src="../../icons/save.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Save</span>
+                            <span class="dropdown-item-shortcut">Ctrl+S</span>
+                        </a>
+                        <a href="#" class="dropdown-item" id="save-as-btn">
+                            <img src="../../icons/save-as.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Save As...</span>
+                            <span class="dropdown-item-shortcut">Ctrl+Shift+S</span>
+                        </a>
+                        <hr class="dropdown-divider">
+                        <a href="#" class="dropdown-item" id="close-project-btn">
+                            <img src="../../icons/exit.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Close Project</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="menu-item">
+                    <button class="menu-btn">Edit</button>
+                    <div class="dropdown-menu">
+                        <a href="#" class="dropdown-item disabled">
+                            <img src="../../icons/undo.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Undo</span>
+                            <span class="dropdown-item-shortcut">Ctrl+Z</span>
+                        </a>
+                        <a href="#" class="dropdown-item disabled">
+                            <img src="../../icons/redo.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Redo</span>
+                            <span class="dropdown-item-shortcut">Ctrl+Y</span>
+                        </a>
+                        <hr class="dropdown-divider">
+                        <a href="#" class="dropdown-item disabled">
+                            <img src="../../icons/cut.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Cut</span>
+                            <span class="dropdown-item-shortcut">Ctrl+X</span>
+                        </a>
+                        <a href="#" class="dropdown-item disabled">
+                            <img src="../../icons/copy.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Copy</span>
+                            <span class="dropdown-item-shortcut">Ctrl+C</span>
+                        </a>
+                        <a href="#" class="dropdown-item disabled">
+                            <img src="../../icons/paste.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Paste</span>
+                            <span class="dropdown-item-shortcut">Ctrl+V</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="menu-item">
+                    <button class="menu-btn">Settings</button>
+                    <div class="dropdown-menu">
+                        <a href="#" class="dropdown-item">
+                            <img src="../../icons/settings.svg" alt="" class="dropdown-item-icon">
+                            <span class="dropdown-item-label">Preferences...</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEW TIMELINE and CONTROLS (Absolutely Centered) -->
+        <div class="timeline-container">
+            <div class="playback-controls">
+                <button class="header-btn" id="backward-btn" title="Previous Measure">
+                    <img src="../../icons/backward.svg" alt="Backward">
+                </button>
+                <button class="header-btn" id="play-pause-btn" title="Play">
+                    <img src="../../icons/play.svg" alt="Play" class="play-icon">
+                    <img src="../../icons/pause.svg" alt="Pause" class="pause-icon">
+                </button>
+                <button class="header-btn" id="forward-btn" title="Next Measure">
+                    <img src="../../icons/forward.svg" alt="Forward">
+                </button>
+            </div>
+
+            <div class="header-divider"></div>
+
+            <div class="timeline-bar">
+                <div class="timeline-progress" style="width: 73.33%;"></div>
+                <span>22 / 30</span>
+            </div>
+
+            <div class="header-divider"></div>
+
+            <div class="bpm-control">
+                <div class="custom-select-wrapper">
+                    <div class="custom-select" id="bpm-note-select-custom">
+                        <div class="select-selected" tabindex="0" data-value="q_note">
+                            <img src="../../icons/q_note.svg" alt="Quarter Note">
+                        </div>
+                        <div class="select-items select-hide">
+                            <div data-value="w_note"><img src="../../icons/w_note.svg" alt="Whole Note"></div>
+                            <div data-value="h_note"><img src="../../icons/h_note.svg" alt="Half Note"></div>
+                            <div data-value="q_note"><img src="../../icons/q_note.svg" alt="Quarter Note"></div>
+                            <div data-value="e_note"><img src="../../icons/e_note.svg" alt="Eighth Note"></div>
+                        </div>
+                    </div>
+                </div>
+                <span class="bpm-equals">=</span>
+                <input type="number" id="bpm-value-input" class="form-input" value="120">
+            </div>
+        </div>
+
+        <div class="header-actions-right">
+            <!-- Right-side actions can go here in the future -->
+        </div>
+    </div>
+    <div class="editor-layout">
+        <!-- Handle for Elements Panel -->
+        <div id="elements-panel-handle" class="drawer-handle">
+            <button class="drawer-open-btn">»</button>
+        </div>
+        <!-- Elements Panel (Left) -->
+        <div class="elements-panel">
+            <div id="elements-panel-header" class="drawer-header clickable">
+                <h3>Elements</h3>
+                <span class="drawer-collapse-icon">«</span>
+            </div>
+            <div class="drawer-body">
+                <div class="drawer-group">
+                    <h4>Live Content</h4>
+                    <div class="drawer-element" draggable="true" data-element-type="lyrics">
+                        <div class="element-icon">
+                            <img src="../../icons/lyrics.svg" alt="Lyrics Icon" width="24" height="24">
+
+                        </div>
+                        <span class="element-label">Lyrics</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="orchestra">
+                        <div class="element-icon">
+                            <img src="../../icons/orchestra.svg" alt="Orchestra Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Orchestra</span>
+                    </div>
+                </div>
+                <div class="drawer-group">
+                    <h4>Text</h4>
+                    <div class="drawer-element" draggable="true" data-element-type="title">
+                        <div class="element-icon">
+                            <img src="../../icons/title.svg" alt="Title Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Title</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="text">
+                        <div class="element-icon">
+                            <img src="../../icons/text.svg" alt="Text Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Text</span>
+                    </div>
+                </div>
+                <div class="drawer-group">
+                    <h4>Graphics</h4>
+                    <div class="drawer-element" draggable="true" data-element-type="image">
+                        <div class="element-icon">
+                            <img src="../../icons/image.svg" alt="Image Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Image</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="video">
+                        <div class="element-icon">
+                            <img src="../../icons/video.svg" alt="Video Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Video</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="audio">
+                        <div class="element-icon">
+                            <img src="../../icons/audio.svg" alt="Audio Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Audio</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="smart-effect">
+                        <div class="element-icon">
+                            <img src="../../icons/smart-effect.svg" alt="Smart Effect Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">Smart Effect</span>
+                    </div>
+                </div>
+                <div class="drawer-group">
+                    <h4>Layout</h4>
+                    <div class="drawer-element" draggable="true" data-element-type="vcontainer">
+                        <div class="element-icon">
+                            <img src="../../icons/vcontainer.svg" alt="VContainer Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">VContainer</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="hcontainer">
+                        <div class="element-icon">
+                            <img src="../../icons/hcontainer.svg" alt="HContainer Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">HContainer</span>
+                    </div>
+                    <div class="drawer-element" draggable="true" data-element-type="acontainer">
+                        <div class="element-icon">
+                            <img src="../../icons/acontainer.svg" alt="AContainer Icon" width="24" height="24">
+                        </div>
+                        <span class="element-label">AContainer</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Handle for Events Panel -->
+        <div id="events-panel-handle" class="drawer-handle">
+            <button class="drawer-open-btn">»</button>
+        </div>
+
+        <!-- Events Panel (Left) -->
+        <div class="events-panel">
+            <div id="events-panel-header" class="drawer-header clickable">
+                <h3>Events</h3>
+                <span class="drawer-collapse-icon">«</span>
+            </div>
+            <div class="drawer-body">
+                <div class="drawer-group">
+                    <h4>ELEMENTS ORDER</h4>
+                    <ul id="music-elements-list" class="music-elements-list">
+                        <!-- Music elements will be dynamically rendered here -->
+                    </ul>
+                    <div id="total-measures-display" class="total-measures-display">Total measures: 0</div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Main Editor Area -->
+        <div class="main-editor-area">
+            <div id="empty-page-hint" class="empty-page-hint">This page has 0 measures and will be ignored during playback.</div>
+
+            <!-- REFACTORED STRUCTURE -->
+            <div id="slide-viewport" class="presentation-slide">
+                <!-- This container will hold all page divs -->
+                <div id="staging-page-container"></div>
+                <div id="page-container">
+                    <!-- Page divs will be dynamically generated here by JavaScript -->
+                </div>
+                <!-- MOVED: Resizing Overlay is now inside the slide viewport -->
+                <div id="resizing-overlay">
+                    <div class="resizing-box">
+                        <div class="resizing-text">Resizing<span class="dots"><span></span><span></span><span></span></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Properties Panel (Right) -->
+        <div class="properties-panel">
+            <div id="properties-drawer-header" class="drawer-header clickable">
+                <h3 id="properties-title">Properties</h3>
+                <span class="drawer-collapse-icon">»</span>
+            </div>
+            <div class="properties-body" id="properties-body-content">
+                <!-- DYNAMIC CONTENT GOES HERE -->
+            </div>
+        </div>
+        <!-- Handle for Properties Panel -->
+        <div id="properties-panel-handle" class="drawer-handle">
+            <button class="drawer-open-btn">«</button>
+        </div>
+
+        <!-- Layers Panel (Right) -->
+        <div class="layers-panel">
+            <div id="layers-drawer-header" class="drawer-header clickable">
+                <h3>Layers</h3>
+                <span class="drawer-collapse-icon">»</span>
+            </div>
+            <div class="drawer-body">
+                <ul class="layer-tree">
+                    <!-- DYNAMIC CONTENT GOES HERE -->
+                </ul>
+            </div>
+        </div>
+        <!-- Handle for Layers Panel -->
+        <div id="layers-panel-handle" class="drawer-handle">
+            <button class="drawer-open-btn">«</button>
+        </div>
+    </div>
+
+    <!-- Page Manager (Bottom) -->
+    <div class="page-manager">
+        <div id="page-thumbnails-container" class="page-thumbnails-container">
+            <!-- Thumbnails are generated by editor-renderer.js -->
+        </div>
+        <button class="add-page-btn">+</button>
+    </div>
+
+    <!-- Drop Hint -->
+    <div id="drop-hint" class="drop-hint"></div>
+</div>
+
+<!-- ADDED: Alert Dialog -->
+<div id="alert-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="min-width: 400px; max-width: 600px;">
+        <div id="alert-dialog-header" class="dialog-header">Alert</div>
+        <div class="dialog-body">
+            <p id="alert-dialog-message">Something went wrong.</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="alert-dialog-ok" class="action-btn primary-btn">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADDED: Confirmation Dialog -->
+<div id="confirmation-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="min-width: 400px; max-width: 500px;">
+        <div id="confirmation-dialog-header" class="dialog-header">Confirmation</div>
+        <div class="dialog-body">
+            <p id="confirmation-dialog-message">Are you sure?</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="confirmation-dialog-no" class="action-btn secondary-btn">No</button>
+            <button id="confirmation-dialog-yes" class="action-btn danger-btn">Yes</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADDED: Loading Dialog -->
+<div id="loading-dialog" class="dialog-overlay">
+    <div class="dialog-content">
+        <div class="loading-text" id="loading-dialog-message">Saving...</div>
+    </div>
+</div>
+
+<!-- ADDED: Edit Event Property Dialog -->
+<div id="edit-event-property-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="min-width: 400px;">
+        <div id="eep-dialog-header" class="dialog-header">Edit Property</div>
+        <div id="eep-dialog-body" class="dialog-body">
+            <!-- Dynamic content will be injected here -->
+        </div>
+        <div class="dialog-footer">
+            <button id="eep-dialog-cancel" class="action-btn secondary-btn">Cancel</button>
+            <button id="eep-dialog-ok" class="action-btn primary-btn">OK</button>
+        </div>
+    </div>
+</div>
+
+
+<script src="../js/editor/main.js" type="module"></script>
+</body>
+</html>
+

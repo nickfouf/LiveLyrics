@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="linearTitle">
+    <title id="linearTitle">Linear interpolation icon</title>
+    <rect width="128" height="128" rx="8" fill="none"/>
+    <!-- diagonal straight line -->
+    <path d="M12 116 L116 12" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

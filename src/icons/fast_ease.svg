@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="fastTitle">
+    <title id="fastTitle">t squared ease icon</title>
+    <rect width="128" height="128" rx="8" fill="none"/>
+    <path d="M12 116 Q64 116, 116 12" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+</svg>

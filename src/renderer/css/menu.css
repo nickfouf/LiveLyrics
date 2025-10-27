@@ -1,0 +1,109 @@
+/* --- menu.css --- */
+/* Styles specific to the main menu (index.html) */
+
+.container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    box-sizing: border-box;
+    flex-grow: 1; /* Take remaining vertical space */
+    position: relative; /* Added for positioning context */
+}
+
+/* --- Text Animation (Original Sweeping Gradient) --- */
+.animated-gradient-text {
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+    background: linear-gradient(
+            -45deg,
+            #007bff,      /* Base blue */
+            #80bfff 48%, /* Lighter tint leading to the spark */
+            #ffffff 50%, /* Sharp white spark */
+            #80bfff 52%, /* Lighter tint fading from the spark */
+            #007bff       /* Base blue, repeated for a seamless loop */
+    );
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-flow 8s linear infinite;
+}
+
+@keyframes gradient-flow {
+    0% {
+        background-position: 300% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+
+/* --- Icon Animation (Synchronized Color Pulse) --- */
+.animated-color-icon {
+    width: 100%;
+    height: 100%;
+    background-color: #007bff; /* Start with base blue */
+    /* This animation is timed to match the text's gradient sweep */
+    animation: sync-pulse 4s linear infinite;
+    animation-delay: 0.5s; /* Start slightly after the text spark */
+}
+
+/*
+  This animation syncs with the text's "spark" by hitting the
+  white color at the 50% mark of its 8-second cycle.
+*/
+@keyframes sync-pulse {
+    0% { background-color: #007bff; }
+    50% { background-color: #80bfff; }
+    100% { background-color: #007bff; }
+}
+
+
+/* --- Common Button & Layout Styles --- */
+.menu-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+.menu-btn {
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 5px;
+    background-color: #4a4a4a;
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    /* Arrange icon and text side-by-side */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* Add some space between the icon and the text */
+    gap: 8px;
+}
+
+.menu-btn:hover {
+    background-color: #5a5a5a;
+}
+
+.menu-icon {
+    /* Set a specific size for the icons */
+    width: 24px;
+    height: 24px;
+}
+
+/* --- Version Display --- */
+.version-container {
+    position: absolute;
+    bottom: 10px;
+    right: 15px;
+    font-size: 0.75rem;
+    color: #666;
+    -webkit-app-region: no-drag; /* Ensure it's not part of the draggable title bar region */
+}
