@@ -1,8 +1,12 @@
 {
   "name": "livelyrics",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "A modern and responsive app for editing and displaying lyrics.",
   "main": "src/main/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nickfouf/LiveLyrics.git"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
@@ -62,7 +66,8 @@
       {
         "provider": "github",
         "owner": "nickfouf",
-        "repo": "LiveLyrics"
+        "repo": "LiveLyrics",
+        "releaseType": "release"
       }
     ]
   }
