@@ -1,6 +1,6 @@
 {
   "name": "livelyrics",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A modern and responsive app for editing and displaying lyrics.",
   "main": "src/main/main.js",
   "repository": {
@@ -12,7 +12,11 @@
     "dist": "electron-builder",
     "release": "dotenv -- electron-builder --publish always"
   },
-  "keywords": ["electron", "nodejs", "lyrics"],
+  "keywords": [
+    "electron",
+    "nodejs",
+    "lyrics"
+  ],
   "author": "Your Name",
   "license": "ISC",
   "devDependencies": {
