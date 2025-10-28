@@ -44,7 +44,12 @@
     ],
     "win": {
       "icon": "src/renderer/assets/icon.png",
-      "target": "nsis"
+      "target": "nsis",
+      "nsis": {
+        "oneClick": false,
+        "perMachine": true,
+        "allowToChangeInstallationDirectory": true
+      }
     },
     "mac": {
       "icon": "src/renderer/assets/icon.png",
