@@ -1,0 +1,535 @@
+/* --- player.css --- */
+/* Styles specific to the player window */
+
+html, body {
+    height: 100vh;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+/* MODIFIED: Player Layout is now a flex container for panels */
+.player-layout {
+    display: flex;
+    flex-grow: 1;
+    overflow: hidden;
+    height: calc(100% - 32px); /* Full height minus title bar */
+}
+
+/* MODIFIED: Songs Manager Panel (Left) */
+.songs-manager-panel {
+    width: 280px; /* Give it a fixed width */
+    background-color: #252526;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease-in-out;
+    overflow: hidden;
+    border-right: 1px solid #444;
+}
+
+/* ADDED: Collapsed state for left panel */
+.songs-manager-panel.collapsed {
+    width: 0;
+    border-right: none;
+}
+
+.songs-manager-panel .drawer-header {
+    padding: 0 1rem;
+    height: 50px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #444;
+    flex-shrink: 0;
+    transition: background-color 0.2s;
+}
+
+.songs-manager-panel .drawer-header.clickable {
+    cursor: pointer;
+}
+
+.songs-manager-panel .drawer-header.clickable:hover {
+    background-color: #3c3c3c;
+}
+
+.songs-manager-panel .drawer-collapse-icon {
+    color: #ccc;
+    font-size: 1.5rem;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.songs-manager-panel .drawer-header.clickable:hover .drawer-collapse-icon {
+    color: #fff;
+}
+
+.songs-manager-panel .drawer-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+
+.songs-manager-panel .drawer-body {
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Pushes the button to the bottom */
+    flex-grow: 1;
+    overflow-y: auto; /* Allow body to scroll if content overflows */
+}
+
+.song-playlist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.song-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.8rem;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    background-color: #3c3c3c;
+    transition: all 0.2s ease-in-out;
+    position: relative;
+}
+
+.song-item:hover {
+    background-color: #4a4a4a;
+    border-color: #555;
+}
+
+.song-item.active {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
+}
+
+/* MODIFIED: Style for highlighting a duplicate song with a distinctive yellow-orange */
+.song-item.highlight-duplicate {
+    background-color: #f3a412; /* A rich, distinctive golden-orange */
+    border-color: #f3a412;
+    transition: background-color 0.2s ease-in, border-color 0.2s ease-in;
+}
+
+.song-details {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 0; /* Crucial for child ellipsis to work correctly */
+    padding-right: 30px; /* Space for the absolute-positioned delete button */
+}
+
+.song-title-primary {
+    font-size: 0.95rem;
+    color: #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.song-path-secondary {
+    font-size: 0.75rem;
+    color: #a0a0a0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* CSS trick for middle-ellipsis effect */
+    direction: rtl;
+    text-align: left;
+}
+
+.delete-song-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    background-color: #555;
+    color: #ccc;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+.song-item:hover .delete-song-btn {
+    opacity: 1;
+}
+
+.delete-song-btn:hover {
+    background-color: #e81123;
+    color: white;
+}
+
+
+/* Drag and Drop styles for the playlist */
+.song-item.dragging {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+.song-item.drag-over-before {
+    border-top: 2px solid #ff00e5;
+}
+
+.song-item.drag-over-after {
+    border-bottom: 2px solid #ff00e5;
+}
+
+/* --- ADDED: Drawer Handles (copied from editor.css) --- */
+.drawer-handle {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    background-color: #252526;
+    flex-shrink: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: width 0.2s ease-in-out, opacity 0.2s ease-in-out, background-color 0.2s;
+}
+
+.drawer-handle:hover {
+    background-color: #3c3c3c;
+}
+
+.drawer-open-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+#configuration-panel-handle {
+    border-left: 1px solid #444;
+}
+
+#songs-manager-panel-handle {
+    border-right: 1px solid #444;
+}
+
+/* Show handle when its preceding sibling drawer is collapsed */
+#songs-manager-panel-handle.visible,
+.configuration-panel.collapsed + #configuration-panel-handle {
+    width: 28px;
+    opacity: 1;
+}
+
+/* --- ADDED: Configuration Panel (Right) - similar to editor's properties-panel --- */
+.configuration-panel {
+    width: 280px;
+    background-color: #252526;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease-in-out;
+    overflow: hidden;
+    border-left: 1px solid #444;
+}
+
+.configuration-panel.collapsed {
+    width: 0;
+    border-left: none;
+}
+
+.configuration-panel .drawer-header {
+    padding: 0 1rem;
+    height: 50px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #444;
+    flex-shrink: 0;
+    transition: background-color 0.2s;
+}
+
+.configuration-panel .drawer-header.clickable {
+    cursor: pointer;
+}
+
+.configuration-panel .drawer-header.clickable:hover {
+    background-color: #3c3c3c;
+}
+
+.configuration-panel .drawer-collapse-icon {
+    color: #ccc;
+    font-size: 1.5rem;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.configuration-panel .drawer-header.clickable:hover .drawer-collapse-icon {
+    color: #fff;
+}
+
+.configuration-panel .drawer-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+.configuration-panel .drawer-body {
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem; /* Space between groups */
+}
+
+/* ADDED: Drawer Group styles (from editor.css) */
+.drawer-group h4 {
+    color: #888;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #444;
+}
+
+/* ADDED: Styles for the new Display Status section */
+.display-status-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.85rem;
+    color: #ccc;
+}
+.display-status-list li {
+    padding: 4px 0;
+}
+.display-status-list .display-label {
+    font-weight: bold;
+    color: #aaa;
+}
+.display-status-list .display-name {
+    padding: 4px 8px;
+    background-color: #3c3c3c;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 4px;
+}
+.audience-display-list {
+    list-style: disc;
+    padding-left: 20px;
+    margin-top: 4px;
+}
+.audience-display-list li {
+    padding: 2px 0;
+}
+
+
+/* ADDED: Volume Slider Styles */
+.volume-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.volume-slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: #555;
+    outline: none;
+    opacity: 0.7;
+    transition: opacity .2s;
+    cursor: pointer;
+}
+
+.volume-slider:hover {
+    opacity: 1;
+}
+
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    border: none;
+}
+#volume-level-display {
+    color: #ccc;
+    font-size: 0.9rem;
+    min-width: 40px; /* Prevent layout shift */
+    text-align: right;
+}
+
+.device-info-container {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.8rem;
+    align-items: center;
+}
+
+.info-item .info-label {
+    font-weight: bold;
+    color: #aaa;
+    font-size: 0.85rem;
+}
+
+.info-item .info-value {
+    color: #ddd;
+    font-size: 0.85rem;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-value {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.status-indicator.offline {
+    background-color: #dc3545; /* Red */
+}
+
+.status-indicator.online {
+    background-color: #28a745; /* Green */
+}
+
+/* --- NEW: Device List Dialog Styles --- */
+.device-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.device-list-item {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.device-list-item:not(:last-child) {
+    border-bottom: 1px solid #4a4a4a;
+}
+
+.device-list-item:hover {
+    background-color: #4a4a4a;
+}
+
+.device-list-details {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0; /* For ellipsis */
+}
+
+.device-name {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+.device-ips {
+    font-size: 0.8rem;
+    color: #a0a0a0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pair-btn {
+    padding: 0.5rem 1.2rem;
+    font-size: 0.9rem;
+    margin-left: 1rem;
+    flex-shrink: 0;
+}
+
+
+/* --- Renderer Area (Right) --- */
+.renderer-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #2d2d2d;
+    overflow: hidden;
+}
+
+.player-header {
+    height: 50px;
+    flex-shrink: 0;
+    background-color: #252526;
+    border-bottom: 1px solid #444;
+    display: flex;
+    justify-content: center; /* Center the timeline controls */
+    align-items: center;
+    position: relative;
+}
+
+.player-viewport {
+    flex-grow: 1;
+    padding: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Ensure the player's slide viewport takes up the available space */
+.player-viewport .presentation-slide {
+    width: 100%;
+    height: 100%;
+}
+
+.drawer-body {
+    gap: 0.5rem;
+}
+
+/* Indexing */
+.player-header {
+    z-index: 10;
+}

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LiveLyrics Player</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/editor.css"> <!-- Reusing editor styles -->
+    <link rel="stylesheet" href="../css/player.css">
+</head>
+<body class="no-selection">
+<!-- Custom Title Bar -->
+<div class="title-bar">
+    <div class="title-bar-left">
+        <img src="../assets/icon.png" alt="LiveLyrics Icon" class="icon">
+        <span id="window-title" class="title">Player</span>
+    </div>
+    <div class="title-bar-right">
+        <button id="minimize-btn" class="title-bar-btn">
+            <img src="../../icons/minimize.svg" alt="Minimize" class="minimize-icon">
+        </button>
+        <button id="maximize-btn" class="title-bar-btn">
+            <img src="../../icons/maximize.svg" alt="Maximize" class="maximize-icon">
+            <img src="../../icons/restore.svg" alt="Restore" class="restore-icon">
+        </button>
+        <button id="close-btn" class="title-bar-btn">
+            <img src="../../icons/close.svg" alt="Close" class="close-icon">
+        </button>
+    </div>
+</div>
+
+<!-- Main Player Layout -->
+<div class="player-layout">
+    <!-- Handle for Songs Manager Panel -->
+    <div id="songs-manager-panel-handle" class="drawer-handle">
+        <button class="drawer-open-btn">»</button>
+    </div>
+
+    <!-- Left Panel: Songs Manager -->
+    <div id="songs-manager-panel" class="songs-manager-panel">
+        <div id="songs-manager-panel-header" class="drawer-header clickable">
+            <h3>Songs Manager</h3>
+            <span class="drawer-collapse-icon">«</span>
+        </div>
+        <div class="drawer-body">
+            <ul id="song-playlist" class="song-playlist">
+                <!-- Song items will be dynamically added here -->
+            </ul>
+            <button id="add-song-btn" class="action-btn secondary-btn" style="width: 100%;">+ Add Song</button>
+        </div>
+    </div>
+
+    <!-- Right Area: Renderer and Controls -->
+    <div class="renderer-area">
+        <!-- Top Controls (reusing editor structure) -->
+        <div class="player-header">
+            <div class="timeline-container">
+                <div class="playback-controls">
+                    <button class="header-btn" id="backward-btn" title="Previous Measure" disabled>
+                        <img src="../../icons/backward.svg" alt="Backward">
+                    </button>
+                    <button class="header-btn" id="play-pause-btn" title="Play" disabled>
+                        <img src="../../icons/play.svg" alt="Play" class="play-icon">
+                        <img src="../../icons/pause.svg" alt="Pause" class="pause-icon">
+                    </button>
+                    <button class="header-btn" id="forward-btn" title="Next Measure" disabled>
+                        <img src="../../icons/forward.svg" alt="Forward">
+                    </button>
+                </div>
+                <div class="header-divider"></div>
+                <div class="timeline-bar">
+                    <div class="timeline-progress" style="width: 0%;"></div>
+                    <span>- | - | ----</span>
+                </div>
+                <div class="header-divider"></div>
+                <div class="bpm-control">
+                    <div class="custom-select-wrapper">
+                        <div class="custom-select" id="bpm-note-select-custom">
+                            <div class="select-selected" tabindex="-1" data-value="q_note">
+                                <img src="../../icons/q_note.svg" alt="Quarter Note">
+                            </div>
+                            <div class="select-items select-hide">
+                                <div data-value="w_note"><img src="../../icons/w_note.svg" alt="Whole Note"></div>
+                                <div data-value="h_note"><img src="../../icons/h_note.svg" alt="Half Note"></div>
+                                <div data-value="q_note"><img src="../../icons/q_note.svg" alt="Quarter Note"></div>
+                                <div data-value="e_note"><img src="../../icons/e_note.svg" alt="Eighth Note"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <span class="bpm-equals">=</span>
+                    <input type="number" id="bpm-value-input" class="form-input" value="120" disabled>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Viewport -->
+        <div class="player-viewport">
+            <div id="slide-viewport" class="presentation-slide">
+                <div id="page-container">
+                    <!-- The selected song will be rendered here by the DomManager -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Page Manager (reusing editor structure) -->
+        <div class="page-manager">
+            <div id="page-thumbnails-container" class="page-thumbnails-container">
+                <!-- Page thumbnails for the loaded song will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW Right Panel: Configuration -->
+    <div id="configuration-panel" class="configuration-panel">
+        <div id="configuration-panel-header" class="drawer-header clickable">
+            <span class="drawer-collapse-icon">»</span>
+            <h3>Configuration</h3>
+        </div>
+        <div class="drawer-body">
+
+            <!-- Group 1: Display Settings -->
+            <div class="drawer-group">
+                <h4>Display Settings</h4>
+                <div class="form-group">
+                    <label>Presenter's Monitor</label>
+                    <div class="segmented-tabs" id="presenter-monitor-tabs">
+                        <!-- Buttons will be dynamically generated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Group 2: Audio Settings -->
+            <div class="drawer-group">
+                <h4>Audio Settings</h4>
+                <div class="form-group">
+                    <label for="audio-output-device">Output Device</label>
+                    <select id="audio-output-device" class="form-select">
+                        <option>Default System Device</option>
+                        <option>Headphones (Realtek)</option>
+                        <option>Speakers (NVIDIA)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="audio-volume-slider">Volume</label>
+                    <div class="volume-slider-container">
+                        <input type="range" min="0" max="100" value="75" class="volume-slider" id="audio-volume-slider">
+                        <span id="volume-level-display">75%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Group 3: Device Controller -->
+            <div class="drawer-group">
+                <h4>Device Controller</h4>
+                <div class="device-info-container">
+                    <div class="info-item">
+                        <span class="info-label">Status</span>
+                        <div class="info-value status-value">
+                            <span class="status-indicator offline"></span>
+                            <span>Offline</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Device Name</span>
+                        <span class="info-value">Not Connected</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Connections</span>
+                        <span class="info-value">Out: 0 | In: 0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Network</span>
+                        <span class="info-value">↓ 0 KB/s | ↑ 0 KB/s</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">IP Addresses</span>
+                        <span class="info-value">---</span>
+                    </div>
+                </div>
+                <button id="open-device-list-btn" class="action-btn secondary-btn" style="width: 100%;">Open Device List</button>
+            </div>
+        </div>
+    </div>
+    <!-- Handle for Configuration Panel -->
+    <div id="configuration-panel-handle" class="drawer-handle">
+        <button class="drawer-open-btn">«</button>
+    </div>
+</div>
+
+<!-- Dialogs from editor that are needed -->
+<div id="alert-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="min-width: 400px; max-width: 600px;">
+        <div id="alert-dialog-header" class="dialog-header">Alert</div>
+        <div class="dialog-body">
+            <p id="alert-dialog-message">Something went wrong.</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="alert-dialog-ok" class="action-btn danger-btn">OK</button>
+        </div>
+    </div>
+</div>
+<div id="loading-dialog" class="dialog-overlay">
+    <div class="dialog-content">
+        <div class="loading-text" id="loading-dialog-message">Loading...</div>
+    </div>
+</div>
+
+<!-- NEW Dialog for Device List -->
+<div id="device-list-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="width: 500px;">
+        <div class="dialog-header">Available Devices</div>
+        <div class="dialog-body">
+            <ul id="device-list" class="device-list">
+                <!-- Device items will be dynamically added here -->
+            </ul>
+        </div>
+        <div class="dialog-footer">
+            <button id="close-device-list-btn" class="action-btn secondary-btn">Close</button>
+        </div>
+    </div>
+</div>
+
+
+<script src="../js/player/main.js" type="module"></script>
+</body>
+</html>

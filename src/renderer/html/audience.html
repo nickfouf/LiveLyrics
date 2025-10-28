@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audience View</title>
+    <!-- Reusing existing stylesheets for consistency -->
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/editor.css">
+    <link rel="stylesheet" href="../css/player.css">
+    <style>
+        /* Override specific styles for a clean, fullscreen presenter view */
+        html, body {
+            background-color: #000;
+            overflow: hidden;
+        }
+
+        .player-layout, .renderer-area, .player-viewport {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        #slide-viewport {
+            width: 100vw !important;
+            height: 100vh !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="player-layout">
+        <div class="renderer-area">
+            <div class="player-viewport">
+                <div id="slide-viewport" class="presentation-slide">
+                    <div id="page-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="../js/audience/main.js" type="module"></script>
+</body>
+</html>

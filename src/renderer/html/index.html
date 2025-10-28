@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LiveLyrics</title>
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/menu.css">
+</head>
+<body>
+<div class="title-bar">
+    <div class="title-bar-left">
+        <img src="../assets/icon.png" alt="LiveLyrics Icon" class="icon">
+        <span class="title">LiveLyrics</span>
+    </div>
+    <div class="title-bar-right">
+        <button id="minimize-btn" class="title-bar-btn">
+            <img src="../../icons/minimize.svg" alt="Minimize" class="minimize-icon">
+        </button>
+
+
+        <button id="maximize-btn" class="title-bar-btn">
+            <img src="../../icons/maximize.svg" alt="Maximize" class="maximize-icon">
+            <img src="../../icons/restore.svg" alt="Restore" class="restore-icon">
+        </button>
+
+        <button id="close-btn" class="title-bar-btn">
+            <img src="../../icons/close.svg" alt="Close" class="close-icon">
+        </button>
+    </div>
+</div>
+<div class="container">
+    <h1 class="animated-gradient-text">Welcome to LiveLyrics</h1>
+    <div class="menu-buttons">
+        <button id="editor-btn" class="menu-btn">
+            <svg class="menu-icon" viewBox="1.75 1.75 20.5 20.5" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <clipPath id="editor-clip">
+                        <rect x="2.5" y="2.5" width="19" height="19" rx="4" ry="4"/>
+                    </clipPath>
+                </defs>
+                <foreignObject x="0" y="0" width="24" height="24" clip-path="url(#editor-clip)">
+                    <div class="animated-color-icon" xmlns="http://www.w3.org/1999/xhtml"></div>
+                </foreignObject>
+                <g transform="translate(12, 12) scale(0.75) translate(-12, -12)">
+                    <path d="M10.95 17.51C10.66 17.8 10.11 18.08 9.71 18.14L7.25 18.49C7.16 18.5 7.07 18.51 6.98 18.51C6.57 18.51 6.19 18.37 5.92 18.1C5.59 17.77 5.45 17.29 5.53 16.76L5.88 14.3C5.94 13.89 6.21 13.35 6.51 13.06L10.97 8.6C11.05 8.81 11.13 9.02 11.24 9.26C11.34 9.47 11.45 9.69 11.57 9.89C11.67 10.06 11.78 10.22 11.87 10.34C11.98 10.51 12.11 10.67 12.19 10.76C12.24 10.83 12.28 10.88 12.3 10.9C12.55 11.2 12.84 11.48 13.09 11.69C13.16 11.76 13.2 11.8 13.22 11.81C13.37 11.93 13.52 12.05 13.65 12.14C13.81 12.26 13.97 12.37 14.14 12.46C14.34 12.58 14.56 12.69 14.78 12.8C15.01 12.9 15.22 12.99 15.43 13.06L10.95 17.51ZM17.37 11.09L16.45 12.02C16.39 12.08 16.31 12.11 16.23 12.11C16.2 12.11 16.16 12.11 16.14 12.1C14.11 11.52 12.49 9.9 11.91 7.87C11.88 7.76 11.91 7.64 11.99 7.57L12.92 6.64C14.44 5.12 15.89 5.15 17.38 6.64C18.14 7.4 18.51 8.13 18.51 8.89C18.5 9.61 18.13 10.33 17.37 11.09Z" fill="#ffffff"/>
+                </g>
+                <rect x="2.5" y="2.5" width="19" height="19" rx="4" ry="4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+            </svg>
+            Editor
+        </button>
+        <button id="player-btn" class="menu-btn">
+            <svg class="menu-icon" viewBox="-1.5 -0.5 13 14" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <clipPath id="player-clip">
+                        <path d="M18.074,3650.7335 L12.308,3654.6315 C10.903,3655.5815 9,3654.5835 9,3652.8985 L9,3645.1015 C9,3643.4155 10.903,3642.4185 12.308,3643.3685 L18.074,3647.2665 C19.306,3648.0995 19.306,3649.9005 18.074,3650.7335" transform="translate(-9, -3642)"/>
+                    </clipPath>
+                </defs>
+                <foreignObject x="-1.5" y="-0.5" width="13" height="14" clip-path="url(#player-clip)">
+                    <div class="animated-color-icon" xmlns="http://www.w3.org/1999/xhtml"></div>
+                </foreignObject>
+                <path d="M18.074,3650.7335 L12.308,3654.6315 C10.903,3655.5815 9,3654.5835 9,3652.8985 L9,3645.1015 C9,3643.4155 10.903,3642.4185 12.308,3643.3685 L18.074,3647.2665 C19.306,3648.0995 19.306,3649.9005 18.074,3650.7335"
+                      transform="translate(-9, -3642)"
+                      fill="none"
+                      stroke="#fff"
+                      stroke-width="1"
+                      stroke-linejoin="round"
+                      stroke-linecap="round"/>
+            </svg>
+            Player
+        </button>
+    </div>
+    <div class="version-container">
+        <span id="app-version"></span>
+    </div>
+</div>
+
+<!-- ADDED: Updater Dialogs -->
+<div id="updater-dialog-overlay" class="dialog-overlay">
+    <!-- "Update Available" Dialog -->
+    <div id="update-available-dialog" class="dialog-content" style="display: none;">
+        <div class="dialog-header">Update Available</div>
+        <div class="dialog-body">
+            <p>A new version of LiveLyrics is available!</p>
+            <p>Current version: <span id="current-version-span"></span></p>
+            <p>New version: <span id="new-version-span"></span></p>
+        </div>
+        <div class="dialog-footer">
+            <button id="update-later-btn" class="action-btn secondary-btn">Not Now</button>
+            <button id="update-download-btn" class="action-btn primary-btn">Download</button>
+        </div>
+    </div>
+
+    <!-- "Download Progress" Dialog -->
+    <div id="download-progress-dialog" class="dialog-content" style="display: none; max-width: 400px;">
+        <div class="dialog-header">Downloading Update</div>
+        <div class="dialog-body">
+            <p>Please wait while the new version is being downloaded...</p>
+            <div class="progress-bar-container">
+                <div id="download-progress-bar" class="progress-bar-fill"></div>
+            </div>
+            <div id="download-progress-text" class="progress-text"></div>
+        </div>
+    </div>
+
+    <!-- "Download Failed" Dialog -->
+    <div id="download-failed-dialog" class="dialog-content" style="display: none;">
+        <div class="dialog-header">Download Failed</div>
+        <div class="dialog-body">
+            <p>The update failed to download. Please check your internet connection and try again.</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="download-failed-ok-btn" class="action-btn primary-btn">OK</button>
+        </div>
+    </div>
+
+    <!-- "Download Succeeded" Dialog -->
+    <div id="update-ready-dialog" class="dialog-content" style="display: none;">
+        <div class="dialog-header">Update Ready to Install</div>
+        <div class="dialog-body">
+            <p>The new version has been downloaded. Restart the application to apply the update.</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="update-restart-later-btn" class="action-btn secondary-btn">Later</button>
+            <button id="update-restart-now-btn" class="action-btn primary-btn">Restart Now</button>
+        </div>
+    </div>
+</div>
+<script src="../js/renderer.js"></script>
+</body>
+</html>
