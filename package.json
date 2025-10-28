@@ -43,16 +43,16 @@
       "package.json"
     ],
     "win": {
-      "icon": "src/renderer/assets/icon.png",
+      "icon": "src/renderer/assets/icon.ico",
       "target": "nsis",
       "verifyUpdateCodeSignature": false
     },
     "mac": {
-      "icon": "src/renderer/assets/icon.png",
+      "icon": "src/renderer/assets/icon.ico",
       "target": "dmg"
     },
     "linux": {
-      "icon": "src/renderer/assets/icon.png"
+      "icon": "src/renderer/assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -64,7 +64,7 @@
         "ext": "lyx",
         "name": "LiveLyrics Project",
         "description": "A project file for the LiveLyrics application.",
-        "icon": "src/renderer/assets/icon.png",
+        "icon": "src/renderer/assets/icon.ico",
         "role": "Editor"
       }
     ],
