@@ -4,6 +4,9 @@
 # Build artifacts
 /dist
 
+# Certificates
+/certs
+
 # Environment variables
 .env
 
