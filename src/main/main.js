@@ -56,7 +56,7 @@ function sendDisplaysUpdate() {
 function createMainWindow() {
     const preloadScriptPath = path.join(app.getAppPath(), 'src', 'main', 'preload.js');
     const htmlPath = path.join(app.getAppPath(), 'src', 'renderer', 'html', 'index.html');
-    const iconPath = path.join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.png');
+    const iconPath = path.join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.ico');
 
     console.log(`[Main] Loading mainWindow. Preload path: ${preloadScriptPath}`);
     console.log(`[Main] Loading mainWindow. HTML path: ${htmlPath}`);
@@ -103,7 +103,7 @@ function createMainWindow() {
 function createEditorWindow() {
     const preloadScriptPath = path.join(app.getAppPath(), 'src', 'main', 'preload-editor.js');
     const htmlPath = path.join(app.getAppPath(), 'src', 'renderer', 'html', 'editor.html');
-    const iconPath = path.join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.png');
+    const iconPath = path.join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.ico');
 
     console.log(`[Main] Loading editorWindow. Preload path: ${preloadScriptPath}`);
 
@@ -137,7 +137,7 @@ function createEditorWindow() {
 function createPlayerWindow() {
     const preloadScriptPath = path.join(app.getAppPath(), 'src', 'main', 'preload-player.js');
     const htmlPath = path.join(app.getAppPath(), 'src', 'renderer', 'html', 'player.html');
-    const iconPath = path.join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.png');
+    const iconPath = path.join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.ico');
 
     console.log(`[Main] Loading playerWindow. Preload path: ${preloadScriptPath}`);
 
