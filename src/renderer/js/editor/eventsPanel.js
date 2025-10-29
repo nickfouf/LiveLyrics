@@ -86,6 +86,7 @@ export function renderEventsPanel() {
                 <label for="page-transition-type">Type</label>
                 <select id="page-transition-type" class="form-select">
                     <option value="fade" ${initialTransition.type === 'fade' ? 'selected' : ''}>Fade</option>
+                    <option value="dip-to-black" ${initialTransition.type === 'dip-to-black' ? 'selected' : ''}>Dip to Black</option>
                     <option value="push" ${initialTransition.type === 'push' ? 'selected' : ''}>Push</option>
                     <option value="flip" ${initialTransition.type === 'flip' ? 'selected' : ''}>Flip</option>
                     <option value="cube" ${initialTransition.type === 'cube' ? 'selected' : ''}>Cube</option>
@@ -104,7 +105,7 @@ export function renderEventsPanel() {
             const transition = activePage.transition; // FIX: Read the latest transition state
             transition.type = currentType;
 
-            if (currentType === 'fade' || currentType === 'push' || currentType === 'flip' || currentType === 'cube') {
+            if (currentType === 'fade' || currentType === 'dip-to-black' || currentType === 'push' || currentType === 'flip' || currentType === 'cube') {
                 transitionPropertiesContainer.innerHTML += `
                     <div class="form-group">
                         <label for="page-transition-duration">Duration</label>
@@ -348,4 +349,3 @@ export function initEventsPanelInteractions() {
         }
     });
 }
-

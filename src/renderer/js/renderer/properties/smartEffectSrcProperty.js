@@ -68,14 +68,13 @@ export class SmartEffectSrcProperty extends VirtualProperty {
     }
 
     /**
-     * ADDED: Custom serialization to include the full effect data.
-     * This ensures the effect's JSON content is saved within the song file.
+     * MODIFIED: Custom serialization to only save the source path and alias.
+     * The effect data will be reloaded from the source file when the project is opened.
      */
     toJSON() {
         return {
             src: this.#src.getDefaultValue(),
             alias: this.#alias.getDefaultValue(),
-            effectData: this.#effectData.effectData
         };
     }
 
@@ -110,4 +109,4 @@ export class SmartEffectSrcProperty extends VirtualProperty {
         //     this.#effectData.applyDifferences(element);
         // }
     }
-}
+}

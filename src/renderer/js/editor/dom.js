@@ -14,6 +14,7 @@ export const DOM = {
     // Main Menu
     newSongBtn: null,
     openSongBtn: null,
+    editorBackToMainBtn: null,
     exitBtn: null,
 
     // New Song
@@ -22,6 +23,7 @@ export const DOM = {
     createSongBtn: null,
 
     // Editor Header
+    backToMainMenuBtn: null,
     closeProjectBtn: null,
     bpmValueInput: null,
     playPauseBtn: null,
@@ -56,6 +58,7 @@ export const DOM = {
     totalMeasuresDisplay: null,
 
     // Main Viewport
+    slideViewportWrapper: null, // ADDED
     presentationSlide: null,
     pageContainer: null,
     stagingPageContainer: null,
@@ -88,6 +91,7 @@ export function initDOM() {
     // Main Menu
     DOM.newSongBtn = document.getElementById('new-song-btn');
     DOM.openSongBtn = document.getElementById('open-song-btn');
+    DOM.editorBackToMainBtn = document.getElementById('editor-back-to-main-btn');
     DOM.exitBtn = document.getElementById('exit-btn');
 
     // New Song
@@ -96,6 +100,7 @@ export function initDOM() {
     DOM.createSongBtn = document.getElementById('create-song-btn');
 
     // Editor Header
+    DOM.backToMainMenuBtn = document.getElementById('back-to-main-menu-btn');
     DOM.closeProjectBtn = document.getElementById('close-project-btn');
     DOM.bpmValueInput = document.getElementById('bpm-value-input');
     DOM.playPauseBtn = document.getElementById('play-pause-btn');
@@ -128,6 +133,7 @@ export function initDOM() {
     DOM.totalMeasuresDisplay = document.getElementById('total-measures-display');
 
     // Main Viewport
+    DOM.slideViewportWrapper = document.getElementById('slide-viewport-wrapper'); // ADDED
     DOM.presentationSlide = document.getElementById('slide-viewport');
     DOM.pageContainer = document.getElementById('page-container');
     DOM.stagingPageContainer = document.getElementById('staging-page-container');

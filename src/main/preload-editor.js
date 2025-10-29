@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('editorAPI', {
     minimizeWindow: () => ipcRenderer.send('minimize-editor-window'),
     maximizeWindow: () => ipcRenderer.send('maximize-editor-window'),
     closeWindow: () => ipcRenderer.send('close-editor-window'),
+    goToMainMenu: () => ipcRenderer.send('go-to-main-menu'),
     setTitle: (title) => ipcRenderer.send('set-editor-title', title),
     onWindowStateChange: (callback) => ipcRenderer.on('editor-window-maximized-state', (_event, value) => callback(value)),
 
@@ -21,4 +22,6 @@ contextBridge.exposeInMainWorld('editorAPI', {
     cleanUnusedAssets: (usedAssets) => ipcRenderer.invoke('project:cleanUnusedAssets'),
     saveProject: (filePath, data) => ipcRenderer.invoke('project:save', filePath, data),
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
+    onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
+    notifyReady: () => ipcRenderer.send('editor:ready'),
 });

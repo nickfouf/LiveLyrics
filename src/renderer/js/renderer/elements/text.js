@@ -56,9 +56,14 @@ export class VirtualText extends VirtualElement {
         const escapedText = escapeHTML(initialText);
         textElement.innerHTML = escapedText.replace(/\n/g, '<br>');
 
+        const defaultTextStyle = {
+            fontSize: { value: 30, unit: 'px' }
+        };
+        const finalTextStyle = { ...defaultTextStyle, ...(options.textStyle || {}) };
+
         this.setProperty('background', new BackgroundProperty({ enabled: false }));
         this.setProperty('textContent', new TextContentProperty(initialText));
-        this.setProperty('textStyle', new TextStyleProperty(options.textStyle));
+        this.setProperty('textStyle', new TextStyleProperty(finalTextStyle));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {width: {value:100, unit:'auto'}, height: {value:100, unit:'auto'}}));
         this.setProperty('margin', new MarginProperty(options.margin));

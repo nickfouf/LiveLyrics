@@ -4,7 +4,7 @@ import { NameProperty } from "../properties/name.js";
 export class VirtualTitle extends VirtualText {
     constructor(options = {}, name = 'Title') {
         const defaultTitleStyle = {
-            fontSize: { value: 32, unit: 'px' },
+            fontSize: { value: 60, unit: 'px' },
             fontWeight: 'bold',
             textAlign: 'center'
         };

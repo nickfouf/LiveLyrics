@@ -42,7 +42,7 @@ export class VirtualOrchestra extends VirtualElement {
         }));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {
             width: { value: 80, unit: 'pw' },
-            height: { value: 65, unit: 'px' }
+            height: { value: 70, unit: 'px' }
         }));
         this.setProperty('border', new BorderProperty(options.border || {
             enabled: true,
@@ -185,4 +185,4 @@ function findLastIndex(array, predicate) {
         }
     }
     return -1;
-}
+}

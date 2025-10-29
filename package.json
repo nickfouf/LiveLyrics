@@ -44,7 +44,10 @@
     ],
     "win": {
       "icon": "src/renderer/assets/icon.ico",
-      "target": "nsis",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "verifyUpdateCodeSignature": false
     },
     "mac": {
@@ -56,7 +59,7 @@
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": true,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true
     },
     "fileAssociations": [
@@ -78,3 +81,4 @@
     ]
   }
 }
+

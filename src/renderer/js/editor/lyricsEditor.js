@@ -863,4 +863,4 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     renderMeasures();
     updateDeleteButtonState();
     lyricsEditorDialog.classList.add('visible');
-}
+}

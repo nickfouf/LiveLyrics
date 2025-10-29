@@ -42,9 +42,14 @@ export class VirtualLyrics extends VirtualElement {
         shadowRoot.appendChild(style);
         shadowRoot.appendChild(svg);
 
+        const defaultTextStyle = {
+            fontSize: { value: 42, unit: 'px' }
+        };
+        const finalTextStyle = { ...defaultTextStyle, ...(options.textStyle || {}) };
+
         this.setProperty('background', new BackgroundProperty({ enabled: false }));
         this.setProperty('lyricsContent', new LyricsContentProperty(lyricsContentData));
-        this.setProperty('textStyle', new TextStyleLyricsProperty(options.textStyle));
+        this.setProperty('textStyle', new TextStyleLyricsProperty(finalTextStyle));
         this.setProperty('highlightedPercentage', new HighlightedPercentage(options.highlightedPercentage));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {

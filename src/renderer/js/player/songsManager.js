@@ -10,7 +10,7 @@ import { VirtualTitle } from '../renderer/elements/title.js';
 import { VirtualText } from '../renderer/elements/text.js';
 import { DOM } from './dom.js';
 
-let songPlaylist = []; // Array to hold { id, title, filePath, songData };
+export let songPlaylist = []; // Array to hold { id, title, filePath, songData };
 let playlistElement;
 
 /**
@@ -73,9 +73,9 @@ function showDefaultPlayerView() {
     container.getProperty('gravity').setJustifyContent('center', true);
     container.getProperty('gravity').setAlignItems('center', true);
     container.getProperty('gap').setGap({ value: 20, unit: 'px' }, true);
-    title.getProperty('textStyle').setFontSize({ value: 32, unit: 'px' }, true);
+    title.getProperty('textStyle').setFontSize({ value: 64, unit: 'px' }, true);
     title.getProperty('textStyle').setTextAlign('center', true);
-    text.getProperty('textStyle').setFontSize({ value: 18, unit: 'px' }, true);
+    text.getProperty('textStyle').setFontSize({ value: 30, unit: 'px' }, true);
     text.getProperty('textStyle').setTextColor({ r: 200, g: 200, b: 200, a: 1, mode: 'color' }, true);
     text.getProperty('textStyle').setTextAlign('center', true);
 
@@ -83,6 +83,8 @@ function showDefaultPlayerView() {
     container.addElement(title);
     container.addElement(text);
     defaultPage.addElement(container);
+
+    state.domManager.addPage(defaultPage);
 
     updateState({
         song: {
@@ -112,6 +114,8 @@ function showDefaultPlayerView() {
         DOM.pageThumbnailsContainer.innerHTML = '';
     }
 
+    window.DOM = DOM; // For debugging
+    window.state = state; // For debugging
     document.getElementById('window-title').innerText = "Player";
     document.getElementById('play-pause-btn').disabled = true;
     document.getElementById('backward-btn').disabled = true;
@@ -148,7 +152,7 @@ function clearRenderer() {
     window.playerAPI.unloadSong();
 }
 
-export async function handleSongLoaded(song) {
+async function handleSongLoaded(song) {
     showLoadingDialog('Loading song...');
     try {
         if (DOM.pageManager) {
@@ -239,7 +243,7 @@ export async function handleSongLoaded(song) {
     }
 }
 
-export function handleSongUnloaded() {
+function handleSongUnloaded() {
     updateState({ activeSongId: null });
     renderPlaylist();
     showDefaultPlayerView();
@@ -289,11 +293,17 @@ async function handleAddSong() {
 
     showLoadingDialog("Opening project...");
     try {
-        const songData = await window.playerAPI.openProject(filePath);
+        const result = await window.playerAPI.openProject(filePath);
+
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+        const songData = result.data;
 
         // MODIFIED: Validate that the song has measures before adding it.
         if (!songDataHasMeasures(songData)) {
             await showAlertDialog('Loading song failed', 'The selected song project does not contain any measures and cannot be played.');
+            hideLoadingDialog(); // Hide dialog after showing the specific alert
             return;
         }
 
@@ -309,14 +319,59 @@ async function handleAddSong() {
 
     } catch (error) {
         console.error('Failed to open project:', error);
+        hideLoadingDialog(); // Hide dialog on failure, BEFORE showing alert
+        await showAlertDialog('Failed to Open Project', error.message);
+    }
+}
+
+/**
+ * ADDED: Opens a project from a given file path and adds it to the playlist.
+ * @param {string} filePath The path of the song file to add.
+ */
+async function addSongFromPath(filePath) {
+    if (!filePath) return;
+
+    // Check if the song already exists in the playlist
+    const existingSong = songPlaylist.find(song => song.filePath === filePath);
+    if (existingSong) {
+        const songItemElement = playlistElement.querySelector(`[data-song-id="${existingSong.id}"]`);
+        if (songItemElement) {
+            songItemElement.classList.add('highlight-duplicate');
+            setTimeout(() => songItemElement.classList.remove('highlight-duplicate'), 1000);
+        }
+        // If the song isn't already the active one, load it.
+        if (state.activeSongId !== existingSong.id) {
+            await loadSong(existingSong.id);
+        }
+        return;
+    }
+
+    showLoadingDialog("Opening project...");
+    try {
+        const result = await window.playerAPI.openProject(filePath);
+
+        if (!result.success) throw new Error(result.error);
+
+        const songData = result.data;
+        if (!songDataHasMeasures(songData)) {
+            throw new Error('The selected song project does not contain any measures and cannot be played.');
+        }
+
+        const songId = `song-${Date.now()}`;
+        const title = filePath.split(/[\\/]/).pop().replace(/\.lyx$/, '');
+        const newSong = { id: songId, title, filePath, songData };
+        songPlaylist.push(newSong);
+
+        await loadSong(songId);
+    } catch (error) {
+        console.error('Failed to open project from path:', error);
         await showAlertDialog('Failed to Open Project', error.message);
     } finally {
         hideLoadingDialog();
     }
 }
 
-
-export function initSongsManager() {
+function initSongsManager() {
     playlistElement = document.getElementById('song-playlist');
     const addSongBtn = document.getElementById('add-song-btn');
 
@@ -334,14 +389,14 @@ export function initSongsManager() {
                 const wasActive = state.activeSongId === songId;
                 songPlaylist.splice(index, 1);
                 renderPlaylist(); // Re-render the list immediately
-
-                if (wasActive) {
-                    if(songPlaylist.length > 0) {
-                        const newActiveIndex = Math.max(0, index - 1);
-                        loadSong(songPlaylist[newActiveIndex].id);
-                    } else {
-                        clearRenderer();
-                    }
+                if (songPlaylist.length === 0) {
+                    // The playlist is empty. Reset the view locally.
+                    handleSongUnloaded();
+                    // Also notify the main process so the audience window clears.
+                    window.playerAPI.unloadSong();
+                } else if (wasActive) {
+                    const newActiveIndex = Math.max(0, index - 1);
+                    loadSong(songPlaylist[newActiveIndex].id);
                 }
             }
         } else {
@@ -405,4 +460,6 @@ export function initSongsManager() {
         songPlaylist.splice(targetIndex, 0, draggedSong);
         renderPlaylist();
     });
-}
+}
+
+export { initSongsManager, handleSongLoaded, handleSongUnloaded, addSongFromPath };

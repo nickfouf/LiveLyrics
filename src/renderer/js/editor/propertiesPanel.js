@@ -8,6 +8,7 @@ import {openGradientEditor} from './gradientEditor.js';
 import {renderLayersPanel} from './layersPanel.js';
 import {openLyricsEditor} from "./lyricsEditor.js";
 import {openOrchestraEditor} from "./orchestraEditor.js";
+import {openFontPicker} from "./fontPicker.js"; // ADDED
 import {renderEventsPanel} from "./eventsPanel.js";
 import {setPropertyAsDefaultValue, rebuildAllEventTimelines, markAsDirty} from "./events.js";
 import {generateCSSColor, parseColorString, generateCSSGradient} from '../renderer/utils.js';
@@ -209,6 +210,8 @@ function buildNumberWithStaticUnitUI(propGroupBody, propKey, label, valueObject,
 }
 
 function buildSelectUI(propGroupBody, propKey, label, valueObject, options) {
+    if(!Array.isArray(options) || options.length === 0) return;
+
     const defaultValue = valueObject.getDefaultValue();
     const optionsHTML = options.map(opt => `<option value="${opt.value}" ${defaultValue === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('');
     const formGroup = document.createElement('div');
@@ -249,7 +252,6 @@ function buildNameProperty(element, isCollapsed) {
     propGroup.querySelector('#prop-name').addEventListener('input', (e) => {
         nameProp.setName(e.target.value);
         markAsDirty();
-        DOM.propertiesPanelTitle.textContent = e.target.value;
         renderLayersPanel();
         if (element instanceof VirtualLyrics || element instanceof VirtualOrchestra) {
             renderEventsPanel();
@@ -984,21 +986,46 @@ function buildAlignmentProperties(element, isCollapsed) {
     renderFlexProps();
 }
 
-// --- MODIFIED: Margin properties now use correct event keys ---
+// --- MODIFIED: Margin properties now use setPropertyAsDefaultValue and read from getDefaultValue ---
 function buildMarginProperties(element, isCollapsed) {
     const propGroup = document.createElement('div');
     propGroup.id = 'prop-group-margin';
     propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
     const marginProp = element.getProperty('margin');
+    const isEnabled = marginProp.getEnabled().getDefaultValue();
 
-    propGroup.innerHTML = `${createPropHeader('Margin')} <div class="prop-group-body"></div>`;
-    const body = propGroup.querySelector('.prop-group-body');
+    propGroup.innerHTML = `
+        ${createPropHeader('Margin')}
+        <div class="prop-group-body">
+            <div class="form-group">
+                <div class="toggle-switch-container">
+                    <label for="prop-margin-enabled">Enabled</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="prop-margin-enabled" ${isEnabled ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>`;
     DOM.propertiesPanelBody.appendChild(propGroup);
 
-    buildUnitValueUI(body, 'top', 'Top', marginProp.getTop());
-    buildUnitValueUI(body, 'left', 'Left', marginProp.getLeft());
-    buildUnitValueUI(body, 'bottom', 'Bottom', marginProp.getBottom());
-    buildUnitValueUI(body, 'right', 'Right', marginProp.getRight());
+    const body = propGroup.querySelector('.prop-group-body');
+
+    const controlsContainer = document.createElement('div');
+    if (!isEnabled) {
+        controlsContainer.classList.add('controls-disabled');
+    }
+    body.appendChild(controlsContainer);
+
+    buildUnitValueUI(controlsContainer, 'top', 'Top', marginProp.getTop());
+    buildUnitValueUI(controlsContainer, 'left', 'Left', marginProp.getLeft());
+    buildUnitValueUI(controlsContainer, 'bottom', 'Bottom', marginProp.getBottom());
+    buildUnitValueUI(controlsContainer, 'right', 'Right', marginProp.getRight());
+
+    body.querySelector('#prop-margin-enabled').addEventListener('change', (e) => {
+        setPropertyAsDefaultValue(state.selectedElement, 'marginEnabled', e.target.checked);
+        renderPropertiesPanel();
+    });
 }
 
 function buildInnerPaddingProperties(element, isCollapsed) {
@@ -1530,16 +1557,7 @@ function buildTextStyleProperties(element, isCollapsed) {
     propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
     const textStyleProp = element.getProperty('textStyle');
     const isLyrics = textStyleProp.getKaraokeColor !== undefined;
-
     const currentFont = textStyleProp.getFontFamily().getDefaultValue();
-    let fontOptionsHTML = (state.systemFonts || []).map(fontFamily =>
-        `<option value="${fontFamily}" ${fontFamily === currentFont ? 'selected' : ''}>${fontFamily}</option>`
-    ).join('');
-
-    const isCurrentFontInList = (state.systemFonts || []).includes(currentFont);
-    if (!isCurrentFontInList && currentFont) {
-        fontOptionsHTML = `<option value="${currentFont}" selected>${currentFont}</option>${fontOptionsHTML}`;
-    }
 
     const defaultFontSize = textStyleProp.getFontSize().getDefaultValue();
     const defaultLineHeight = textStyleProp.getLineHeight().getDefaultValue();
@@ -1550,9 +1568,14 @@ function buildTextStyleProperties(element, isCollapsed) {
         ${createPropHeader('Text Style')}
         <div class="prop-group-body">
             <div class="form-group form-group-grid-3">
-                <div>
+                <div style="grid-column: 1 / -1;">
                     <label>Font Family</label>
-                    <select id="prop-font-family" class="form-select">${fontOptionsHTML}</select>
+                    <div class="input-with-button">
+                        <button class="font-picker-button" id="prop-font-family">
+                            <span>${currentFont}</span>
+                            <img src="../../icons/font.svg" alt="Choose Font">
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <label>Weight</label>
@@ -1718,7 +1741,7 @@ function buildTextStyleProperties(element, isCollapsed) {
     }
 
     // --- Add Event Listeners ---
-    const fontFamilySelect = propGroup.querySelector('#prop-font-family');
+    const fontFamilyButton = propGroup.querySelector('#prop-font-family');
     const fontWeightSelect = propGroup.querySelector('#prop-font-weight');
     const fontStyleSelect = propGroup.querySelector('#prop-font-style');
     const fontSizeInput = propGroup.querySelector('#prop-font-size');
@@ -1729,8 +1752,22 @@ function buildTextStyleProperties(element, isCollapsed) {
     const alignButtons = propGroup.querySelector('#text-align-tabs').querySelectorAll('.tab-btn');
     const justifyToggle = propGroup.querySelector('#prop-justify-text');
 
+    // MODIFIED: Font Family Picker Button
+    fontFamilyButton.addEventListener('click', () => {
+        const currentFont = textStyleProp.getFontFamily().getDefaultValue();
+        let previewText = '';
+        if (element.hasProperty('textContent')) {
+            previewText = element.getProperty('textContent').getTextContent().getDefaultValue();
+        }
+        openFontPicker(currentFont, (newFont) => {
+            textStyleProp.setFontFamily(newFont, true);
+            markAsDirty();
+            triggerActivePageRender(true);
+            renderPropertiesPanel(); // Re-render to update the button text
+        }, previewText);
+    });
+
     // Non-animatable properties update directly
-    fontFamilySelect.addEventListener('input', (e) => { textStyleProp.setFontFamily(e.target.value, true); markAsDirty(); triggerActivePageRender(true); });
     fontWeightSelect.addEventListener('input', (e) => { textStyleProp.setFontWeight(e.target.value, true); markAsDirty(); triggerActivePageRender(true); });
     fontStyleSelect.addEventListener('input', (e) => { textStyleProp.setFontStyle(e.target.value, true); markAsDirty(); triggerActivePageRender(true); });
     alignButtons.forEach(btn => btn.addEventListener('click', () => { textStyleProp.setTextAlign(btn.dataset.align, true); markAsDirty(); triggerActivePageRender(true); renderPropertiesPanel(); }));
@@ -1995,7 +2032,7 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
         { value: 'flat', label: 'Flat' },
         { value: 'preserve-3d', label: 'Preserve 3D' }
     ]);
-    buildSelectUI(body3D, 'backface-visibility', 'Backface Visibility', transformProp.getBackfaceVisibility(), [
+    buildSelectUI(body3D, 'backface-visibility', 'Backface Visibility', [
         { value: 'visible', label: 'Visible' },
         { value: 'hidden', label: 'Hidden' }
     ]);
@@ -2021,15 +2058,13 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
  */
 export function renderPropertiesPanel(element = state.selectedElement) {
     DOM.propertiesPanelBody.innerHTML = '';
+    DOM.propertiesPanelTitle.textContent = 'Properties';
     if (!element) {
-        DOM.propertiesPanelTitle.textContent = 'Properties';
         return;
     }
 
     const elementId = element.id;
     const elementType = element.type;
-    const defaultName = element.getProperty('name')?.name || 'Element';
-    DOM.propertiesPanelTitle.textContent = defaultName;
 
     // Read the collapsed state for the current element
     const collapsedGroups = state.ui.propertiesPanelState.collapsedGroupsByElementId[elementId] || {};
@@ -2138,4 +2173,4 @@ export function renderPropertiesPanel(element = state.selectedElement) {
             DOM.propertiesPanelBody.scrollTop = savedScroll;
         }
     });
-}
+}

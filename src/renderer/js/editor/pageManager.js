@@ -498,4 +498,4 @@ function handlePageDrop(e) {
     updateTimelineAndEditorView();
 }
 
-export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };
+export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };

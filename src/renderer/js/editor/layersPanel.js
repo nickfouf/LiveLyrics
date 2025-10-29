@@ -2,13 +2,86 @@
 
 import { state, updateState } from './state.js';
 import { DOM } from './dom.js';
-import { getNameForElementType, getIconForElementType, showConfirmationDialog, findVirtualElementById, getAllUsedAssets } from './utils.js';
+import { getNameForElementType, getIconForElementType, showConfirmationDialog, findVirtualElementById, getAllUsedAssets, serializeElement, deserializeElement } from './utils.js';
 import { renderPropertiesPanel } from './propertiesPanel.js';
 import { renderEventsPanel } from './eventsPanel.js';
-import { updateTimelineAndEditorView, setPropertyAsDefaultValue, markAsDirty } from './events.js';
+import { updateTimelineAndEditorView, setPropertyAsDefaultValue, markAsDirty, rebuildAllEventTimelines, reprogramAllPageTransitions } from './events.js';
 import { VirtualContainer } from '../renderer/elements/container.js';
 import { triggerActivePageRender } from './pageManager.js';
 import { updateEmptyPageHintVisibility } from './rendering.js';
+import { generateUUID } from '../renderer/utils.js';
+
+/**
+ * Duplicates a virtual element and its entire subtree, reassigning all necessary IDs.
+ * @param {VirtualElement} elementToDuplicate The element to copy.
+ */
+function duplicateLayer(elementToDuplicate) {
+    if (!elementToDuplicate || !elementToDuplicate.parent) {
+        console.error("Cannot duplicate root element or element without a parent.");
+        return;
+    }
+
+    const parent = elementToDuplicate.parent;
+    const originalIndex = parent.getChildren().indexOf(elementToDuplicate);
+
+    // 1. Serialize the element and its children
+    const serializedElement = serializeElement(elementToDuplicate);
+
+    // 2. Remap all IDs in the serialized tree
+    const idMap = new Map();
+    function remapIds(data) {
+        const oldId = data.id;
+        const newId = `ve-${generateUUID()}`;
+        idMap.set(oldId, newId);
+        data.id = newId;
+
+        // Remap children IDs
+        if (data.children) {
+            data.children.forEach(remapIds);
+        }
+
+        // Remap music elements order if it's a container that has this property
+        if (data.musicElementsOrder) {
+            data.musicElementsOrder = data.musicElementsOrder.map(oldElId => idMap.get(oldElId)).filter(Boolean);
+        }
+
+        // Remap content inside properties to ensure musical elements get new measure/note IDs
+        if (data.properties) {
+            // For Lyrics
+            if (data.properties.lyricsContent && data.properties.lyricsContent.measures) {
+                data.properties.lyricsContent.measures.forEach(measure => {
+                    measure.id = `measure-${generateUUID()}`;
+                    if (measure.content) {
+                        measure.content.forEach(note => {
+                            note.id = `note-${generateUUID()}`;
+                        });
+                    }
+                });
+            }
+            // For Orchestra
+            if (data.properties.orchestraContent && data.properties.orchestraContent.measures) {
+                data.properties.orchestraContent.measures.forEach(measure => {
+                    measure.id = `measure-${generateUUID()}`;
+                });
+            }
+        }
+    }
+    remapIds(serializedElement);
+
+    // 3. Deserialize back into a new VirtualElement tree
+    const newElement = deserializeElement(serializedElement);
+
+    // 4. Add the new element to the parent
+    parent.addElementAt(newElement, originalIndex + 1);
+
+    // 5. Update UI
+    markAsDirty();
+    triggerActivePageRender(true);
+    renderLayersPanel();
+    selectLayer(newElement);
+    rebuildAllEventTimelines();
+    reprogramAllPageTransitions();
+}
 
 /**
  * Recursively builds the layer tree UI from the virtual element hierarchy.
@@ -42,6 +115,7 @@ function buildLayerTree(element, parentListElement) {
             <span class="layer-name">${displayName}</span>
         </div>
         <div class="layer-actions">
+            <button class="layer-action-btn" title="Duplicate"><img src="../../icons/duplicate.svg" alt="Duplicate"></button>
             <button class="layer-action-btn" title="Delete"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" /></svg></button>
         </div>
     </div>`;
@@ -208,6 +282,14 @@ export function initLayersPanelInteractions() {
                 updateTimelineAndEditorView();
                 updateEmptyPageHintVisibility();
             }
+            return;
+        }
+
+        // --- Handle Duplicate Button Click ---
+        const duplicateButton = e.target.closest('.layer-action-btn[title="Duplicate"]');
+        if (duplicateButton) {
+            e.stopPropagation();
+            duplicateLayer(targetElement);
             return;
         }
 

@@ -3,8 +3,9 @@ export class NumberEvent {
     #ease;
     #measureIndex;
     #measureProgress;
+    #isTransition;
 
-    constructor({ value, ease = 'linear', measureIndex, measureProgress }) {
+    constructor({ value, ease = 'linear', measureIndex, measureProgress, isTransition = false }) {
         if (typeof value !== 'number') {
             throw new TypeError('Value must be a number');
         }
@@ -21,8 +22,10 @@ export class NumberEvent {
         this.setEase(ease);
         this.setMeasureIndex(measureIndex);
         this.setMeasureProgress(measureProgress);
+        this.#isTransition = isTransition;
     }
 
+    getIsTransition() { return this.#isTransition; }
     getMeasureIndex() { return this.#measureIndex; }
     setMeasureIndex(index) { this.#measureIndex = index; }
     getMeasureProgress() { return this.#measureProgress; }
@@ -31,4 +34,4 @@ export class NumberEvent {
     setValue(value) { this.#value = value; }
     getEase() { return this.#ease; }
     setEase(ease) { this.#ease = ease; }
-}
+}

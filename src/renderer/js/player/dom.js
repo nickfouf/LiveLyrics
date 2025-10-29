@@ -19,6 +19,7 @@ export function initDOM() {
     // Player Layout
     DOM.windowTitle = document.getElementById('window-title');
     DOM.pageContainer = document.getElementById('page-container');
+    DOM.slideViewportWrapper = document.getElementById('slide-viewport-wrapper'); // ADDED
     DOM.presentationSlide = document.getElementById('slide-viewport');
     DOM.pageThumbnailsContainer = document.getElementById('page-thumbnails-container');
     DOM.pageManager = document.querySelector('.page-manager');

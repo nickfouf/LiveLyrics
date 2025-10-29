@@ -43,4 +43,4 @@ export class VisibleProperty extends VirtualProperty {
             this.#visible.markAsRendered();
         }
     }
-}
+}

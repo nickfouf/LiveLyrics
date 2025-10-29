@@ -849,7 +849,7 @@ export function buildLyricsTimingMap(measureMap) {
  * @param {Array} measureMap The pre-built map of all measures.
  * @returns {number} The index of the last page with music, or -1 if none.
  */
-function findLastPageWithMusic(targetPageIndex, measureMap) {
+export function findLastPageWithMusic(targetPageIndex, measureMap) {
     // Iterate backwards for efficiency
     for (let i = measureMap.length - 1; i >= 0; i--) {
         const measure = measureMap[i];

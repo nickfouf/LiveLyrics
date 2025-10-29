@@ -43,4 +43,49 @@ export function updateContainerPlaceholder(container) {
     if (!container) return;
     const hasRealChildren = Array.from(container.children).some(child => child.dataset.elementType);
     // Further logic would go here if needed.
+}
+
+export function applyViewportScaling(wrapperElement) {
+    if (!wrapperElement) return;
+
+    const viewportElement = wrapperElement.querySelector('#slide-viewport');
+    if (!viewportElement) return;
+
+    const availableWidth = wrapperElement.clientWidth;
+    const availableHeight = wrapperElement.clientHeight;
+
+    if (availableHeight <= 0 || availableWidth <= 0) return;
+
+    const targetHeight = 1080;
+    
+    // --- START: MODIFICATION ---
+    // Calculate the aspect ratio of the available space (the wrapper).
+    const aspectRatio = availableWidth / availableHeight;
+    // Calculate the target width based on the wrapper's aspect ratio to maintain proportions.
+    const targetWidth = targetHeight * aspectRatio;
+
+    // The scale factor is simply the ratio of the available height to our target height.
+    const scale = availableHeight / targetHeight;
+    // --- END: MODIFICATION ---
+
+    const transformString = `translate(-50%, -50%) scale(${scale})`;
+
+    viewportElement.style.width = `${targetWidth}px`;
+    viewportElement.style.height = `${targetHeight}px`;
+    viewportElement.style.transform = transformString;
+
+    // The inner containers should just fill the viewport
+    const pageContainer = viewportElement.querySelector('#page-container');
+    const stagingContainer = viewportElement.querySelector('#staging-page-container');
+
+    if (pageContainer) {
+        pageContainer.style.width = '100%';
+        pageContainer.style.height = '100%';
+        pageContainer.style.transform = 'none';
+    }
+    if (stagingContainer) {
+        stagingContainer.style.width = '100%';
+        stagingContainer.style.height = '100%';
+        stagingContainer.style.transform = 'none';
+    }
 }

@@ -1,9 +1,10 @@
 // src/renderer/js/editor/propertyValueEditor.js
 
 import { state } from './state.js';
-import { getAvailablePropertiesForElement, getPropertyType } from './utils.js';
+import { getAvailablePropertiesForElement, getPropertyType, findVirtualElementById } from './utils.js'; // MODIFIED
 import { openColorPicker } from './colorPicker.js';
 import { openGradientEditor } from './gradientEditor.js';
+import { openFontPicker } from './fontPicker.js'; // ADDED
 import { generateCSSGradient, parseColorString, generateCSSColor } from "../renderer/utils.js";
 
 let dialog, header, body, okBtn, cancelBtn, inheritBtn;
@@ -200,17 +201,29 @@ function buildDialogUI() {
             break;
 
         case 'fontFamily': {
-            let fontOptionsHTML = (state.systemFonts || []).map(fontFamily =>
-                `<option value="${fontFamily}" ${fontFamily === value ? 'selected' : ''}>${fontFamily}</option>`
-            ).join('');
-            if (!(state.systemFonts || []).includes(value) && value) {
-                fontOptionsHTML = `<option value="${value}" selected>${value}</option>${fontOptionsHTML}`;
-            }
             body.innerHTML = `
                 <div class="form-group">
-                    <label for="eep-font-family-select">Font Family</label>
-                    <select id="eep-font-family-select" class="form-select">${fontOptionsHTML}</select>
+                    <label>Font Family</label>
+                    <div class="input-with-button">
+                        <button class="font-picker-button" id="eep-font-family-button">
+                            <span>${value}</span>
+                            <img src="../../icons/font.svg" alt="Choose Font">
+                        </button>
+                    </div>
                 </div>`;
+            
+            body.querySelector('#eep-font-family-button').addEventListener('click', () => {
+                const element = findVirtualElementById(state.activePage, localState.elementId);
+                let previewText = '';
+                if (element && element.hasProperty('textContent')) {
+                    previewText = element.getProperty('textContent').getTextContent().getDefaultValue();
+                }
+
+                openFontPicker(localState.currentValue, (newFont) => {
+                    localState.currentValue = newFont;
+                    body.querySelector('#eep-font-family-button span').textContent = newFont;
+                }, previewText);
+            });
             break;
         }
 
@@ -540,7 +553,7 @@ function getValueFromUI() {
                 unit: body.querySelector('#eep-size-unit').value
             };
         case 'fontFamily':
-            return body.querySelector('#eep-font-family-select').value;
+            return localState.currentValue; // The value is updated in local state by the picker callback
         case 'fontWeight':
             return body.querySelector('#eep-font-weight-select').value;
         case 'fontStyle':
@@ -669,4 +682,4 @@ export function openPropertyValueEditor(elementId, propKey, currentEffectiveValu
     header.textContent = `Edit '${propName}'`;
     buildDialogUI();
     dialog.classList.add('visible');
-}
+}

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('playerAPI', {
     minimizeWindow: () => ipcRenderer.send('minimize-player-window'),
     maximizeWindow: () => ipcRenderer.send('maximize-player-window'),
     closeWindow: () => ipcRenderer.send('close-player-window'),
+    goToMainMenu: () => ipcRenderer.send('go-to-main-menu'),
     onWindowStateChange: (callback) => ipcRenderer.on('window-maximized-state', (_event, value) => callback(value)),
 
     // --- File Operations ---
@@ -29,4 +30,8 @@ contextBridge.exposeInMainWorld('playerAPI', {
     onSongLoaded: (callback) => ipcRenderer.on('playback:load', (_event, event) => callback(event)),
     onSongUnloaded: (callback) => ipcRenderer.on('playback:unload', (_event, event) => callback(event)),
     onPlaybackEvent: (callback) => ipcRenderer.on('playback:event', (_event, event) => callback(event)),
-});
+
+    // --- MODIFIED: File Opening from Main Process ---
+    onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
+});
+

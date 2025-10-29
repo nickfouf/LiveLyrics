@@ -629,14 +629,23 @@
     overflow: hidden;
 }
 
+#slide-viewport-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
 /* REFACTORED: .presentation-slide is now the viewport */
 .presentation-slide {
-    width: 80%;
-    height: 80%;
     box-shadow: 0 0 20px rgba(0,0,0,0.5);
     background-color: #000000;
     outline: 1px solid #444;
-    position: relative;
+    position: absolute;
+    top: 50%;
+    left: 50%;
     overflow: hidden; /* This is the new clipping boundary */
 }
 
@@ -713,7 +722,7 @@
 /* Placeholder text inside an empty container */
 .container-placeholder {
     color: #666;
-    font-size: 0.9rem;
+    font-size: 30px;
     text-align: center;
     margin: auto; /* This helps center it perfectly */
     position: absolute;   /* take it out of normal flow */
@@ -982,10 +991,17 @@ body.is-dragging .slide-wrapper [data-element-type]:not([data-element-type$="con
     color: #aaa;
 }
 
-.input-with-button .readonly-input {
-    background-color: #2a2a2a; /* Darker background to indicate non-editable */
+.input-with-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.input-with-button .readonly-input,
+.input-with-button .font-picker-button {
     color: #ccc; /* Lighter text for readability */
-    border: 1px solid #444;
+    border: 1px solid #555;
+    background-color: #333;
     padding: 6px 8px;
     font-size: 13px;
     white-space: nowrap;
@@ -993,8 +1009,30 @@ body.is-dragging .slide-wrapper [data-element-type]:not([data-element-type$="con
     text-overflow: ellipsis;
     cursor: default; /* Show a normal cursor, not a text input cursor */
     flex-grow: 1;
-    border-radius: 4px 0 0 4px;
+    border-radius: 4px;
+    height: 38.5px; /* Match form-input height */
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
 }
+
+.input-with-button .font-picker-button {
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.input-with-button .font-picker-button:hover {
+    border-color: #777;
+    background-color: #4a4a4a;
+}
+
+.input-with-button .font-picker-button img {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
 
 .input-with-button button {
     margin-top: 10px;
@@ -1614,7 +1652,7 @@ input:checked + .toggle-slider:before {
     box-shadow: 0 5px 15px rgba(0,0,0,0.5);
     color: #fff;
     font-size: 0.9rem;
-    max-width: min(1000px, 80vw);
+    max-width: min(650px, 80vw);
     /* --- CHANGES FOR POP-IN EFFECT --- */
     transform: scale(0.95);
     opacity: 0;
@@ -2406,6 +2444,11 @@ input:checked + .toggle-slider:before {
     z-index: 1050;
 }
 
+/* ADDED: Font Picker dialog z-index */
+#font-picker-dialog {
+    z-index: 1060;
+}
+
 /* MODIFIED: Swapped z-index with alert dialog */
 #loading-dialog {
     z-index: 1100;
@@ -2726,6 +2769,64 @@ input:checked + .toggle-slider:before {
     width: 48px;
     height: 48px;
 }
+
+/* --- NEW: Font Picker Dialog Styles --- */
+#font-picker-dialog .dialog-content {
+    width: 500px;
+}
+#font-picker-dialog .dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-bottom: 0;
+}
+#font-picker-list-container {
+    height: 350px;
+    overflow-y: auto;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background-color: #2d2d2d;
+}
+#font-picker-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.font-list-item {
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid #444;
+    transition: background-color 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.font-list-item-name {
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.font-list-item-preview {
+    flex-shrink: 0;
+    margin-left: 1rem;
+    font-size: 1.1rem;
+    color: #a0a0a0;
+}
+.font-list-item:last-child {
+    border-bottom: none;
+}
+.font-list-item:hover {
+    background-color: #4a4a4a;
+}
+.font-list-item.selected {
+    background-color: #007bff;
+    color: white;
+}
+.font-list-item.selected .font-list-item-preview {
+    color: white;
+}
+
 
 /* --- Playback Mode UI Disabling --- */
 

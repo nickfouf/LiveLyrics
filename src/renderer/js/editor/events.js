@@ -1,5 +1,4 @@
 import { state, updateState } from './state.js';
-import { generateUUID } from '../renderer/utils.js';
 import { triggerActivePageRender } from './pageManager.js';
 import { DOM } from './dom.js';
 import { showPage } from './rendering.js';
@@ -8,43 +7,29 @@ import { selectLayer, renderLayersPanel } from './layersPanel.js';
 import { DomManager } from '../renderer/domManager.js';
 import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { VirtualPage } from '../renderer/elements/page.js';
+import { VirtualContainer } from '../renderer/elements/container.js';
 import { renderPropertiesPanel } from './propertiesPanel.js';
 import { renderEventsPanel } from './eventsPanel.js';
 import {
     buildLyricsTimingMap,
     findActiveTransition,
     buildMeasureMap,
-    findDeepestAtPoint,
     findAllAtPoint,
     findVirtualElementById,
-    getElementMeasuresStructure,
-    findAllElementsRecursive,
-    calculateGlobalMeasureOffsetForElement,
     pageHasMeasures,
     getAllUsedAssets,
     showConfirmationDialog,
     serializeElement,
-    deserializeElement
+    deserializeElement,
+    findLastPageWithMusic
 } from './utils.js';
-import { NumberEvent } from "../renderer/events/numberEvent.js";
-import { UnitEvent } from "../renderer/events/unitEvent.js";
-import { StringEvent } from '../renderer/events/stringEvent.js';
-import { BooleanEvent } from '../renderer/events/booleanEvent.js';
 import { showLoadingDialog, hideLoadingDialog } from './loadingDialog.js';
 import { showAlertDialog } from './alertDialog.js';
-import { VirtualContainer } from '../renderer/elements/container.js';
-import { VirtualImage } from '../renderer/elements/image.js';
-import { VirtualLyrics } from '../renderer/elements/lyrics.js';
 import { VirtualTitle } from '../renderer/elements/title.js';
-import { VirtualText } from '../renderer/elements/text.js';
-import { VirtualOrchestra } from '../renderer/elements/orchestra.js';
-import { VirtualSmartEffect } from '../renderer/elements/smartEffect.js';
-import { VirtualVideo } from '../renderer/elements/video.js';
-import { VirtualAudio } from '../renderer/elements/audio.js';
 import {
-    rebuildAllEventTimelines as sharedRebuildAllEventTimelines,
-    reprogramAllPageTransitions as sharedReprogramAllPageTransitions
+    rebuildAllEventTimelines as sharedRebuildAllEventTimelines
 } from '../player/events.js';
+import { NumberEvent } from '../renderer/events/numberEvent.js';
 
 
 export function updateWindowTitle() {
@@ -81,6 +66,7 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
         opacity: { prop: 'effects', valueKey: 'opacity' },
         width: { prop: 'dimensions', valueKey: 'width' },
         height: { prop: 'dimensions', valueKey: 'height' },
+        marginEnabled: { prop: 'margin', valueKey: 'enabled' },
         top: { prop: 'margin', valueKey: 'top' },
         left: { prop: 'margin', valueKey: 'left' },
         right: { prop: 'margin', valueKey: 'right' },
@@ -187,10 +173,132 @@ export function rebuildAllEventTimelines() {
 
 
 /**
+ * Converts a time in beats into a measure index and progress percentage.
+ * @param {number} timeInBeats The time in beats to convert.
+ * @param {Array} measureMap The global measure map.
+ * @returns {{measureIndex: number, measureProgress: number}}
+ */
+function _timeInBeatsToMeasureInfo(timeInBeats, measureMap) {
+    if (timeInBeats <= 0) return { measureIndex: 0, measureProgress: 0 };
+
+    let measureIndex = measureMap.findIndex(m => timeInBeats >= m.startTime && timeInBeats < m.startTime + m.duration);
+
+    if (measureIndex !== -1) {
+        const measure = measureMap[measureIndex];
+        const timeIntoMeasure = timeInBeats - measure.startTime;
+        const measureProgress = measure.duration > 0 ? timeIntoMeasure / measure.duration : 0;
+        return { measureIndex, measureProgress };
+    }
+
+    const totalDuration = measureMap.length > 0 ? measureMap.at(-1).startTime + measureMap.at(-1).duration : 0;
+    if (timeInBeats >= totalDuration) {
+        return { measureIndex: measureMap.length, measureProgress: 0 };
+    }
+    
+    if (measureMap.length > 0 && timeInBeats < measureMap[0].startTime) {
+        return { measureIndex: 0, measureProgress: 0 };
+    }
+
+    // Fallback for times between measures (should be rare)
+    const lastMeasureBefore = findLastIndex(measureMap, m => m.startTime <= timeInBeats);
+    return { measureIndex: lastMeasureBefore, measureProgress: 0.9999 };
+}
+
+
+function sharedReprogramAllPageTransitions() {
+    const measureMap = buildMeasureMap();
+    if (!measureMap) return;
+
+    // Clear all existing transition events from all pages first
+    const allPages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
+    for (const page of allPages) {
+        if (page.hasProperty('effects')) {
+            const opacityValue = page.getProperty('effects').getOpacity();
+            if (opacityValue.getEvents().clearTransitionEvents) {
+                opacityValue.getEvents().clearTransitionEvents();
+            }
+            opacityValue.applyDefaultEvent();
+        }
+        // In a full implementation, we would also clear transform properties here.
+    }
+
+    for (let toPageIndex = 0; toPageIndex < state.song.pages.length; toPageIndex++) {
+        const toPage = state.song.pages[toPageIndex];
+        const transition = toPage.transition || { type: 'instant', duration: 0 };
+
+        if (transition.type === 'instant' || !transition.duration || transition.duration <= 0) {
+            continue;
+        }
+
+        const firstMeasureOfPage = measureMap.find(m => m.pageIndex === toPageIndex);
+        if (!firstMeasureOfPage) continue;
+
+        const transitionStartTimeBeats = firstMeasureOfPage.startTime;
+        let durationInBeats;
+
+        if (transition.durationUnit === 'beats') {
+            durationInBeats = transition.duration || 1;
+        } else { // measures
+            durationInBeats = 0;
+            const firstMeasureGlobalIndex = measureMap.indexOf(firstMeasureOfPage);
+            for (let j = 0; j < (transition.duration || 1); j++) {
+                const currentMeasureIndex = firstMeasureGlobalIndex + j;
+                if (measureMap[currentMeasureIndex]) {
+                    durationInBeats += measureMap[currentMeasureIndex].duration;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (durationInBeats <= 0) continue;
+
+        const transitionEndTimeBeats = transitionStartTimeBeats + durationInBeats;
+        const fromPageIndex = findLastPageWithMusic(toPageIndex, measureMap);
+
+        const fromPage = (fromPageIndex > -1) ? state.song.pages[fromPageIndex] : state.song.thumbnailPage;
+        if (!fromPage) continue;
+
+        const fromOpacityValue = fromPage.getProperty('effects').getOpacity();
+        const toOpacityValue = toPage.getProperty('effects').getOpacity();
+
+        const startEventTime = _timeInBeatsToMeasureInfo(transitionStartTimeBeats, measureMap);
+        const endEventTime = _timeInBeatsToMeasureInfo(transitionEndTimeBeats, measureMap);
+
+        switch (transition.type) {
+            case 'fade': {
+                fromOpacityValue.addEvent(new NumberEvent({ value: 1, ...startEventTime, isTransition: true }));
+                fromOpacityValue.addEvent(new NumberEvent({ value: 0, ...endEventTime, isTransition: true }));
+
+                toOpacityValue.addEvent(new NumberEvent({ value: 0, ...startEventTime, isTransition: true }));
+                toOpacityValue.addEvent(new NumberEvent({ value: 1, ...endEventTime, isTransition: true }));
+                break;
+            }
+            case 'dip-to-black': {
+                const transitionMidTimeBeats = transitionStartTimeBeats + (durationInBeats / 2);
+                const midEventTime = _timeInBeatsToMeasureInfo(transitionMidTimeBeats, measureMap);
+
+                // From page fades out completely in the first half
+                fromOpacityValue.addEvent(new NumberEvent({ value: 1, ...startEventTime, isTransition: true }));
+                fromOpacityValue.addEvent(new NumberEvent({ value: 0, ...midEventTime, isTransition: true }));
+
+                // To page is invisible for the first half, then fades in
+                toOpacityValue.addEvent(new NumberEvent({ value: 0, ...startEventTime, isTransition: true }));
+                toOpacityValue.addEvent(new NumberEvent({ value: 0, ...midEventTime, isTransition: true }));
+                toOpacityValue.addEvent(new NumberEvent({ value: 1, ...endEventTime, isTransition: true }));
+                break;
+            }
+            // Other transitions like push, flip, cube would go here
+        }
+    }
+}
+
+
+/**
  * Programs all page transitions based on their settings.
  */
 export function reprogramAllPageTransitions() {
-    // MODIFIED: Call the shared logic from player/events.js
+    // MODIFIED: Call the new local function
     sharedReprogramAllPageTransitions();
     // After updating all data, refresh the timeline view to reflect changes.
     updateTimelineAndEditorView();
@@ -832,6 +940,7 @@ function setupMainMenu() {
             await loadSong(filePath);
         }
     });
+    DOM.editorBackToMainBtn.addEventListener('click', () => window.editorAPI.goToMainMenu());
     DOM.exitBtn.addEventListener('click', () => window.editorAPI.closeWindow());
 }
 
@@ -886,9 +995,17 @@ function setupNewSongMenu() {
         const thumbnailPage = new VirtualPage({ name: 'Thumbnail' });
         const firstPage = new VirtualPage();
 
-        // Create a title element with the song's name and add it to the thumbnail page.
+        // Create a title element with the song's name.
         const titleElement = new VirtualTitle({ textContent: songTitle }, 'Song Title');
-        thumbnailPage.addElement(titleElement);
+        
+        // Create a vertical container to hold the title.
+        const vContainer = new VirtualContainer({ name: 'Title Container', alignment: 'vertical' });
+
+        // Add the title to the container.
+        vContainer.addElement(titleElement);
+
+        // Add the container to the thumbnail page.
+        thumbnailPage.addElement(vContainer);
 
         updateState({
             domManager,
@@ -1079,7 +1196,13 @@ async function save() {
 async function loadSong(filePath) {
     showLoadingDialog('Opening project...');
     try {
-        const songData = await window.editorAPI.openProject(filePath);
+        const result = await window.editorAPI.openProject(filePath);
+
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+
+        const songData = result.data;
 
         // --- Reset Editor State ---
         if (DOM.pageContainer) DOM.pageContainer.innerHTML = '';
@@ -1158,11 +1281,11 @@ async function loadSong(filePath) {
         rebuildAllEventTimelines(); // Re-process all element events with the new structure
         reprogramAllPageTransitions(); // ADDED: Re-process all page transitions
 
+        hideLoadingDialog(); // Hide dialog on success
     } catch (error) {
         console.error('Failed to load song:', error);
+        hideLoadingDialog(); // Hide dialog on failure, BEFORE showing alert
         await showAlertDialog('Failed to Open Project', error.message);
-    } finally {
-        hideLoadingDialog();
     }
 }
 
@@ -1224,6 +1347,18 @@ function setupMenuBar() {
     });
 }
 
+/**
+ * ADDED: Handles a file open request from the main process.
+ * @param {string} filePath The path of the file to open.
+ */
+export async function handleExternalFileOpen(filePath) {
+    if (!filePath) return;
+
+    if (await confirmCloseIfNeeded()) {
+        await loadSong(filePath);
+    }
+}
+
 export function setupEventListeners() {
     setupTitleBar();
     setupDrawerControls();
@@ -1233,6 +1368,16 @@ export function setupEventListeners() {
     setupTimelineControls();
     setupCustomSelects();
     setupMenuBar(); // ADDED
+
+    // ADDED: Back to main menu button in editor header
+    if (DOM.backToMainMenuBtn) {
+        DOM.backToMainMenuBtn.addEventListener('click', async () => {
+            if (await confirmCloseIfNeeded()) {
+                if(state.playback.isPlaying) stop();
+                window.editorAPI.goToMainMenu();
+            }
+        });
+    }
     DOM.addPageBtn.addEventListener('click', addPage);
 
     DOM.bpmValueInput.addEventListener('change', (e) => {

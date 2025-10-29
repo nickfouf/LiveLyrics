@@ -7,7 +7,7 @@ const url = require('url');
 const SystemFonts = require('dnm-font-manager').default;
 const systemFonts = new SystemFonts();
 const crypto = require('crypto');
-const archiver = 'archiver';
+const archiver = require('archiver');
 const extract = require('extract-zip');
 const { PlaybackManager } = require('./playbackManager');
 
@@ -29,6 +29,9 @@ const assetsTempPath = path.join(projectTempPath, 'assets');
 // ADDED: State for managing cancellable file copy operations
 let currentCopyOperation = { cancel: () => {} };
 
+// --- ADDED: File path to open on launch ---
+let filePathToOpen = null;
+
 
 let mainWindow;
 let editorWindow;
@@ -37,6 +40,29 @@ let playerWindow;
 let audienceWindows = new Map();
 // ADDED: Create the central conductor
 let playbackManager;
+
+/**
+ * Compares two semantic version strings.
+ * @param {string} v1 - The first version string (e.g., "1.2.0").
+ * @param {string} v2 - The second version string (e.g., "1.10.0").
+ * @returns {number} 1 if v1 > v2, -1 if v1 < v2, 0 if v1 === v2.
+ */
+function compareVersions(v1, v2) {
+    if (!v1 || !v2) {
+        return 0;
+    }
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    const len = Math.max(parts1.length, parts2.length);
+
+    for (let i = 0; i < len; i++) {
+        const p1 = parts1[i] || 0;
+        const p2 = parts2[i] || 0;
+        if (p1 > p2) return 1;
+        if (p1 < p2) return -1;
+    }
+    return 0;
+}
 
 /**
  * Sends an updated list of displays to the player window.
@@ -142,10 +168,10 @@ function createPlayerWindow() {
     console.log(`[Main] Loading playerWindow. Preload path: ${preloadScriptPath}`);
 
     playerWindow = new BrowserWindow({
-        width: 1200,
-        height: 600,
-        minWidth: 1200,
-        minHeight: 600,
+        width: 1300,
+        height: 800,
+        minWidth: 1300,
+        minHeight: 800,
         frame: false,
         title: 'Player',
         icon: iconPath,
@@ -248,8 +274,6 @@ function updateAudienceWindows() {
 
 // --- App & IPC Logic ---
 app.whenReady().then(() => {
-    createMainWindow();
-
     const broadcastToAllWindows = (channel, ...args) => {
         const windows = [playerWindow, ...audienceWindows.values()];
         for (const window of windows) {
@@ -261,8 +285,36 @@ app.whenReady().then(() => {
 
     playbackManager = new PlaybackManager(broadcastToAllWindows);
 
+    // ADDED: Handle the 'ready' signal from the editor renderer.
+    ipcMain.on('editor:ready', (event) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        // Check if this window was created with a file to open.
+        if (window && window.pendingFileOpen) {
+            const { filePath, windowToClose } = window.pendingFileOpen;
+
+            log.info(`[Main] Editor is ready. Sending file: ${filePath}`);
+            window.webContents.send('file:open', { filePath });
+
+            // Now that the new window has received its data, it's safe to close the main menu.
+            if (windowToClose && !windowToClose.isDestroyed()) {
+                windowToClose.close();
+            }
+
+            // Clean up the property to prevent re-sending.
+            delete window.pendingFileOpen;
+        }
+    });
+
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+        // On macOS it's common to re-create a window in the app when the
+        // dock icon is clicked and there are no other windows open.
+        if (BrowserWindow.getAllWindows().length === 0) {
+            if (filePathToOpen) {
+                handleOpenFile(filePathToOpen);
+            } else {
+                createMainWindow();
+            }
+        }
     });
 
     screen.on('display-added', () => {
@@ -273,7 +325,83 @@ app.whenReady().then(() => {
         sendDisplaysUpdate();
         updateAudienceWindows();
     });
+
+    // If a file path was queued from startup, handle it now.
+    if (filePathToOpen) {
+        handleOpenFile(filePathToOpen);
+        filePathToOpen = null; // Clear after handling
+    } else {
+        // Otherwise, open the main menu as usual.
+        createMainWindow();
+    }
 });
+
+// --- ADDED: Single Instance Lock and File Opening Logic ---
+
+/**
+ * Handles the logic for opening a .lyx file, routing it to the correct window.
+ * @param {string} filePath The absolute path to the file.
+ */
+function handleOpenFile(filePath) {
+    if (!filePath) {
+        return;
+    }
+
+    // Scenario 1: Player window is open. Send the file path to it.
+    if (playerWindow && !playerWindow.isDestroyed()) {
+        log.info(`[Main] Player window is open. Sending file: ${filePath}`);
+        playerWindow.webContents.send('file:open', { filePath });
+        if (playerWindow.isMinimized()) playerWindow.restore();
+        playerWindow.focus();
+        return;
+    }
+
+    // Scenario 2: Editor window is open. Send the file path to it.
+    if (editorWindow && !editorWindow.isDestroyed()) {
+        log.info(`[Main] Editor window is open. Sending file: ${filePath}`);
+        editorWindow.webContents.send('file:open', { filePath });
+        if (editorWindow.isMinimized()) editorWindow.restore();
+        editorWindow.focus();
+        return;
+    }
+
+    // Scenario 3: No specific window is open. Open the editor and load the file.
+    log.info(`[Main] No specific window open. Creating editor to load file: ${filePath}`);
+
+    // Keep a reference to the main menu window if it exists.
+    const oldMainWindow = mainWindow;
+
+    // Create the new editor window BEFORE closing the old one.
+    // This prevents the 'window-all-closed' event from quitting the app prematurely.
+    createEditorWindow();
+
+    // MODIFIED: Instead of using 'did-finish-load', we attach the pending file info
+    // to the window object. The renderer will send an 'editor:ready' IPC message
+    // when it's fully initialized, which we'll handle to send the file path.
+    // This avoids the race condition.
+    editorWindow.pendingFileOpen = {
+        filePath: filePath,
+        windowToClose: oldMainWindow
+    };
+}
+
+// For macOS, the 'open-file' event is the standard.
+app.on('open-file', (event, path) => {
+    event.preventDefault();
+    if (app.isReady()) {
+        handleOpenFile(path);
+    } else {
+        filePathToOpen = path; // Store to handle when app is ready.
+    }
+});
+
+// For Windows/Linux, check process.argv.
+if (process.platform !== 'darwin') {
+    const potentialFilePath = app.isPackaged ? process.argv[1] : process.argv[2];
+    if (potentialFilePath && path.extname(potentialFilePath) === '.lyx') {
+        filePathToOpen = potentialFilePath;
+    }
+}
 
 // --- REVISED: Auto-updater event handlers and IPC ---
 
@@ -324,12 +452,33 @@ ipcMain.on('updater:quit-and-install', () => {
     autoUpdater.quitAndInstall();
 });
 
+ipcMain.on('go-to-main-menu', (event) => {
+    log.info('[Main] go-to-main-menu IPC received. Opening main window.');
+    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+
+    // Create the main window first to prevent the app from quitting on window-all-closed
+    createMainWindow();
+
+    // Now, safely close the source window (editor or player)
+    if (sourceWindow) {
+        if (sourceWindow === editorWindow) {
+            editorWindow = null;
+        } else if (sourceWindow === playerWindow) {
+            // The 'closed' event on playerWindow already handles closing audience windows
+            playerWindow = null;
+        }
+        // The 'closed' event handlers for each window will correctly nullify the global variables.
+        sourceWindow.close();
+    }
+});
+
 
 ipcMain.handle('get-app-version', () => {
     return app.getVersion();
 });
 
 ipcMain.on('open-editor-window', () => {
+    log.info('[Main] open-editor-window IPC received.');
     if (!editorWindow) createEditorWindow();
     mainWindow?.close();
 });
@@ -552,6 +701,9 @@ async function saveProject(filePath, { songData, usedAssets }) {
         }
     }
 
+    // Stamp the current app version into the song data.
+    songData.appVersion = app.getVersion();
+
     relativizeAssetPaths(songData);
 
     return new Promise((resolve, reject) => {
@@ -616,6 +768,60 @@ ipcMain.handle('project:open', async (event, filePath) => {
         const songDataRaw = await fs.promises.readFile(songJsonPath, 'utf-8');
         const songData = JSON.parse(songDataRaw);
 
+        // --- Smart Effect Hydration ---
+        async function hydrateSmartEffects(elementObject) {
+            if (!elementObject || typeof elementObject !== 'object') {
+                return;
+            }
+
+            // If this is a smart effect, load its data from the src path
+            if (elementObject.type === 'smart-effect' && elementObject.properties?.src?.src) {
+                const relativePath = elementObject.properties.src.src; // e.g., 'assets/checksum.json'
+                const absolutePath = path.join(projectTempPath, relativePath);
+                if (fs.existsSync(absolutePath)) {
+                    try {
+                        const content = await fs.promises.readFile(absolutePath, 'utf-8');
+                        const effectData = JSON.parse(content);
+                        // Inject the loaded data back into the object
+                        if (elementObject.properties.src) {
+                            elementObject.properties.src.effectData = effectData;
+                        }
+                    } catch (e) {
+                        console.error(`[Main] Failed to read or parse smart effect JSON at ${absolutePath}:`, e);
+                    }
+                }
+            }
+
+            // Recurse into children if they exist
+            if (elementObject.children && Array.isArray(elementObject.children)) {
+                for (const child of elementObject.children) {
+                    await hydrateSmartEffects(child);
+                }
+            }
+        }
+
+        if (songData.thumbnailPage) {
+            await hydrateSmartEffects(songData.thumbnailPage);
+        }
+        if (songData.pages && Array.isArray(songData.pages)) {
+            for (const page of songData.pages) {
+                await hydrateSmartEffects(page);
+            }
+        }
+        // --- END: Smart Effect Hydration ---
+
+        // --- Version Check ---
+        const songAppVersion = songData.appVersion;
+        const currentAppVersion = app.getVersion();
+
+        // Only check if the song file has a version stamp. Older files will not.
+        if (songAppVersion) {
+            if (compareVersions(songAppVersion, currentAppVersion) > 0) {
+                throw new Error(`This project was created with a newer app version (v${songAppVersion}). Please update your app to open it.`);
+            }
+        }
+        // --- END: Version Check ---
+
         function absolutizeAssetPaths(obj) {
             for (const key in obj) {
                 if (typeof obj[key] === 'string' && obj[key].startsWith('assets/')) {
@@ -633,11 +839,11 @@ ipcMain.handle('project:open', async (event, filePath) => {
         }
 
         absolutizeAssetPaths(songData);
-        return songData;
+        return { success: true, data: songData };
 
     } catch (error) {
         console.error(`[Main] Error opening project: ${error.message}`);
-        throw new Error(`Failed to open project file. Reason: ${error.message}`);
+        return { success: false, error: error.message };
     }
 });
 
@@ -718,3 +924,32 @@ ipcMain.on('playback:jump', (event, timeInMs) => {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
+
+// Enforce a single instance of the application.
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Someone tried to run a second instance. We should focus our window
+        // and handle the file they tried to open.
+        const potentialFilePath = app.isPackaged ? commandLine.find(arg => arg.endsWith('.lyx')) : commandLine[2];
+
+        if (potentialFilePath && path.extname(potentialFilePath) === '.lyx') {
+            handleOpenFile(potentialFilePath);
+        } else {
+            // If no file, just focus an existing window.
+            if (playerWindow) {
+                if (playerWindow.isMinimized()) playerWindow.restore();
+                playerWindow.focus();
+            } else if (editorWindow) {
+                if (editorWindow.isMinimized()) editorWindow.restore();
+                editorWindow.focus();
+            } else if (mainWindow) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            }
+        }
+    });
+}

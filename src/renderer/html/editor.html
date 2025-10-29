@@ -10,7 +10,7 @@
 <!-- Custom Title Bar -->
 <div class="title-bar">
     <div class="title-bar-left">
-        <img src="../assets/icon.png" alt="LiveLyrics Icon" class="icon">
+        <img src="../assets/icon.ico" alt="LiveLyrics Icon" class="icon">
         <!-- The window title will now be displayed in this span -->
         <span id="window-title" class="title">Editor</span>
     </div>
@@ -34,6 +34,7 @@
         <div class="editor-menu">
             <button id="new-song-btn" class="editor-menu-btn">New Song</button>
             <button id="open-song-btn" class="editor-menu-btn">Open Song</button>
+            <button id="editor-back-to-main-btn" class="editor-menu-btn">Back to Main Menu</button>
             <button id="exit-btn" class="editor-menu-btn">Exit</button>
         </div>
     </div>
@@ -306,17 +307,18 @@
         <div class="main-editor-area">
             <div id="empty-page-hint" class="empty-page-hint">This page has 0 measures and will be ignored during playback.</div>
 
-            <!-- REFACTORED STRUCTURE -->
-            <div id="slide-viewport" class="presentation-slide">
-                <!-- This container will hold all page divs -->
-                <div id="staging-page-container"></div>
-                <div id="page-container">
-                    <!-- Page divs will be dynamically generated here by JavaScript -->
-                </div>
-                <!-- MOVED: Resizing Overlay is now inside the slide viewport -->
-                <div id="resizing-overlay">
-                    <div class="resizing-box">
-                        <div class="resizing-text">Resizing<span class="dots"><span></span><span></span><span></span></span></div>
+            <div id="slide-viewport-wrapper">
+                <div id="slide-viewport" class="presentation-slide">
+                    <!-- This container will hold all page divs -->
+                    <div id="staging-page-container"></div>
+                    <div id="page-container">
+                        <!-- Page divs will be dynamically generated here by JavaScript -->
+                    </div>
+                    <!-- MOVED: Resizing Overlay is now inside the slide viewport -->
+                    <div id="resizing-overlay">
+                        <div class="resizing-box">
+                            <div class="resizing-text">Resizing<span class="dots"><span></span><span></span><span></span></span></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -416,8 +418,26 @@
     </div>
 </div>
 
+<!-- ADDED: Font Picker Dialog -->
+<div id="font-picker-dialog" class="dialog-overlay">
+    <div class="dialog-content">
+        <div class="dialog-header">Select Font</div>
+        <div class="dialog-body">
+            <input type="text" id="font-picker-search" class="form-input" placeholder="Search fonts...">
+            <input type="text" id="font-picker-preview-text" class="form-input" placeholder="Enter text for preview...">
+            <div id="font-picker-list-container">
+                <ul id="font-picker-list">
+                    <!-- Font items will be dynamically inserted here -->
+                </ul>
+            </div>
+        </div>
+        <div class="dialog-footer">
+            <button id="font-picker-cancel" class="action-btn secondary-btn">Cancel</button>
+        </div>
+    </div>
+</div>
+
 
 <script src="../js/editor/main.js" type="module"></script>
 </body>
 </html>
-

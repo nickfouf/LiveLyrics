@@ -27,6 +27,10 @@ export class EventsArray {
         this.#events = [];
     }
 
+    clearTransitionEvents() {
+        this.#events = this.#events.filter(event => !event.getIsTransition || !event.getIsTransition());
+    }
+
     setTimelineOffset(offset) {
         this.#timelineOffset = offset || 0;
     }
@@ -210,4 +214,4 @@ export class EventsArray {
         }
         return false;
     }
-}
+}

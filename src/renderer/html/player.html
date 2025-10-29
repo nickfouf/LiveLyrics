@@ -11,7 +11,7 @@
 <!-- Custom Title Bar -->
 <div class="title-bar">
     <div class="title-bar-left">
-        <img src="../assets/icon.png" alt="LiveLyrics Icon" class="icon">
+        <img src="../assets/icon.ico" alt="LiveLyrics Icon" class="icon">
         <span id="window-title" class="title">Player</span>
     </div>
     <div class="title-bar-right">
@@ -53,6 +53,11 @@
     <div class="renderer-area">
         <!-- Top Controls (reusing editor structure) -->
         <div class="player-header">
+            <div class="header-actions">
+                <button class="header-btn" id="player-back-to-main-menu-btn" title="Back to Main Menu">
+                   <img src="../../icons/exit.svg" alt="Back" class="header-btn-icon">
+               </button>
+           </div>
             <div class="timeline-container">
                 <div class="playback-controls">
                     <button class="header-btn" id="backward-btn" title="Previous Measure" disabled>
@@ -90,13 +95,16 @@
                     <input type="number" id="bpm-value-input" class="form-input" value="120" disabled>
                 </div>
             </div>
+            <div class="header-actions-right"> <!-- Empty for balance --> </div>
         </div>
 
         <!-- Main Viewport -->
         <div class="player-viewport">
-            <div id="slide-viewport" class="presentation-slide">
-                <div id="page-container">
-                    <!-- The selected song will be rendered here by the DomManager -->
+            <div id="slide-viewport-wrapper">
+                <div id="slide-viewport" class="presentation-slide">
+                    <div id="page-container">
+                        <!-- The selected song will be rendered here by the DomManager -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -204,6 +212,20 @@
     </div>
 </div>
 
+<!-- ADDED: Confirmation Dialog -->
+<div id="confirmation-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="min-width: 400px; max-width: 500px;">
+        <div id="confirmation-dialog-header" class="dialog-header">Confirmation</div>
+        <div class="dialog-body">
+            <p id="confirmation-dialog-message">Are you sure?</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="confirmation-dialog-no" class="action-btn secondary-btn">No</button>
+            <button id="confirmation-dialog-yes" class="action-btn danger-btn">Yes</button>
+        </div>
+    </div>
+</div>
+
 <!-- NEW Dialog for Device List -->
 <div id="device-list-dialog" class="dialog-overlay">
     <div class="dialog-content" style="width: 500px;">
@@ -222,4 +244,4 @@
 
 <script src="../js/player/main.js" type="module"></script>
 </body>
-</html>
+</html>

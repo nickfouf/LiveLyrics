@@ -2,13 +2,12 @@ import { initDOM, DOM } from './dom.js';
 import { DomManager } from '../renderer/domManager.js';
 import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
-import { initSongsManager, handleSongLoaded, handleSongUnloaded } from './songsManager.js';
+import { initSongsManager, handleSongLoaded, handleSongUnloaded, addSongFromPath, songPlaylist } from './songsManager.js';
 import { initPlayerPlayback, handlePlaybackEvent } from './playback.js';
 import { initAlertDialog } from '../editor/alertDialog.js';
+import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
-// MODIFIED: Import from the new, leaner player-specific events file.
-import { getQuarterNoteDurationMs, rebuildAllEventTimelines, reprogramAllPageTransitions } from './events.js';
-import { deserializeElement, findVirtualElementById } from '../editor/utils.js';
+import { applyViewportScaling } from '../editor/rendering.js';
 
 // --- Device Controller Logic ---
 
@@ -249,8 +248,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 2. Initialize UI Modules (Dialogs)
     initAlertDialog();
+    initConfirmationDialog();
     initLoadingDialog();
     setupPanels();
+    
+    // ADDED: Back to main menu button
+    const backToMainMenuBtn = document.getElementById('player-back-to-main-menu-btn');
+    if (backToMainMenuBtn) {
+        backToMainMenuBtn.addEventListener('click', async () => {
+            // Check if there are songs in the playlist
+            if (songPlaylist.length > 0) {
+                const confirmed = await showConfirmationDialog(
+                    'Are you sure you want to return to the main menu? The current playlist will be cleared.',
+                    'Return to Menu'
+                );
+                if (!confirmed) {
+                    return; // User clicked "No", so do nothing.
+                }
+            }
+            // When going back from player, we should tell the main process to pause playback
+            // so audience windows don't keep playing.
+            window.playerAPI.pause(); 
+            window.playerAPI.goToMainMenu();
+        });
+    }
 
     // --- REWRITTEN IPC Listeners ---
     window.playerAPI.onSongLoaded((event) => {
@@ -258,14 +279,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         handlePlaybackEvent(event); // Also process it as a playback event to reset timeline
     });
 
-    window.playerAPI.onSongUnloaded(() => {
-        handleSongUnloaded();
-        handlePlaybackEvent({ type: 'unload' }); // Also process it as a playback event
-    });
-
     window.playerAPI.onPlaybackEvent((event) => {
         // Forward all other events to the playback engine.
         handlePlaybackEvent(event);
+    });
+
+    window.playerAPI.onSongUnloaded(() => {
+        // The UI part of unloading is now handled directly in songsManager.js when a song is deleted.
+        // This handler now only needs to reset the playback engine's state.
+        handlePlaybackEvent({ type: 'unload' }); // Also process it as a playback event
+    });
+
+    // --- ADDED: Listen for file open requests from the main process ---
+    window.playerAPI.onFileOpen(async (filePath) => {
+        console.log(`Player received file to open via IPC: ${filePath}`);
+        await addSongFromPath(filePath);
     });
 
     // 3. Initialize Core Rendering Managers
@@ -292,13 +320,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleSongUnloaded(); // This now just resets the UI
 
     // 7. Setup Resize Observer for the player viewport
-    const slideObserver = new ResizeObserver(() => {
+    const slideObserver = new ResizeObserver((entries) => {
+        if (!entries || !entries.length) return;
+        applyViewportScaling(entries[0].target);
+
         if (state.timelineManager) {
             state.timelineManager.resize(false);
         }
     });
-    if (DOM.presentationSlide) {
-        slideObserver.observe(DOM.presentationSlide);
+    if (DOM.slideViewportWrapper) {
+        slideObserver.observe(DOM.slideViewportWrapper);
     }
 
     document.addEventListener('keydown', (e) => {
@@ -314,4 +345,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     console.log("Player UI Initialized");
-});
+});
