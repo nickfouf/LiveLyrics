@@ -462,4 +462,4 @@ function initSongsManager() {
     });
 }
 
-export { initSongsManager, handleSongLoaded, handleSongUnloaded, addSongFromPath };
+export { initSongsManager, handleSongLoaded, handleSongUnloaded, addSongFromPath };

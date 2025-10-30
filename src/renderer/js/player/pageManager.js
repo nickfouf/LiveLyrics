@@ -136,4 +136,4 @@ export function jumpToPage_Player(newPage) {
     // FIXED: Instead of calling the old function, send a command to the main process.
     // The main process will then send a 'tick' event back, which triggers the render.
     window.playerAPI.jumpToTime(newTimeAtPause);
-}
+}

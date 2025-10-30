@@ -104,7 +104,6 @@ export class SmartEffectSrcProperty extends VirtualProperty {
 
     applyChanges(element) {
         this.#effectData.applyDifferences(element);
-        console.log(this.#effectData.shouldRender)
         // if (this.#effectData.shouldRender) {
         //     this.#effectData.applyDifferences(element);
         // }

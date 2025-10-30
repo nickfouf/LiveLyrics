@@ -184,6 +184,12 @@ export function reprogramAllPageTransitions() {
             const opacity = destPage.getProperty('effects').getOpacity();
             opacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
             opacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
+        } else if (transition.type === 'dip-to-black') {
+            const destOpacity = destPage.getProperty('effects').getOpacity();
+            // To page is invisible for the first half, then fades in
+            destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionMidMeasure, measureProgress: transitionMidProgress }));
+            destOpacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
         } else if (transition.type === 'push') {
             const transform = destPage.getProperty('transform');
             let startValue, endValue, transformProp;
@@ -352,6 +358,11 @@ export function reprogramAllPageTransitions() {
                 const opacity = sourcePage.getProperty('effects').getOpacity();
                 opacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
                 opacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
+            } else if (transition.type === 'dip-to-black') {
+                const sourceOpacity = sourcePage.getProperty('effects').getOpacity();
+                // From page fades out completely in the first half
+                sourceOpacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionMidMeasure, measureProgress: transitionMidProgress }));
             } else if (transition.type === 'push') {
                 const transform = sourcePage.getProperty('transform');
                 let startValue, endValue, transformProp;
@@ -419,4 +430,4 @@ export function reprogramAllPageTransitions() {
             }
         }
     }
-}
+}
