@@ -1366,11 +1366,14 @@ input:checked + .toggle-slider:before {
     padding: 0 1rem;
     gap: 1rem;
     flex-shrink: 0;
+    overflow-x: auto; /* ADDED */
+    overflow-y: hidden; /* ADDED to prevent vertical scrollbar */
 }
 .page-thumbnails-container {
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex-wrap: nowrap; /* ADDED to ensure it stays in one line */
 }
 .page-thumbnail {
     position: relative;

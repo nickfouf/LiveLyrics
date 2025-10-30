@@ -85,6 +85,16 @@ function renderPageManager() {
 
         DOM.pageThumbnailsContainer.appendChild(thumb);
     });
+
+    // ADDED: Scroll the active page into view if it's not fully visible
+    const activeThumbnail = DOM.pageThumbnailsContainer.querySelector('.page-thumbnail.active-page');
+    if (activeThumbnail) {
+        activeThumbnail.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest'
+        });
+    }
 }
 
 
@@ -498,4 +508,4 @@ function handlePageDrop(e) {
     updateTimelineAndEditorView();
 }
 
-export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };
+export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };

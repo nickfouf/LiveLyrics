@@ -68,6 +68,16 @@ export function renderPageManager_Player() {
 
         DOM.pageThumbnailsContainer.appendChild(thumb);
     });
+
+    // ADDED: Scroll the active page into view if it's not fully visible
+    const activeThumbnail = DOM.pageThumbnailsContainer.querySelector('.page-thumbnail.active-page');
+    if (activeThumbnail) {
+        activeThumbnail.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest'
+        });
+    }
 }
 
 
@@ -126,4 +136,4 @@ export function jumpToPage_Player(newPage) {
     // FIXED: Instead of calling the old function, send a command to the main process.
     // The main process will then send a 'tick' event back, which triggers the render.
     window.playerAPI.jumpToTime(newTimeAtPause);
-}
+}

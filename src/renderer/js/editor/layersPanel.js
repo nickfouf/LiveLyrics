@@ -115,7 +115,7 @@ function buildLayerTree(element, parentListElement) {
             <span class="layer-name">${displayName}</span>
         </div>
         <div class="layer-actions">
-            <button class="layer-action-btn" title="Duplicate"><img src="../../icons/duplicate.svg" alt="Duplicate"></button>
+            <button class="layer-action-btn" title="Duplicate"><img src="../../icons/duplicate_gray.svg" alt="Duplicate"></button>
             <button class="layer-action-btn" title="Delete"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" /></svg></button>
         </div>
     </div>`;
@@ -296,4 +296,4 @@ export function initLayersPanelInteractions() {
         // --- Handle layer selection ---
         selectLayer(targetElement);
     });
-}
+}
