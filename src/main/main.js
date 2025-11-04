@@ -36,6 +36,7 @@ let filePathToOpen = null;
 let mainWindow;
 let editorWindow;
 let playerWindow;
+let tempoSyncWindow; // ADDED: Reference for the new Tempo Sync window
 // MODIFIED: Use a Map to track multiple audience windows by their display ID.
 let audienceWindows = new Map();
 // ADDED: Create the central conductor
@@ -160,6 +161,34 @@ function createEditorWindow() {
     editorWindow.maximize();
 }
 
+/**
+ * ADDED: Creates the new Tempo Sync window.
+ * This window provides controls for the 'synced' playback mode.
+ */
+function createTempoSyncWindow() {
+    const preloadScriptPath = path.join(app.getAppPath(), 'src', 'main', 'preload-tempo-sync.js');
+    const htmlPath = path.join(app.getAppPath(), 'src', 'renderer', 'html', 'tempo-sync.html');
+
+    console.log(`[Main] Loading tempoSyncWindow. Preload path: ${preloadScriptPath}`);
+
+    tempoSyncWindow = new BrowserWindow({
+        width: 300,
+        height: 400,
+        title: 'Tempo Sync',
+        webPreferences: {
+            preload: preloadScriptPath,
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    });
+
+    tempoSyncWindow.loadFile(htmlPath);
+
+    tempoSyncWindow.on('closed', () => {
+        tempoSyncWindow = null;
+    });
+}
+
 function createPlayerWindow() {
     const preloadScriptPath = path.join(app.getAppPath(), 'src', 'main', 'preload-player.js');
     const htmlPath = path.join(app.getAppPath(), 'src', 'renderer', 'html', 'player.html');
@@ -184,6 +213,9 @@ function createPlayerWindow() {
 
     playerWindow.loadFile(htmlPath);
 
+    // ADDED: Create the tempo sync window alongside the player
+    createTempoSyncWindow();
+
     playerWindow.webContents.on('did-finish-load', () => {
         sendDisplaysUpdate();
         updateAudienceWindows();
@@ -199,6 +231,10 @@ function createPlayerWindow() {
     playerWindow.on('closed', () => {
         for (const window of audienceWindows.values()) {
             window.close();
+        }
+        // ADDED: Close the tempo sync window when the player closes
+        if (tempoSyncWindow && !tempoSyncWindow.isDestroyed()) {
+            tempoSyncWindow.close();
         }
         playerWindow = null;
     });
@@ -278,7 +314,8 @@ function updateAudienceWindows() {
 // --- App & IPC Logic ---
 app.whenReady().then(() => {
     const broadcastToAllWindows = (channel, ...args) => {
-        const windows = [playerWindow, ...audienceWindows.values()];
+        // MODIFIED: Add tempoSyncWindow to the list of windows to receive broadcasts.
+        const windows = [playerWindow, ...audienceWindows.values(), tempoSyncWindow];
         for (const window of windows) {
             if (window && !window.isDestroyed()) {
                 window.webContents.send(channel, ...args);
@@ -900,8 +937,9 @@ ipcMain.on('audience:update', (event, data) => {
 });
 
 
-ipcMain.on('playback:load-song', (event, song) => {
-    playbackManager.loadSong(song);
+// MODIFIED: The 'playback:load-song' handler now accepts the measureMap.
+ipcMain.on('playback:load-song', (event, { songMetadata, measureMap }) => {
+    playbackManager.loadSong(songMetadata, measureMap);
 });
 
 ipcMain.on('playback:unload-song', () => {
@@ -922,6 +960,15 @@ ipcMain.on('playback:pause', (event, options) => {
 
 ipcMain.on('playback:jump', (event, { timeInMs, timestamp }) => {
     playbackManager.jump(timeInMs, timestamp);
+});
+
+// ADDED: IPC handlers for the new 'synced' playback mode
+ipcMain.on('playback:play-synced', (event, { timestamp }) => {
+    playbackManager.play(timestamp, 'synced');
+});
+
+ipcMain.on('playback:sync-beat', (event, { timestamp, interpolationDuration }) => {
+    playbackManager.syncBeat(timestamp, interpolationDuration);
 });
 
 app.on('window-all-closed', () => {
@@ -955,4 +1002,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

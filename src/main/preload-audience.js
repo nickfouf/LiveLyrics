@@ -26,8 +26,13 @@ contextBridge.exposeInMainWorld('audienceAPI', {
     // REMOVED: onPlaybackSync is no longer needed.
     
     // --- UNIFIED Playback Event Listener ---
+    /**
+     * Listens for all playback state changes from the main process.
+     * @param {function(object): void} callback - The function to call with the new state.
+     * The state object has the shape: { status, type, song, timeAtReference, referenceTime, syncTime }
+     */
     onPlaybackUpdate: (callback) => createSafeListener('playback:update', callback),
 
     // --- File Operations ---
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
-});
+});

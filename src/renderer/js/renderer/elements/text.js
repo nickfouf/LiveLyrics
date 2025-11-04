@@ -43,7 +43,7 @@ export class VirtualText extends VirtualElement {
         this.domElement.style.display = 'flex';
         this.domElement.style.justifyContent = 'center';
         this.domElement.style.alignItems = 'center';
-        this.domElement.style.overflow = 'hidden';
+        // this.domElement.style.overflow = 'hidden';
         this.domElement.dataset.elementType = 'text';
 
         const textElement = document.createElement('div');
@@ -72,4 +72,4 @@ export class VirtualText extends VirtualElement {
         this.setProperty('inner_padding', new InnerPaddingProperty(options.inner_padding));
         this.setProperty('transform', new TransformProperty(options.transform));
     }
-}
+}

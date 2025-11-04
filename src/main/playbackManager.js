@@ -3,11 +3,15 @@ const { performance } = require('perf_hooks');
 class PlaybackManager {
     #state = {
         status: 'unloaded', // 'unloaded', 'playing', 'paused'
+        type: 'normal',     // 'normal', 'synced'
         song: null,         // Will now store { id, title, filePath, bpm, bpmUnit }
         timeAtReference: 0,
         referenceTime: 0,
     };
     #broadcast;
+    #measureMap = []; // ADDED: To store the song's measure structure
+    #lastBeatTimestamp = 0; // For 'synced' mode
+    #syncedMeasureIndex = 0; // For tracking progress in 'synced' mode
 
     constructor(broadcastFunction) {
         this.#broadcast = broadcastFunction;
@@ -43,14 +47,16 @@ class PlaybackManager {
         return 60000 / quarterNotesPerMinute;
     }
 
-    #broadcastState() {
+    #broadcastState(extraData = {}) {
         // The state object sent over IPC is always lean and never contains song content.
         const stateToSend = {
             status: this.#state.status,
-            song: this.#state.song, // This is now just metadata
+            type: this.#state.type,
+            song: this.#state.song,
             timeAtReference: this.#state.timeAtReference,
             referenceTime: this.#state.referenceTime,
-            syncTime: performance.now()
+            syncTime: performance.now(),
+            ...extraData, // Merge in any extra data, like interpolation info
         };
         this.#broadcast('playback:update', stateToSend);
     }
@@ -58,6 +64,7 @@ class PlaybackManager {
     getCurrentSyncState() {
         return {
             status: this.#state.status,
+            type: this.#state.type,
             song: this.#state.song,
             timeAtReference: this.#state.timeAtReference,
             referenceTime: this.#state.referenceTime,
@@ -65,8 +72,9 @@ class PlaybackManager {
         };
     }
 
-    loadSong(songMetadata) {
+    loadSong(songMetadata, measureMap = []) {
         this.#state.status = 'paused';
+        this.#state.type = 'normal'; // Reset type on load
         this.#state.song = {
             id: songMetadata.id,
             title: songMetadata.title,
@@ -74,16 +82,23 @@ class PlaybackManager {
             bpm: songMetadata.bpm || 120,
             bpmUnit: songMetadata.bpmUnit || 'q_note',
         };
+        this.#measureMap = measureMap; // Store the measure map
         this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
+        this.#lastBeatTimestamp = 0;
+        this.#syncedMeasureIndex = 0;
         this.#broadcastState();
     }
 
     unloadSong() {
         this.#state.status = 'unloaded';
+        this.#state.type = 'normal';
         this.#state.song = null;
+        this.#measureMap = [];
         this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
+        this.#lastBeatTimestamp = 0;
+        this.#syncedMeasureIndex = 0;
         this.#broadcastState();
     }
 
@@ -113,11 +128,17 @@ class PlaybackManager {
         this.#broadcastState();
     }
 
-    play(absoluteTimestamp) {
+    play(absoluteTimestamp, type = 'normal') {
         if (this.#state.status !== 'paused') return;
         this.#state.status = 'playing';
+        this.#state.type = type; // Set the playback type
         const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
         this.#state.referenceTime = mainRelativeTimestamp;
+        
+        if (type === 'synced') {
+            this.#lastBeatTimestamp = 0;
+            this.#syncedMeasureIndex = 0;
+        }
         this.#broadcastState();
     }
 
@@ -130,6 +151,8 @@ class PlaybackManager {
         this.#state.status = 'paused';
         this.#state.timeAtReference = timeAtPause;
         this.#state.referenceTime = 0;
+        this.#lastBeatTimestamp = 0;
+        this.#syncedMeasureIndex = 0;
         this.#broadcastState();
     }
 
@@ -143,8 +166,79 @@ class PlaybackManager {
         } else {
             this.#state.status = 'paused';
         }
+        this.#lastBeatTimestamp = 0;
+        this.#syncedMeasureIndex = 0;
         this.#broadcastState();
+    }
+
+    /**
+     * REVISED: Handles a beat signal for 'synced' playback using the measure map.
+     * Each call to this function marks the beginning of the next measure.
+     * @param {number} absoluteTimestamp - The high-resolution timestamp of the beat event.
+     * @param {number} interpolationDuration - The duration in seconds to smooth the transition.
+     */
+    syncBeat(absoluteTimestamp, interpolationDuration) {
+        if (this.#state.status !== 'playing' || this.#state.type !== 'synced' || !this.#state.song || this.#measureMap.length === 0) {
+            return;
+        }
+
+        const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
+        const currentMeasure = this.#measureMap[this.#syncedMeasureIndex];
+        const nextMeasure = this.#measureMap[this.#syncedMeasureIndex + 1];
+
+        if (!currentMeasure) {
+            console.warn(`[PlaybackManager] Sync beat called, but current measure index ${this.#syncedMeasureIndex} is out of bounds.`);
+            return;
+        }
+
+        const intervalStart = this.#lastBeatTimestamp || this.#state.referenceTime;
+        const intervalMs = mainRelativeTimestamp - intervalStart;
+
+        if (intervalMs <= 0) return; // Ignore erroneous double-taps
+
+        // --- Capture the state AT THE MOMENT of the beat ---
+        const timeAtStart = this.#getCurrentTime(mainRelativeTimestamp);
+        const bpmAtStart = this.#state.song.bpm;
+
+        // --- Calculate the TARGET state ---
+        let targetBpm = bpmAtStart;
+        const beatsInMeasure = currentMeasure.duration;
+        if (beatsInMeasure > 0) {
+            const msPerBeat = intervalMs / beatsInMeasure;
+            targetBpm = 60000 / msPerBeat;
+        }
+
+        const newTimeInBeats = nextMeasure ? nextMeasure.startTime : (currentMeasure.startTime + currentMeasure.duration);
+        const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(targetBpm, this.#state.song.bpmUnit);
+        const timeAtEnd = newTimeInBeats * newQuarterNoteDuration;
+
+        // --- Prepare the broadcast message ---
+        // This object contains everything the renderer needs to perform the interpolation.
+        const interpolationData = {
+            interpolation: {
+                startTime: mainRelativeTimestamp, // The timestamp when the interpolation should begin
+                duration: interpolationDuration * 1000, // Convert seconds to ms
+                startMs: timeAtStart,
+                endMs: timeAtEnd,
+                startBpm: bpmAtStart,
+                endBpm: targetBpm,
+            }
+        };
+
+        // --- Atomically update the manager's internal state to the new TARGET ---
+        // This ensures consistency for new windows or subsequent beats.
+        this.#state.song.bpm = targetBpm;
+        this.#state.timeAtReference = timeAtEnd;
+        this.#state.referenceTime = mainRelativeTimestamp;
+        this.#lastBeatTimestamp = mainRelativeTimestamp;
+
+        if (nextMeasure) {
+            this.#syncedMeasureIndex++;
+        }
+
+        // --- Broadcast the new state, including the special interpolation data ---
+        this.#broadcastState(interpolationData);
     }
 }
 
-module.exports = { PlaybackManager };
+module.exports = { PlaybackManager };

@@ -19,7 +19,8 @@ contextBridge.exposeInMainWorld('playerAPI', {
     onDisplaysChanged: (callback) => ipcRenderer.on('displays-changed', (_event, data) => callback(data)),
 
     // --- Playback Commands (MODIFIED) ---
-    loadSong: (song) => ipcRenderer.send('playback:load-song', song),
+    // MODIFIED: Now sends an object containing both metadata and the measure map.
+    loadSong: (data) => ipcRenderer.send('playback:load-song', data),
     unloadSong: () => ipcRenderer.send('playback:unload-song'),
     play: (timestamp) => ipcRenderer.send('playback:play', timestamp),
     pause: (options) => ipcRenderer.send('playback:pause', options), // Now sends an object { timeOverride?, timestamp }
@@ -27,8 +28,13 @@ contextBridge.exposeInMainWorld('playerAPI', {
     updateBpm: (bpm, bpmUnit, timestamp) => ipcRenderer.send('playback:update-bpm', { bpm, bpmUnit, timestamp }),
 
     // --- UNIFIED Playback Event Listener ---
+    /**
+     * Listens for all playback state changes from the main process.
+     * @param {function(object): void} callback - The function to call with the new state.
+     * The state object has the shape: { status, type, song, timeAtReference, referenceTime, syncTime }
+     */
     onPlaybackUpdate: (callback) => ipcRenderer.on('playback:update', (_event, state) => callback(state)),
 
     // --- File Opening from Main Process ---
     onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
-});
+});

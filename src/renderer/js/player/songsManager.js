@@ -129,6 +129,21 @@ async function loadSong(songId) {
         console.error(`Song with id ${songId} not found in playlist.`);
         return;
     }
+
+    // MODIFIED: This function now sends both metadata and the measure map to the main process.
+    // First, we need to temporarily load the song data into the state to build the map.
+    const tempThumbnailPage = deserializeElement(song.songData.thumbnailPage);
+    const tempPages = song.songData.pages.map(p => deserializeElement(p));
+    updateState({
+        song: {
+            ...song.songData,
+            thumbnailPage: tempThumbnailPage,
+            pages: tempPages,
+        }
+    });
+    const measureMap = buildMeasureMap();
+
+    // Now, create the lean metadata object for the main process.
     const songMetadata = {
         id: song.id,
         title: song.title,
@@ -136,7 +151,9 @@ async function loadSong(songId) {
         bpm: song.songData.bpm,
         bpmUnit: song.songData.bpmUnit,
     };
-    window.playerAPI.loadSong(songMetadata);
+
+    // Send the command to the main process.
+    window.playerAPI.loadSong({ songMetadata, measureMap });
 }
 
 /**
@@ -395,4 +412,4 @@ export function initSongsManager() {
         songPlaylist.splice(targetIndex, 0, draggedSong);
         renderPlaylist();
     });
-}
+}

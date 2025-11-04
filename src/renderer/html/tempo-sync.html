@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tempo Sync</title>
+    <style>
+        :root {
+            --background-color: #2c2c2c;
+            --text-color: #f0f0f0;
+            --primary-color: #007bff;
+            --primary-hover-color: #0056b3;
+            --disabled-color: #555;
+            --input-background: #3a3a3a;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        h1 {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        button {
+            font-size: 24px;
+            padding: 20px;
+            width: 100%;
+            max-width: 200px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            margin-bottom: 15px;
+        }
+        #play-btn {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        #play-btn:hover:not(:disabled) {
+            background-color: var(--primary-hover-color);
+        }
+        #beat-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        #beat-btn:hover:not(:disabled) {
+            background-color: #218838;
+        }
+        button:disabled {
+            background-color: var(--disabled-color);
+            cursor: not-allowed;
+            color: #999;
+        }
+        /* ADDED: Style for visual feedback on key press */
+        button.active {
+            transform: scale(0.98);
+            filter: brightness(0.9);
+        }
+        .bpm-display {
+            font-size: 18px;
+            color: #aaa;
+            margin-top: 10px; /* Reduced margin */
+            min-height: 25px;
+        }
+        .bpm-value {
+            font-weight: bold;
+            color: #fff;
+            font-size: 22px;
+        }
+        /* ADDED: Styles for the new input */
+        .interpolation-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .interpolation-control label {
+            font-size: 14px;
+            color: #ccc;
+        }
+        .interpolation-control input {
+            width: 60px;
+            padding: 5px;
+            font-size: 14px;
+            background-color: var(--input-background);
+            color: var(--text-color);
+            border: 1px solid #555;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tempo Sync</h1>
+    <button id="play-btn">Play</button>
+    <button id="beat-btn" disabled>Beat</button>
+    <div class="bpm-display">BPM: <span id="bpm-value" class="bpm-value">--</span></div>
+    <!-- ADDED: Interpolation duration input -->
+    <div class="interpolation-control">
+        <label for="interpolation-duration">Smooth (s):</label>
+        <input type="number" id="interpolation-duration" value="0.5" step="0.1" min="0">
+    </div>
+
+    <script>
+        const playBtn = document.getElementById('play-btn');
+        const beatBtn = document.getElementById('beat-btn');
+        const bpmValue = document.getElementById('bpm-value');
+        const interpolationInput = document.getElementById('interpolation-duration');
+
+        function getInterpolationDuration() {
+            const duration = parseFloat(interpolationInput.value);
+            return isNaN(duration) || duration < 0 ? 0 : duration;
+        }
+
+        playBtn.addEventListener('click', () => {
+            window.tempoSyncAPI.play();
+        });
+
+        beatBtn.addEventListener('click', () => {
+            window.tempoSyncAPI.beat(getInterpolationDuration());
+        });
+
+        // MODIFIED: Unified spacebar handler
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Prevent default browser action (e.g., scrolling)
+
+                // If the play button is active, trigger a click on it.
+                if (!playBtn.disabled) {
+                    playBtn.classList.add('active');
+                    playBtn.click();
+                }
+                // Otherwise, if the beat button is active, trigger a beat.
+                else if (!beatBtn.disabled) {
+                    beatBtn.classList.add('active');
+                    window.tempoSyncAPI.beat(getInterpolationDuration());
+                }
+            }
+        });
+
+        // MODIFIED: Unified keyup handler for visual feedback
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                // Remove active class from whichever button might have it
+                playBtn.classList.remove('active');
+                beatBtn.classList.remove('active');
+            }
+        });
+
+        // Listen for state updates to sync UI and BPM
+        window.tempoSyncAPI.onPlaybackUpdate((state) => {
+            // Update BPM display
+            if (state.song && state.song.bpm) {
+                // If there's an interpolation target from a sync message, show that instead.
+                const displayBpm = state.interpolation?.endBpm ?? state.song.bpm;
+                bpmValue.textContent = displayBpm.toFixed(1);
+            } else {
+                bpmValue.textContent = '--';
+            }
+
+            // Update button states
+            const isPlayingSynced = state.status === 'playing' && state.type === 'synced';
+            const isSongLoaded = state.status !== 'unloaded';
+
+            playBtn.disabled = isPlayingSynced || !isSongLoaded;
+            beatBtn.disabled = !isPlayingSynced;
+
+            if (isPlayingSynced) {
+                beatBtn.focus();
+            } else if (isSongLoaded) {
+                playBtn.focus();
+            }
+        });
+    </script>
+</body>
+</html>

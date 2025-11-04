@@ -47,4 +47,4 @@ export function showConfirmationDialog(message = 'Are you sure?', title = 'Confi
             resolve(confirmed);
         }
     });
-}
+}

@@ -3,7 +3,6 @@ import { DOM } from './dom.js';
 import { buildMeasureMap, findActiveTransition } from '../editor/utils.js';
 import { setActivePage_Player } from './pageManager.js';
 import { getQuarterNoteDurationMs, rebuildAllEventTimelines, reprogramAllPageTransitions } from './events.js';
-// MODIFIED: Renamed for clarity and to match new function signature.
 import { handleSongActivated, handleSongUnloaded, songPlaylist } from './songsManager.js';
 
 // --- State-based Synchronization ---
@@ -13,9 +12,20 @@ let localPlaybackState = {
     timeAtReference: 0,
     referenceTime: 0,
     referenceTimeOffset: 0,
+    song: null, // To store the authoritative song state from main
 };
+// State for handling smooth tempo interpolation
+let activeInterpolation = null;
 
-function getCurrentTime() {
+function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+}
+
+/**
+ * Calculates the current time based on the authoritative state from the main process.
+ * This represents the "true" timeline position without any interpolation.
+ */
+function getAuthoritativeTime() {
     if (!state.song || localPlaybackState.status !== 'playing') {
         return localPlaybackState.timeAtReference;
     }
@@ -41,7 +51,41 @@ function renderLoop() {
         stopRenderLoop();
         return;
     }
-    const currentTime = getCurrentTime();
+
+    let currentTime;
+    const now = performance.now();
+
+    if (activeInterpolation) {
+        const elapsed = now - activeInterpolation.localStartTime;
+        const progress = easeInOutQuad(Math.min(1, elapsed / activeInterpolation.duration));
+
+        // The authoritative time is our moving target.
+        const authoritativeTime = getAuthoritativeTime();
+
+        // The remaining offset to correct for shrinks over time.
+        const remainingOffset = activeInterpolation.initialOffset * (1 - progress);
+
+        // Our rendered time is the target minus the shrinking offset.
+        currentTime = authoritativeTime - remainingOffset;
+
+        // Interpolate BPM as well for smooth visual feedback.
+        const interpolatedBpm = activeInterpolation.startBpm + (activeInterpolation.endBpm - activeInterpolation.startBpm) * progress;
+        if (state.song.bpm !== interpolatedBpm) {
+            updateState({ song: { ...state.song, bpm: interpolatedBpm } });
+        }
+
+        if (elapsed >= activeInterpolation.duration) {
+            activeInterpolation = null;
+            // Final sync to ensure the rendering state's BPM matches the authoritative one.
+            if (state.song.bpm !== localPlaybackState.song.bpm) {
+                updateState({ song: { ...state.song, bpm: localPlaybackState.song.bpm } });
+            }
+        }
+    } else {
+        // No interpolation, just use the authoritative time.
+        currentTime = getAuthoritativeTime();
+    }
+
     const measureMap = state.timelineManager.getMeasureMap();
     const beatDurationMs = getQuarterNoteDurationMs();
     const totalDurationBeats = measureMap.length > 0 ? measureMap.at(-1).startTime + measureMap.at(-1).duration : 0;
@@ -138,16 +182,14 @@ export async function handlePlaybackUpdate(newState) {
     const newSongId = newState.song ? newState.song.id : null;
 
     if (newState.status === 'unloaded') {
+        activeInterpolation = null; // Clear any running interpolation
         handleSongUnloaded();
         return;
     }
 
-    // If the song ID from the state update is different, we need to load its content.
     if (newSongId !== currentSongId) {
         const songFromPlaylist = songPlaylist.find(s => s.id === newSongId);
         if (songFromPlaylist) {
-            // FIXED: Pass the metadata from the state and the content from the playlist cache.
-            // This ensures the function receives the correct data structure and avoids the crash.
             await handleSongActivated(newState.song, songFromPlaylist.songData);
         } else {
             console.error(`Player received instruction to load song ID ${newSongId}, but it was not found in the playlist.`);
@@ -156,10 +198,41 @@ export async function handlePlaybackUpdate(newState) {
         }
     }
 
+    // --- REVISED: Handle interpolation for synced playback ---
+    if (newState.type === 'synced' && newState.interpolation) {
+        // Capture the visual time right before we update our authoritative state.
+        const visualTimeBeforeUpdate = getAuthoritativeTime();
+
+        // Update the authoritative state tracker FIRST.
+        localPlaybackState.timeAtReference = newState.timeAtReference;
+        localPlaybackState.referenceTime = newState.referenceTime;
+        localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
+
+        // Now, calculate the authoritative time at this exact moment.
+        const authoritativeTimeNow = getAuthoritativeTime();
+        const offset = authoritativeTimeNow - visualTimeBeforeUpdate;
+
+        activeInterpolation = {
+            localStartTime: performance.now(),
+            duration: newState.interpolation.duration,
+            initialOffset: offset,
+            startBpm: state.song.bpm, // The BPM we were just rendering with.
+            endBpm: newState.interpolation.endBpm,
+        };
+    } else {
+        activeInterpolation = null;
+    }
+
+    // Always update the rest of the authoritative state.
     localPlaybackState.status = newState.status;
-    localPlaybackState.timeAtReference = newState.timeAtReference;
-    localPlaybackState.referenceTime = newState.referenceTime;
-    localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
+    if (!activeInterpolation) { // Don't overwrite if we just set it above
+        localPlaybackState.timeAtReference = newState.timeAtReference;
+        localPlaybackState.referenceTime = newState.referenceTime;
+        localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
+    }
+    if (newState.song) {
+        localPlaybackState.song = newState.song;
+    }
 
     const isPlaying = newState.status === 'playing';
     updateState({ playback: { ...state.playback, isPlaying } });
@@ -169,7 +242,8 @@ export async function handlePlaybackUpdate(newState) {
     if (state.song && newState.song) {
         const newBpm = newState.song.bpm;
         const newBpmUnit = newState.song.bpmUnit;
-        if (state.song.bpm !== newBpm || state.song.bpmUnit !== newBpmUnit) {
+        // Only update the rendering state's BPM if not interpolating.
+        if (!activeInterpolation && (state.song.bpm !== newBpm || state.song.bpmUnit !== newBpmUnit)) {
             updateState({ song: { ...state.song, bpm: newBpm, bpmUnit: newBpmUnit } });
             rebuildAllEventTimelines();
             reprogramAllPageTransitions();
@@ -217,7 +291,7 @@ function jumpMeasure(direction) {
     const measureMap = state.timelineManager.getMeasureMap();
     if (measureMap.length === 0) return;
     const beatDurationMs = getQuarterNoteDurationMs();
-    const currentTime = getCurrentTime();
+    const currentTime = getAuthoritativeTime(); // Use authoritative time for jumps
     const currentBeats = beatDurationMs > 0 ? currentTime / beatDurationMs : 0;
     const totalDurationBeats = measureMap.at(-1).startTime + measureMap.at(-1).duration;
     let currentMeasureIndex = measureMap.findIndex(m => currentBeats >= m.startTime && currentBeats < m.startTime + m.duration);
@@ -269,4 +343,4 @@ export function initPlayerPlayback() {
     });
     DOM.forwardBtn.addEventListener('click', () => jumpMeasure(1));
     DOM.backwardBtn.addEventListener('click', () => jumpMeasure(-1));
-}
+}
