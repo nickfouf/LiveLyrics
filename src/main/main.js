@@ -232,10 +232,13 @@ function createAudienceWindow(display) {
 
     audienceWindow.webContents.on('did-finish-load', () => {
         if (playbackManager) {
+            // Get the complete, authoritative current state from the manager.
             const syncState = playbackManager.getCurrentSyncState();
-            if (syncState.currentSong) {
-                console.log(`[Main] Syncing new audience window on display ${display.id} with ${syncState.eventHistory.length} events.`);
-                audienceWindow.webContents.send('playback:sync', syncState);
+            // If a song is loaded/playing/paused, send the state to the new window.
+            if (syncState.status !== 'unloaded') {
+                console.log(`[Main] Syncing new audience window on display ${display.id}.`);
+                // Send the state on the SAME unified channel all windows use.
+                audienceWindow.webContents.send('playback:update', syncState);
             }
         }
     });
@@ -905,20 +908,20 @@ ipcMain.on('playback:unload-song', () => {
     playbackManager.unloadSong();
 });
 
-ipcMain.on('playback:update-bpm', (event, { bpm, bpmUnit }) => {
-    playbackManager.updateBpm(bpm, bpmUnit);
+ipcMain.on('playback:update-bpm', (event, { bpm, bpmUnit, timestamp }) => {
+    playbackManager.updateBpm(bpm, bpmUnit, timestamp);
 });
 
-ipcMain.on('playback:play', () => {
-    playbackManager.play();
+ipcMain.on('playback:play', (event, timestamp) => {
+    playbackManager.play(timestamp);
 });
 
-ipcMain.on('playback:pause', (event, timeOverride) => {
-    playbackManager.pause(timeOverride);
+ipcMain.on('playback:pause', (event, options) => {
+    playbackManager.pause(options);
 });
 
-ipcMain.on('playback:jump', (event, timeInMs) => {
-    playbackManager.jump(timeInMs);
+ipcMain.on('playback:jump', (event, { timeInMs, timestamp }) => {
+    playbackManager.jump(timeInMs, timestamp);
 });
 
 app.on('window-all-closed', () => {
@@ -952,4 +955,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

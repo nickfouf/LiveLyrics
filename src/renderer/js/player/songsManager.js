@@ -9,18 +9,13 @@ import { VirtualContainer } from '../renderer/elements/container.js';
 import { VirtualTitle } from '../renderer/elements/title.js';
 import { VirtualText } from '../renderer/elements/text.js';
 import { DOM } from './dom.js';
+import { applyViewportScaling } from '../editor/rendering.js';
 
 export let songPlaylist = []; // Array to hold { id, title, filePath, songData };
 let playlistElement;
 
-/**
- * Checks if a raw page data object contains any musical measures.
- * @param {object} pageData The raw page data from the project file.
- * @returns {boolean} True if the page has measures, false otherwise.
- */
 function pageDataHasMeasures(pageData) {
     if (!pageData) return false;
-
     function findMusicElements(element) {
         let elements = [];
         if (element.type === 'lyrics' || element.type === 'orchestra' || element.type === 'audio') {
@@ -33,7 +28,6 @@ function pageDataHasMeasures(pageData) {
         }
         return elements;
     }
-
     const musicElements = findMusicElements(pageData);
     for (const el of musicElements) {
         if (el.type === 'lyrics' && el.properties?.lyricsContent?.measures?.length > 0) {
@@ -48,11 +42,6 @@ function pageDataHasMeasures(pageData) {
     return false;
 }
 
-/**
- * Checks if a raw song data object contains any pages with musical measures.
- * @param {object} songData The raw song data from the project file.
- * @returns {boolean} True if the song has at least one measure, false otherwise.
- */
 function songDataHasMeasures(songData) {
     if (!songData || !songData.pages || songData.pages.length === 0) {
         return false;
@@ -61,15 +50,15 @@ function songDataHasMeasures(songData) {
 }
 
 function showDefaultPlayerView() {
-    // Clear existing content from managers before loading new content.
     if (state.domManager) state.domManager.clear();
 
+    // Create the virtual elements for the default view
     const defaultPage = new VirtualPage({ name: 'Default' });
     const container = new VirtualContainer({ alignment: 'vertical' });
     const title = new VirtualTitle({ textContent: "No song loaded yet" });
     const text = new VirtualText({ textContent: "Use the songs manager panel and click at the add song button." });
-
-    // Some styling for the default view
+    
+    // Style the elements
     container.getProperty('gravity').setJustifyContent('center', true);
     container.getProperty('gravity').setAlignItems('center', true);
     container.getProperty('gap').setGap({ value: 20, unit: 'px' }, true);
@@ -78,64 +67,60 @@ function showDefaultPlayerView() {
     text.getProperty('textStyle').setFontSize({ value: 30, unit: 'px' }, true);
     text.getProperty('textStyle').setTextColor({ r: 200, g: 200, b: 200, a: 1, mode: 'color' }, true);
     text.getProperty('textStyle').setTextAlign('center', true);
-
-
+    
+    // Assemble the virtual elements
     container.addElement(title);
     container.addElement(text);
     defaultPage.addElement(container);
 
-    state.domManager.addPage(defaultPage);
-
+    // Directly add the constructed page to the visible DOM.
+    // The regular rendering loop is bypassed when no song is loaded, so we do it manually.
+    state.domManager.addToDom(defaultPage);
+    
+    // Update the global state to reflect that no song is loaded.
     updateState({
-        song: {
-            title: "Player",
-            thumbnailPage: defaultPage,
-            pages: [],
-            currentFilePath: null,
-            isDirty: false,
-        },
-        activePage: null,
+        song: null,
+        activePage: defaultPage,
         selectedElement: null,
-        playback: {
-            ...state.playback,
-            isPlaying: false,
-            timeAtPause: 0,
-            songHasEnded: false,
-        }
+        playback: { ...state.playback, isPlaying: false, timeAtPause: 0, songHasEnded: false, }
     });
 
-    rebuildAllEventTimelines(); // Important to clear old timeline data
-    setActivePage_Player(defaultPage);
-    
-    // FIXED: Tell the main process to go to time 0, which will trigger a render.
-    window.playerAPI.jumpToTime(0);
-
+    // Clear the page manager thumbnails and update the rest of the UI
     if (DOM.pageThumbnailsContainer) {
         DOM.pageThumbnailsContainer.innerHTML = '';
     }
-
-    window.DOM = DOM; // For debugging
-    window.state = state; // For debugging
     document.getElementById('window-title').innerText = "Player";
     document.getElementById('play-pause-btn').disabled = true;
     document.getElementById('backward-btn').disabled = true;
     document.getElementById('forward-btn').disabled = true;
-
-    // Disable BPM controls
     const bpmValueInput = document.getElementById('bpm-value-input');
     const bpmNoteSelect = document.getElementById('bpm-note-select-custom');
     if (bpmValueInput && bpmNoteSelect) {
         bpmValueInput.disabled = true;
         bpmValueInput.value = 120;
-
         const selectedDiv = bpmNoteSelect.querySelector('.select-selected');
-        selectedDiv.setAttribute('tabindex', '-1'); // Disable it
+        selectedDiv.setAttribute('tabindex', '-1');
         const optionDiv = bpmNoteSelect.querySelector(`.select-items div[data-value="q_note"]`);
         if (optionDiv) {
             selectedDiv.dataset.value = 'q_note';
             selectedDiv.innerHTML = optionDiv.innerHTML;
         }
     }
+
+    // Manually trigger a viewport scale calculation AND render the initial state.
+    // This is wrapped in a setTimeout to ensure the DOM has updated
+    // from the .clear() and .addToDom() calls before we try to measure and scale it.
+    setTimeout(() => {
+        if (DOM.slideViewportWrapper) {
+            applyViewportScaling(DOM.slideViewportWrapper);
+        }
+        if (state.timelineManager) {
+            // Force the timeline manager to recalculate element sizes based on the new content.
+            state.timelineManager.resize(true);
+            // Render the elements at their initial state (time = 0).
+            state.timelineManager.renderAt(0, 0);
+        }
+    }, 0);
 }
 
 async function loadSong(songId) {
@@ -144,24 +129,28 @@ async function loadSong(songId) {
         console.error(`Song with id ${songId} not found in playlist.`);
         return;
     }
-    // The main process will now handle loading and broadcasting.
-    window.playerAPI.loadSong({ id: song.id, data: song.songData, filePath: song.filePath, title: song.title });
+    const songMetadata = {
+        id: song.id,
+        title: song.title,
+        filePath: song.filePath,
+        bpm: song.songData.bpm,
+        bpmUnit: song.songData.bpmUnit,
+    };
+    window.playerAPI.loadSong(songMetadata);
 }
 
-function clearRenderer() {
-    window.playerAPI.unloadSong();
-}
-
-async function handleSongLoaded(song) {
+/**
+ * Activates a song in the renderer using its metadata and content.
+ * @param {object} songMetadata The authoritative metadata from the main process state.
+ * @param {object} songData The full song content from the local cache.
+ */
+export async function handleSongActivated(songMetadata, songData) {
     showLoadingDialog('Loading song...');
     try {
         if (DOM.pageManager) {
             DOM.pageManager.style.display = 'flex';
         }
-        // Clear existing content from managers before loading new content.
         if (state.domManager) state.domManager.clear();
-
-        const songData = song.data;
 
         const thumbnailPage = deserializeElement(songData.thumbnailPage);
         const pages = songData.pages.map(p => deserializeElement(p));
@@ -178,23 +167,17 @@ async function handleSongLoaded(song) {
 
         updateState({
             song: {
-                title: songData.title,
+                id: songMetadata.id,
+                title: songMetadata.title,
+                filePath: songMetadata.filePath,
                 thumbnailPage: thumbnailPage,
                 pages: pages,
-                currentFilePath: song.filePath,
-                isDirty: false,
-                bpm: songData.bpm || 120,
-                bpmUnit: songData.bpmUnit || 'q_note',
+                bpm: songMetadata.bpm, // Use authoritative BPM from main process
+                bpmUnit: songMetadata.bpmUnit,
             },
             activePage: null,
             selectedElement: null,
-            playback: {
-                ...state.playback,
-                isPlaying: false,
-                timeAtPause: 0,
-                songHasEnded: false,
-            },
-            activeSongId: song.id,
+            activeSongId: songMetadata.id,
         });
 
         rebuildAllEventTimelines();
@@ -206,44 +189,38 @@ async function handleSongLoaded(song) {
         state.timelineManager.setLyricsTimingMap(lyricsTimingMap);
 
         setActivePage_Player(thumbnailPage);
-        
-        // FIXED: Tell the main process to go to time 0, which will trigger the initial render.
-        window.playerAPI.jumpToTime(0);
 
-        document.getElementById('window-title').innerText = `Player - ${song.title}`;
+        document.getElementById('window-title').innerText = `Player - ${songMetadata.title}`;
         renderPlaylist();
 
-        // Enable and update BPM controls
         const bpmValueInput = document.getElementById('bpm-value-input');
         const bpmNoteSelect = document.getElementById('bpm-note-select-custom');
         if (bpmValueInput && bpmNoteSelect) {
             bpmValueInput.disabled = !songDataHasMeasures(songData);
-            bpmValueInput.value = songData.bpm || 120;
-
+            bpmValueInput.value = songMetadata.bpm || 120;
             const selectedDiv = bpmNoteSelect.querySelector('.select-selected');
             selectedDiv.setAttribute('tabindex', songDataHasMeasures(songData) ? '0' : '-1');
-            const optionDiv = bpmNoteSelect.querySelector(`.select-items div[data-value="${songData.bpmUnit || 'q_note'}"]`);
+            const optionDiv = bpmNoteSelect.querySelector(`.select-items div[data-value="${songMetadata.bpmUnit || 'q_note'}"]`);
             if (optionDiv) {
-                selectedDiv.dataset.value = songData.bpmUnit || 'q_note';
+                selectedDiv.dataset.value = songMetadata.bpmUnit || 'q_note';
                 selectedDiv.innerHTML = optionDiv.innerHTML;
             }
         }
 
-        // Enable playback controls
         const hasMeasures = songDataHasMeasures(songData);
         document.getElementById('play-pause-btn').disabled = !hasMeasures;
         document.getElementById('backward-btn').disabled = !hasMeasures;
         document.getElementById('forward-btn').disabled = !hasMeasures;
 
     } catch (error) {
-        console.error('Failed to load song into renderer:', error);
+        console.error('Failed to activate song in renderer:', error);
         await showAlertDialog('Failed to Load Song', error.message);
     } finally {
         hideLoadingDialog();
     }
 }
 
-function handleSongUnloaded() {
+export function handleSongUnloaded() {
     updateState({ activeSongId: null });
     renderPlaylist();
     showDefaultPlayerView();
@@ -252,7 +229,6 @@ function handleSongUnloaded() {
 function renderPlaylist() {
     if (!playlistElement) return;
     playlistElement.innerHTML = '';
-
     songPlaylist.forEach(song => {
         const li = document.createElement('li');
         li.className = 'song-item';
@@ -275,63 +251,44 @@ function renderPlaylist() {
 async function handleAddSong() {
     const filePath = await window.playerAPI.openSong();
     if (!filePath) return;
-
-    // Check if the song already exists in the playlist
     const existingSong = songPlaylist.find(song => song.filePath === filePath);
     if (existingSong) {
-        // If it exists, find its DOM element and highlight it
         const songItemElement = playlistElement.querySelector(`[data-song-id="${existingSong.id}"]`);
         if (songItemElement) {
             songItemElement.classList.add('highlight-duplicate');
-            // Remove the highlight after 1 second
             setTimeout(() => {
                 songItemElement.classList.remove('highlight-duplicate');
             }, 1000);
         }
-        return; // Prevent adding the duplicate
+        return;
     }
-
     showLoadingDialog("Opening project...");
     try {
         const result = await window.playerAPI.openProject(filePath);
-
         if (!result.success) {
             throw new Error(result.error);
         }
         const songData = result.data;
-
-        // MODIFIED: Validate that the song has measures before adding it.
         if (!songDataHasMeasures(songData)) {
             await showAlertDialog('Loading song failed', 'The selected song project does not contain any measures and cannot be played.');
-            hideLoadingDialog(); // Hide dialog after showing the specific alert
+            hideLoadingDialog();
             return;
         }
-
         const songId = `song-${Date.now()}`;
         const fileNameWithExt = filePath.split(/[\\/]/).pop();
         const title = fileNameWithExt.replace(/\.lyx$/, '');
-
         const newSong = { id: songId, title, filePath, songData };
         songPlaylist.push(newSong);
-
-        // Always load the newly added song into the renderer
         await loadSong(songId);
-
     } catch (error) {
         console.error('Failed to open project:', error);
-        hideLoadingDialog(); // Hide dialog on failure, BEFORE showing alert
+        hideLoadingDialog();
         await showAlertDialog('Failed to Open Project', error.message);
     }
 }
 
-/**
- * ADDED: Opens a project from a given file path and adds it to the playlist.
- * @param {string} filePath The path of the song file to add.
- */
-async function addSongFromPath(filePath) {
+export async function addSongFromPath(filePath) {
     if (!filePath) return;
-
-    // Check if the song already exists in the playlist
     const existingSong = songPlaylist.find(song => song.filePath === filePath);
     if (existingSong) {
         const songItemElement = playlistElement.querySelector(`[data-song-id="${existingSong.id}"]`);
@@ -339,29 +296,23 @@ async function addSongFromPath(filePath) {
             songItemElement.classList.add('highlight-duplicate');
             setTimeout(() => songItemElement.classList.remove('highlight-duplicate'), 1000);
         }
-        // If the song isn't already the active one, load it.
         if (state.activeSongId !== existingSong.id) {
             await loadSong(existingSong.id);
         }
         return;
     }
-
     showLoadingDialog("Opening project...");
     try {
         const result = await window.playerAPI.openProject(filePath);
-
         if (!result.success) throw new Error(result.error);
-
         const songData = result.data;
         if (!songDataHasMeasures(songData)) {
             throw new Error('The selected song project does not contain any measures and cannot be played.');
         }
-
         const songId = `song-${Date.now()}`;
         const title = filePath.split(/[\\/]/).pop().replace(/\.lyx$/, '');
         const newSong = { id: songId, title, filePath, songData };
         songPlaylist.push(newSong);
-
         await loadSong(songId);
     } catch (error) {
         console.error('Failed to open project from path:', error);
@@ -371,28 +322,21 @@ async function addSongFromPath(filePath) {
     }
 }
 
-function initSongsManager() {
+export function initSongsManager() {
     playlistElement = document.getElementById('song-playlist');
     const addSongBtn = document.getElementById('add-song-btn');
-
     addSongBtn.addEventListener('click', handleAddSong);
-
     playlistElement.addEventListener('click', e => {
         const songItem = e.target.closest('.song-item');
         if (!songItem) return;
-
         const songId = songItem.dataset.songId;
-
         if (e.target.closest('.delete-song-btn')) {
             const index = songPlaylist.findIndex(s => s.id === songId);
             if (index > -1) {
                 const wasActive = state.activeSongId === songId;
                 songPlaylist.splice(index, 1);
-                renderPlaylist(); // Re-render the list immediately
+                renderPlaylist();
                 if (songPlaylist.length === 0) {
-                    // The playlist is empty. Reset the view locally.
-                    handleSongUnloaded();
-                    // Also notify the main process so the audience window clears.
                     window.playerAPI.unloadSong();
                 } else if (wasActive) {
                     const newActiveIndex = Math.max(0, index - 1);
@@ -405,7 +349,6 @@ function initSongsManager() {
             }
         }
     });
-
     let draggedId = null;
     playlistElement.addEventListener('dragstart', e => {
         const item = e.target.closest('.song-item');
@@ -414,7 +357,6 @@ function initSongsManager() {
             setTimeout(() => item.classList.add('dragging'), 0);
         }
     });
-
     playlistElement.addEventListener('dragend', e => {
         const item = e.target.closest('.song-item');
         if(item) item.classList.remove('dragging');
@@ -423,7 +365,6 @@ function initSongsManager() {
             el.classList.remove('drag-over-before', 'drag-over-after');
         });
     });
-
     playlistElement.addEventListener('dragover', e => {
         e.preventDefault();
         const targetItem = e.target.closest('.song-item');
@@ -436,30 +377,22 @@ function initSongsManager() {
         targetItem.classList.toggle('drag-over-before', y < rect.height / 2);
         targetItem.classList.toggle('drag-over-after', y >= rect.height / 2);
     });
-
     playlistElement.addEventListener('drop', e => {
         e.preventDefault();
         const targetItem = e.target.closest('.song-item');
         if (!targetItem || !draggedId) return;
-
         const draggedIndex = songPlaylist.findIndex(s => s.id === draggedId);
         let targetIndex = songPlaylist.findIndex(s => s.id === targetItem.dataset.songId);
-
         const [draggedSong] = songPlaylist.splice(draggedIndex, 1);
-
         const rect = targetItem.getBoundingClientRect();
         const y = e.clientY - rect.top;
         if (y >= rect.height / 2) {
             targetIndex++;
         }
-
         if (draggedIndex < targetIndex) {
             targetIndex--;
         }
-
         songPlaylist.splice(targetIndex, 0, draggedSong);
         renderPlaylist();
     });
 }
-
-export { initSongsManager, handleSongLoaded, handleSongUnloaded, addSongFromPath };

@@ -2,99 +2,149 @@ const { performance } = require('perf_hooks');
 
 class PlaybackManager {
     #state = {
-        isPlaying: false,
-        songLoaded: false,
-        startTime: 0, // performance.now() when play was last called
-        timeAtPause: 0, // The playback time in ms when paused
-        currentSong: null,
+        status: 'unloaded', // 'unloaded', 'playing', 'paused'
+        song: null,         // Will now store { id, title, filePath, bpm, bpmUnit }
+        timeAtReference: 0,
+        referenceTime: 0,
     };
     #broadcast;
-    #eventHistory = []; // Authoritative history of events since last play/pause.
 
     constructor(broadcastFunction) {
         this.#broadcast = broadcastFunction;
     }
 
-    #getCurrentTime() {
-        if (!this.#state.songLoaded) return 0;
-        let currentTime = this.#state.timeAtPause;
-        if (this.#state.isPlaying) {
-            currentTime += performance.now() - this.#state.startTime;
-        }
-        return currentTime;
+    #getCurrentTime(atTimestamp = performance.now()) {
+        if (this.#state.status === 'unloaded') return 0;
+        if (this.#state.status === 'paused') return this.#state.timeAtReference;
+        return this.#state.timeAtReference + (atTimestamp - this.#state.referenceTime);
+    }
+
+    #getQuarterNoteDurationMs(bpm, bpmUnit) {
+        const effectiveBpm = bpm || 120;
+        const effectiveBpmUnit = bpmUnit || 'q_note';
+
+        const noteMultipliers = {
+            'w_note': 4,
+            'h_note': 2,
+            'q_note': 1,
+            'e_note': 0.5,
+            's_note': 0.25,
+            'w_note_dotted': 6,
+            'h_note_dotted': 3,
+            'q_note_dotted': 1.5,
+            'e_note_dotted': 0.75,
+        };
+
+        const multiplier = noteMultipliers[effectiveBpmUnit] || 1;
+        const quarterNotesPerMinute = effectiveBpm * multiplier;
+
+        if (quarterNotesPerMinute === 0) return 0;
+
+        return 60000 / quarterNotesPerMinute;
+    }
+
+    #broadcastState() {
+        // The state object sent over IPC is always lean and never contains song content.
+        const stateToSend = {
+            status: this.#state.status,
+            song: this.#state.song, // This is now just metadata
+            timeAtReference: this.#state.timeAtReference,
+            referenceTime: this.#state.referenceTime,
+            syncTime: performance.now()
+        };
+        this.#broadcast('playback:update', stateToSend);
     }
 
     getCurrentSyncState() {
         return {
-            currentSong: this.#state.currentSong,
-            eventHistory: this.#eventHistory,
+            status: this.#state.status,
+            song: this.#state.song,
+            timeAtReference: this.#state.timeAtReference,
+            referenceTime: this.#state.referenceTime,
+            syncTime: performance.now()
         };
     }
 
-    loadSong(song) {
-        this.#state.songLoaded = true;
-        this.#state.currentSong = song;
-        this.#state.timeAtPause = 0;
-        this.#state.isPlaying = false;
-
-        const event = { type: 'load', song, timestamp: Date.now() };
-        this.#eventHistory = [{ type: 'pause', timeAtPause: 0, timestamp: event.timestamp }];
-        // Broadcast on a dedicated 'playback:load' channel.
-        this.#broadcast('playback:load', event);
+    loadSong(songMetadata) {
+        this.#state.status = 'paused';
+        this.#state.song = {
+            id: songMetadata.id,
+            title: songMetadata.title,
+            filePath: songMetadata.filePath,
+            bpm: songMetadata.bpm || 120,
+            bpmUnit: songMetadata.bpmUnit || 'q_note',
+        };
+        this.#state.timeAtReference = 0;
+        this.#state.referenceTime = 0;
+        this.#broadcastState();
     }
 
     unloadSong() {
-        this.#state.songLoaded = false;
-        this.#state.currentSong = null;
-        this.#state.isPlaying = false;
-        this.#state.timeAtPause = 0;
-
-        const event = { type: 'unload', timestamp: Date.now() };
-        this.#eventHistory = [];
-        // Broadcast on a dedicated 'playback:unload' channel.
-        this.#broadcast('playback:unload', event);
+        this.#state.status = 'unloaded';
+        this.#state.song = null;
+        this.#state.timeAtReference = 0;
+        this.#state.referenceTime = 0;
+        this.#broadcastState();
     }
 
-    updateBpm(bpm, bpmUnit) {
-        if (!this.#state.songLoaded || !this.#state.currentSong) return;
-        this.#state.currentSong.data.bpm = bpm;
-        this.#state.currentSong.data.bpmUnit = bpmUnit;
-        const event = { type: 'update-bpm', bpm, bpmUnit, timestamp: Date.now() };
-        this.#eventHistory.push(event);
-        this.#broadcast('playback:event', event);
-    }
+    updateBpm(bpm, bpmUnit, absoluteTimestamp) {
+        if (!this.#state.song) return;
 
+        const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
+        const currentTime = this.#getCurrentTime(mainRelativeTimestamp);
 
+        const oldBpm = this.#state.song.bpm;
+        const oldBpmUnit = this.#state.song.bpmUnit;
+        const oldQuarterNoteDuration = this.#getQuarterNoteDurationMs(oldBpm, oldBpmUnit);
+        const currentMusicalTime = oldQuarterNoteDuration > 0 ? currentTime / oldQuarterNoteDuration : 0;
 
-    play() {
-        if (this.#state.isPlaying || !this.#state.songLoaded) return;
-        this.#state.isPlaying = true;
-        this.#state.startTime = performance.now();
-        const event = { type: 'play', timeAtStart: this.#state.timeAtPause, timestamp: Date.now() };
-        this.#eventHistory = [event];
-        this.#broadcast('playback:event', event);
-    }
+        this.#state.song.bpm = bpm;
+        this.#state.song.bpmUnit = bpmUnit;
 
-    pause(timeOverride) {
-        if (!this.#state.isPlaying && timeOverride === undefined) return;
-        const timeAtPause = (timeOverride !== undefined) ? timeOverride : this.#getCurrentTime();
-        this.#state.timeAtPause = timeAtPause;
-        this.#state.isPlaying = false;
-        const event = { type: 'pause', timeAtPause, timestamp: Date.now() };
-        this.#eventHistory = [event];
-        this.#broadcast('playback:event', event);
-    }
+        const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(bpm, bpmUnit);
+        const newCurrentTime = currentMusicalTime * newQuarterNoteDuration;
 
-    jump(timeInMs) {
-        this.#state.timeAtPause = Math.max(0, timeInMs);
-        if (this.#state.isPlaying) {
-            // If we jump while playing, the reference start time must be reset.
-            this.#state.startTime = performance.now();
+        this.#state.timeAtReference = newCurrentTime;
+
+        if (this.#state.status === 'playing') {
+            this.#state.referenceTime = mainRelativeTimestamp;
         }
-        const event = { type: 'jump', timeInMs, timestamp: Date.now() };
-        this.#eventHistory.push(event);
-        this.#broadcast('playback:event', event);
+        
+        this.#broadcastState();
+    }
+
+    play(absoluteTimestamp) {
+        if (this.#state.status !== 'paused') return;
+        this.#state.status = 'playing';
+        const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
+        this.#state.referenceTime = mainRelativeTimestamp;
+        this.#broadcastState();
+    }
+
+    pause(options = {}) {
+        const { timeOverride, timestamp: absoluteTimestamp } = options;
+        if (this.#state.status !== 'playing' && timeOverride === undefined) return;
+
+        const mainRelativeTimestamp = absoluteTimestamp ? absoluteTimestamp - performance.timeOrigin : undefined;
+        const timeAtPause = (timeOverride !== undefined) ? timeOverride : this.#getCurrentTime(mainRelativeTimestamp);
+        this.#state.status = 'paused';
+        this.#state.timeAtReference = timeAtPause;
+        this.#state.referenceTime = 0;
+        this.#broadcastState();
+    }
+
+    jump(timeInMs, absoluteTimestamp) {
+        if (this.#state.status === 'unloaded') return;
+        this.#state.timeAtReference = Math.max(0, timeInMs);
+        const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
+
+        if (this.#state.status === 'playing') {
+            this.#state.referenceTime = mainRelativeTimestamp;
+        } else {
+            this.#state.status = 'paused';
+        }
+        this.#broadcastState();
     }
 }
 
-module.exports = { PlaybackManager };
+module.exports = { PlaybackManager };

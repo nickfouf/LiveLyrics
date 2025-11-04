@@ -2,8 +2,8 @@ import { initDOM, DOM } from './dom.js';
 import { DomManager } from '../renderer/domManager.js';
 import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
-import { initSongsManager, handleSongLoaded, handleSongUnloaded, addSongFromPath, songPlaylist } from './songsManager.js';
-import { initPlayerPlayback, handlePlaybackEvent } from './playback.js';
+import { initSongsManager, addSongFromPath, songPlaylist } from './songsManager.js';
+import { initPlayerPlayback, handlePlaybackUpdate } from './playback.js';
 import { initAlertDialog } from '../editor/alertDialog.js';
 import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
@@ -210,7 +210,7 @@ function setupPlayerBPMControls() {
 
         // Send a single command to the main process. The main process will handle
         // creating the timestamped event and broadcasting it to all windows.
-        window.playerAPI.updateBpm(newBpm, newBpmUnit);
+        window.playerAPI.updateBpm(newBpm, newBpmUnit, performance.timeOrigin + performance.now());
     };
 
     // --- BPM Input Listener ---
@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initConfirmationDialog();
     initLoadingDialog();
     setupPanels();
-    
+
     // ADDED: Back to main menu button
     const backToMainMenuBtn = document.getElementById('player-back-to-main-menu-btn');
     if (backToMainMenuBtn) {
@@ -268,26 +268,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             // When going back from player, we should tell the main process to pause playback
             // so audience windows don't keep playing.
-            window.playerAPI.pause(); 
+            window.playerAPI.pause({ timestamp: performance.timeOrigin + performance.now() });
             window.playerAPI.goToMainMenu();
         });
     }
 
-    // --- REWRITTEN IPC Listeners ---
-    window.playerAPI.onSongLoaded((event) => {
-        handleSongLoaded(event.song);
-        handlePlaybackEvent(event); // Also process it as a playback event to reset timeline
-    });
-
-    window.playerAPI.onPlaybackEvent((event) => {
-        // Forward all other events to the playback engine.
-        handlePlaybackEvent(event);
-    });
-
-    window.playerAPI.onSongUnloaded(() => {
-        // The UI part of unloading is now handled directly in songsManager.js when a song is deleted.
-        // This handler now only needs to reset the playback engine's state.
-        handlePlaybackEvent({ type: 'unload' }); // Also process it as a playback event
+    // --- UNIFIED IPC Listener ---
+    // All playback logic is now handled by this single function.
+    window.playerAPI.onPlaybackUpdate((newState) => {
+        console.log('Player received playback update:', newState);
+        handlePlaybackUpdate(newState);
     });
 
     // --- ADDED: Listen for file open requests from the main process ---
@@ -317,7 +307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initConfigurationPanel();
 
     // 6. Show the default view initially
-    handleSongUnloaded(); // This now just resets the UI
+    handlePlaybackUpdate({ status: 'unloaded' });
 
     // 7. Setup Resize Observer for the player viewport
     const slideObserver = new ResizeObserver((entries) => {
@@ -345,4 +335,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     console.log("Player UI Initialized");
-});
+});

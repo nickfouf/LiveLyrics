@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 console.log('✅ preload-player.js loaded successfully');
 
 contextBridge.exposeInMainWorld('playerAPI', {
-    // --- Window Controls (Restored) ---
+    // --- Window Controls ---
     minimizeWindow: () => ipcRenderer.send('minimize-player-window'),
     maximizeWindow: () => ipcRenderer.send('maximize-player-window'),
     closeWindow: () => ipcRenderer.send('close-player-window'),
@@ -18,20 +18,17 @@ contextBridge.exposeInMainWorld('playerAPI', {
     setPresenterDisplay: (displayId) => ipcRenderer.send('player:set-presenter-display', displayId),
     onDisplaysChanged: (callback) => ipcRenderer.on('displays-changed', (_event, data) => callback(data)),
 
-    // --- Playback Commands ---
+    // --- Playback Commands (MODIFIED) ---
     loadSong: (song) => ipcRenderer.send('playback:load-song', song),
     unloadSong: () => ipcRenderer.send('playback:unload-song'),
-    play: () => ipcRenderer.send('playback:play'),
-    pause: (timeOverride) => ipcRenderer.send('playback:pause', timeOverride),
-    jumpToTime: (timeInMs) => ipcRenderer.send('playback:jump', timeInMs),
-    updateBpm: (bpm, bpmUnit) => ipcRenderer.send('playback:update-bpm', { bpm, bpmUnit }),
+    play: (timestamp) => ipcRenderer.send('playback:play', timestamp),
+    pause: (options) => ipcRenderer.send('playback:pause', options), // Now sends an object { timeOverride?, timestamp }
+    jumpToTime: (timeInMs, timestamp) => ipcRenderer.send('playback:jump', { timeInMs, timestamp }),
+    updateBpm: (bpm, bpmUnit, timestamp) => ipcRenderer.send('playback:update-bpm', { bpm, bpmUnit, timestamp }),
 
-    // --- Unified Playback Event Listener ---
-    onSongLoaded: (callback) => ipcRenderer.on('playback:load', (_event, event) => callback(event)),
-    onSongUnloaded: (callback) => ipcRenderer.on('playback:unload', (_event, event) => callback(event)),
-    onPlaybackEvent: (callback) => ipcRenderer.on('playback:event', (_event, event) => callback(event)),
+    // --- UNIFIED Playback Event Listener ---
+    onPlaybackUpdate: (callback) => ipcRenderer.on('playback:update', (_event, state) => callback(state)),
 
-    // --- MODIFIED: File Opening from Main Process ---
+    // --- File Opening from Main Process ---
     onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
 });
-

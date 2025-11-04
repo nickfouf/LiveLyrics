@@ -1,146 +1,26 @@
-// src/renderer/js/audience/main.js
-
 import { initDOM, DOM } from './dom.js';
 import { DomManager } from '../renderer/domManager.js';
 import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { deserializeElement, buildMeasureMap, buildLyricsTimingMap, findActiveTransition, findVirtualElementById } from '../editor/utils.js';
-// MODIFIED: Import from the new, leaner player-specific events file.
 import { getQuarterNoteDurationMs, rebuildAllEventTimelines, reprogramAllPageTransitions } from '../player/events.js';
 
-// --- Event-driven State Management ---
-let eventHistory = [];
+// --- State-based Synchronization ---
 let animationFrameId = null;
+let localPlaybackState = {
+    status: 'unloaded',
+    timeAtReference: 0,
+    referenceTime: 0,
+    referenceTimeOffset: 0,
+};
 
-/**
- * Calculates the current playback time in milliseconds by tracking the musical position in beats,
- * which correctly handles variable BPM during playback.
- * @param {Array} history The event history array.
- * @param {object} song The current song object containing base BPM info.
- * @returns {{currentTime: number, isPlaying: boolean}}
- */
-function calculateCurrentTime(history, song) {
-    if (!song || !history || history.length === 0) {
-        return { currentTime: 0, isPlaying: false };
+function getCurrentTime() {
+    if (!state.song || localPlaybackState.status !== 'playing') {
+        return localPlaybackState.timeAtReference;
     }
-
-    const lastPlayOrPause = [...history].reverse().find(e => e.type === 'play' || e.type === 'pause');
-    const isPlaying = lastPlayOrPause ? lastPlayOrPause.type === 'play' : false;
-
-    let musicalTimeInBeats = 0;
-    let lastTimestamp = 0; // Wall-clock time of the last event. 0 if paused.
-    let currentBpmConfig = { bpm: song.bpm, bpmUnit: song.bpmUnit }; // Start with song's base BPM.
-
-    // Process history chronologically
-    for (const event of history) {
-        // If playing, add the beats that have passed since the last event.
-        if (lastTimestamp > 0) {
-            const elapsedWallTime = event.timestamp - lastTimestamp;
-            const beatDuration = getQuarterNoteDurationMs(currentBpmConfig);
-            if (beatDuration > 0) {
-                musicalTimeInBeats += elapsedWallTime / beatDuration;
-            }
-        }
-
-        // Now, update the state based on the event itself.
-        switch (event.type) {
-            case 'play':
-                // A 'play' event's time is relative to the BPM at that moment.
-                const beatDurationAtPlay = getQuarterNoteDurationMs(currentBpmConfig);
-                musicalTimeInBeats = beatDurationAtPlay > 0 ? event.timeAtStart / beatDurationAtPlay : 0;
-                lastTimestamp = event.timestamp; // Start the clock
-                break;
-            case 'pause':
-                // A 'pause' event's time is relative to the BPM at that moment.
-                const beatDurationAtPause = getQuarterNoteDurationMs(currentBpmConfig);
-                musicalTimeInBeats = beatDurationAtPause > 0 ? event.timeAtPause / beatDurationAtPause : 0;
-                lastTimestamp = 0; // Stop the clock
-                break;
-            case 'jump':
-                // A 'jump' event's time is relative to the BPM at that moment.
-                const beatDurationAtJump = getQuarterNoteDurationMs(currentBpmConfig);
-                musicalTimeInBeats = beatDurationAtJump > 0 ? event.timeInMs / beatDurationAtJump : 0;
-                if (isPlaying) {
-                    lastTimestamp = event.timestamp; // Reset the clock's reference point
-                }
-                break;
-            case 'update-bpm':
-                // The musical time in beats does not change when BPM is updated.
-                // We just update the config for the *next* interval.
-                currentBpmConfig = { bpm: event.bpm, bpmUnit: event.bpmUnit };
-                break;
-        }
-    }
-
-    // If still playing after the last event, add the final elapsed time.
-    if (isPlaying && lastTimestamp > 0) {
-        const finalElapsedWallTime = Date.now() - lastTimestamp;
-        const finalBeatDuration = getQuarterNoteDurationMs(currentBpmConfig);
-        if (finalBeatDuration > 0) {
-            musicalTimeInBeats += finalElapsedWallTime / finalBeatDuration;
-        }
-    }
-
-    // Convert the final musical position back to milliseconds using the final active BPM.
-    const finalBeatDuration = getQuarterNoteDurationMs(currentBpmConfig);
-    const finalCurrentTime = musicalTimeInBeats * finalBeatDuration;
-
-    return { currentTime: finalCurrentTime, isPlaying };
-}
-
-
-/**
- * Replays the event history to determine the exact current state.
- */
-function recalculateStateAndRender() {
-    if (!state.song) {
-        stopRenderLoop();
-        return;
-    }
-
-    if (eventHistory.length === 0) {
-        stopRenderLoop();
-        renderFrameAtTime(0);
-        return;
-    }
-
-    // --- 1. Sync local BPM state from event history ---
-    let currentBpm = state.song.bpm;
-    let currentBpmUnit = state.song.bpmUnit;
-    for (const event of eventHistory) {
-        if (event.type === 'update-bpm') {
-            currentBpm = event.bpm;
-            currentBpmUnit = event.bpmUnit;
-        }
-    }
-    if (state.song.bpm !== currentBpm || state.song.bpmUnit !== currentBpmUnit) {
-        updateState({ song: { ...state.song, bpm: currentBpm, bpmUnit: currentBpmUnit } });
-        rebuildAllEventTimelines();
-        reprogramAllPageTransitions();
-    }
-
-    // --- 2. Calculate final time using the new robust function ---
-    const { currentTime, isPlaying } = calculateCurrentTime(eventHistory, state.song);
-
-    // --- 3. Render the Final State ---
-    updateState({ playback: { ...state.playback, isPlaying } });
-
-    if (isPlaying) {
-        startRenderLoop();
-    } else {
-        stopRenderLoop();
-        renderFrameAtTime(currentTime);
-    }
-}
-
-function renderLoop() {
-    const { currentTime, isPlaying } = calculateCurrentTime(eventHistory, state.song);
-    if (isPlaying) {
-        renderFrameAtTime(currentTime);
-        animationFrameId = requestAnimationFrame(renderLoop);
-    } else {
-        stopRenderLoop();
-    }
+    const mainNow = performance.now() - localPlaybackState.referenceTimeOffset;
+    const elapsed = mainNow - localPlaybackState.referenceTime;
+    return localPlaybackState.timeAtReference + elapsed;
 }
 
 function startRenderLoop() {
@@ -153,6 +33,16 @@ function stopRenderLoop() {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
     }
+}
+
+function renderLoop() {
+    if (localPlaybackState.status !== 'playing') {
+        stopRenderLoop();
+        return;
+    }
+    const currentTime = getCurrentTime();
+    renderFrameAtTime(currentTime);
+    animationFrameId = requestAnimationFrame(renderLoop);
 }
 
 function renderFrameAtTime(timeInMs) {
@@ -239,13 +129,12 @@ function updateVisiblePagesForTime(musicalTimeInBeats) {
     }
 }
 
-function handleSongLoad(song) {
-    if (!song || !song.data || !song.data.thumbnailPage || !Array.isArray(song.data.pages)) {
-        console.error("Audience: Aborting song load due to invalid or incomplete song data structure.", song);
+async function handleSongLoad(songMetadata, songData) {
+    if (!songMetadata || !songData) {
+        console.error("Audience: Aborting song load due to invalid data.");
         handleSongUnload();
         return;
     }
-    const songData = song.data;
     if(state.domManager) state.domManager.clear();
     const thumbnailPage = deserializeElement(songData.thumbnailPage);
     const pages = songData.pages.map(p => deserializeElement(p));
@@ -260,11 +149,13 @@ function handleSongLoad(song) {
     });
     updateState({
         song: {
-            title: song.title,
+            id: songMetadata.id,
+            title: songMetadata.title,
+            filePath: songMetadata.filePath,
             thumbnailPage: thumbnailPage,
             pages: pages,
-            bpm: songData.bpm || 120,
-            bpmUnit: songData.bpmUnit || 'q_note',
+            bpm: songMetadata.bpm || 120,
+            bpmUnit: songMetadata.bpmUnit || 'q_note',
         },
         activePage: thumbnailPage,
     });
@@ -281,7 +172,50 @@ function handleSongUnload() {
     stopRenderLoop();
     if(state.domManager) state.domManager.clear();
     updateState({ song: null, activePage: null });
-    eventHistory = [];
+}
+
+async function handlePlaybackUpdate(newState) {
+    const currentSongFilePath = state.song ? state.song.filePath : null;
+    const newSongFilePath = newState.song ? newState.song.filePath : null;
+
+    if (newState.status === 'unloaded') {
+        if (currentSongFilePath !== null) handleSongUnload();
+        return;
+    }
+
+    if (newSongFilePath !== currentSongFilePath) {
+        try {
+            const result = await window.audienceAPI.openProject(newSongFilePath);
+            if (!result.success) throw new Error(result.error);
+            await handleSongLoad(newState.song, result.data);
+        } catch (error) {
+            console.error(`Audience failed to load project from ${newSongFilePath}:`, error);
+            handleSongUnload();
+            return;
+        }
+    }
+
+    localPlaybackState.status = newState.status;
+    localPlaybackState.timeAtReference = newState.timeAtReference;
+    localPlaybackState.referenceTime = newState.referenceTime;
+    localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
+
+    if (state.song && newState.song) {
+        const newBpm = newState.song.bpm;
+        const newBpmUnit = newState.song.bpmUnit;
+        if (state.song.bpm !== newBpm || state.song.bpmUnit !== newBpmUnit) {
+            updateState({ song: { ...state.song, bpm: newBpm, bpmUnit: newBpmUnit } });
+            rebuildAllEventTimelines();
+            reprogramAllPageTransitions();
+        }
+    }
+
+    if (newState.status === 'playing') {
+        startRenderLoop();
+    } else {
+        stopRenderLoop();
+        renderFrameAtTime(newState.timeAtReference);
+    }
 }
 
 // --- Main Initialization ---
@@ -296,58 +230,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
 
-    // --- REWRITTEN IPC Listeners ---
+    // --- UNIFIED IPC Listeners ---
 
-    // Listener for the initial state when the window first opens
-    window.audienceAPI.onPlaybackSync((data) => {
-        console.log('Audience: Syncing state', data);
-        if (!data || typeof data !== 'object') {
-            console.error('Audience: Received invalid or null sync data. Aborting sync.', data);
-            handleSongUnload();
-            return;
-        }
-        handleSongLoad(data.currentSong);
-        eventHistory = data.eventHistory || [];
-        recalculateStateAndRender();
+    // Listener for ALL playback updates (initial sync and subsequent changes)
+    window.audienceAPI.onPlaybackUpdate(async (newState) => {
+        // This single handler is now responsible for all state processing.
+        await handlePlaybackUpdate(newState);
     });
-
-    // Listener for when a new song is loaded by the player
-    window.audienceAPI.onSongLoaded((event) => {
-        console.log('Audience: Received song load event', event);
-        if (!event || typeof event !== 'object') {
-            console.error('Audience: Received invalid or null load event. Aborting.', event);
-            handleSongUnload();
-            return;
-        }
-        handleSongLoad(event.song);
-        // Reset the history to match the manager's state after a load
-        eventHistory = [{ type: 'pause', timeAtPause: 0, timestamp: event.timestamp }];
-        recalculateStateAndRender();
-    });
-
-    // Listener for when the current song is unloaded
-    window.audienceAPI.onSongUnloaded(() => {
-        console.log('Audience: Received song unload event');
-        handleSongUnload();
-    });
-
-    // Listener for timeline-only events (play, pause, jump, etc.)
-    window.audienceAPI.onPlaybackEvent((event) => {
-        if (!event || typeof event !== 'object' || typeof event.type === 'undefined') {
-            console.error('Audience: Received an invalid or null event object. Ignoring.', event);
-            return;
-        }
-
-        // The logic is now much simpler as we don't handle 'load' or 'unload' here.
-        switch (event.type) {
-            case 'play':
-            case 'pause':
-                eventHistory = [event];
-                break;
-            default: // 'jump', 'update-bpm'
-                eventHistory.push(event);
-                break;
-        }
-        recalculateStateAndRender();
-    });
-});
+});

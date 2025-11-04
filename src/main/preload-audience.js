@@ -23,13 +23,11 @@ const createSafeListener = (channel, callback) => {
 };
 
 contextBridge.exposeInMainWorld('audienceAPI', {
-    // For the initial state dump when a window opens
-    onPlaybackSync: (callback) => createSafeListener('playback:sync', callback),
+    // REMOVED: onPlaybackSync is no longer needed.
     
-    // Dedicated listeners for major state changes
-    onSongLoaded: (callback) => createSafeListener('playback:load', callback),
-    onSongUnloaded: (callback) => createSafeListener('playback:unload', callback),
+    // --- UNIFIED Playback Event Listener ---
+    onPlaybackUpdate: (callback) => createSafeListener('playback:update', callback),
 
-    // A single, unified channel for all subsequent timestamped events
-    onPlaybackEvent: (callback) => createSafeListener('playback:event', callback),
-});
+    // --- File Operations ---
+    openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
+});

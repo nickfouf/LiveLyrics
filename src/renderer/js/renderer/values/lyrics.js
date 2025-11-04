@@ -554,13 +554,6 @@ export class LyricsLayout {
     
         if (totalLayoutWidth === 0 || groupStart === -1 || groupEnd === -1) return null;
 
-        console.log("DEBUGGING:", {
-            start: (groupStart / totalLayoutWidth) * 100,
-            end: (groupEnd / totalLayoutWidth) * 100,
-            width: (groupEnd - groupStart),
-            noteId: noteId,
-            noteValue: this.#lyricsObject.measures.flatMap(m => m.content).find(n => n.id === noteId)
-        });
         return {
             start: (groupStart / totalLayoutWidth) * 100,
             end: (groupEnd / totalLayoutWidth) * 100,
@@ -854,4 +847,4 @@ export class LyricsLayout {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}

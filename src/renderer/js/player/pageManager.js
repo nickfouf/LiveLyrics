@@ -14,6 +14,11 @@ export function renderPageManager_Player() {
     if (!DOM.pageThumbnailsContainer) return;
     DOM.pageThumbnailsContainer.innerHTML = '';
 
+    // FIXED: Add a guard clause to handle the case where no song is loaded.
+    if (!state.song) {
+        return;
+    }
+
     // 1. Render Thumbnail Page
     const thumbnailPage = state.song.thumbnailPage;
     if (thumbnailPage) {
@@ -136,4 +141,4 @@ export function jumpToPage_Player(newPage) {
     // FIXED: Instead of calling the old function, send a command to the main process.
     // The main process will then send a 'tick' event back, which triggers the render.
     window.playerAPI.jumpToTime(newTimeAtPause);
-}
+}
