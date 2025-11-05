@@ -39,6 +39,8 @@ let playerWindow;
 let tempoSyncWindow; // ADDED: Reference for the new Tempo Sync window
 // MODIFIED: Use a Map to track multiple audience windows by their display ID.
 let audienceWindows = new Map();
+// ADDED: Map to store latency per display ID
+let displayLatencies = new Map();
 // ADDED: Create the central conductor
 let playbackManager;
 
@@ -173,7 +175,7 @@ function createTempoSyncWindow() {
 
     tempoSyncWindow = new BrowserWindow({
         width: 300,
-        height: 400,
+        height: 450, // Increased height for the new button
         title: 'Tempo Sync',
         webPreferences: {
             preload: preloadScriptPath,
@@ -274,7 +276,10 @@ function createAudienceWindow(display) {
             if (syncState.status !== 'unloaded') {
                 console.log(`[Main] Syncing new audience window on display ${display.id}.`);
                 // Send the state on the SAME unified channel all windows use.
-                audienceWindow.webContents.send('playback:update', syncState);
+                // MODIFIED: The broadcast function now handles adding latency, so we call it directly.
+                const latency = displayLatencies.get(display.id) || 0;
+                const stateForWindow = { ...syncState, latency };
+                audienceWindow.webContents.send('playback:update', stateForWindow);
             }
         }
     });
@@ -314,16 +319,55 @@ function updateAudienceWindows() {
 // --- App & IPC Logic ---
 app.whenReady().then(() => {
     const broadcastToAllWindows = (channel, ...args) => {
-        // MODIFIED: Add tempoSyncWindow to the list of windows to receive broadcasts.
-        const windows = [playerWindow, ...audienceWindows.values(), tempoSyncWindow];
-        for (const window of windows) {
+        // The state object from PlaybackManager is the first argument.
+        const stateObject = args[0];
+
+        // --- Player Window ---
+        if (playerWindow && !playerWindow.isDestroyed()) {
+            const playerBounds = playerWindow.getBounds();
+            const display = screen.getDisplayMatching(playerBounds) || screen.getPrimaryDisplay();
+            const latency = displayLatencies.get(display.id) || 0;
+            const stateForWindow = { ...stateObject, latency };
+            playerWindow.webContents.send(channel, stateForWindow);
+        }
+
+        // --- Audience Windows ---
+        for (const [displayId, window] of audienceWindows.entries()) {
             if (window && !window.isDestroyed()) {
-                window.webContents.send(channel, ...args);
+                const latency = displayLatencies.get(displayId) || 0;
+                const stateForWindow = { ...stateObject, latency };
+                window.webContents.send(channel, stateForWindow);
             }
+        }
+
+        // --- Tempo Sync Window (no display, so latency is 0) ---
+        if (tempoSyncWindow && !tempoSyncWindow.isDestroyed()) {
+            const stateForWindow = { ...stateObject, latency: 0 };
+            tempoSyncWindow.webContents.send(channel, stateForWindow);
         }
     };
 
     playbackManager = new PlaybackManager(broadcastToAllWindows);
+
+    // --- IPC handler for latency updates ---
+    // MOVED here to have access to playbackManager and broadcastToAllWindows
+    ipcMain.on('player:set-latency', (event, { displayId, latency }) => {
+        const parsedLatency = parseInt(latency, 10);
+        if (isNaN(parsedLatency)) {
+            console.warn(`[Main] Received invalid latency value for display ${displayId}: ${latency}`);
+            return;
+        }
+        console.log(`[Main] Setting latency for display ${displayId} to ${parsedLatency}ms`);
+        displayLatencies.set(displayId, parsedLatency);
+
+        // --- FIXED: Trigger a state broadcast after latency change ---
+        // This ensures all windows receive the updated latency value immediately
+        // and can adjust their rendering.
+        if (playbackManager) {
+            const currentState = playbackManager.getCurrentSyncState();
+            broadcastToAllWindows('playback:update', currentState);
+        }
+    });
 
     // ADDED: Handle the 'ready' signal from the editor renderer.
     ipcMain.on('editor:ready', (event) => {
@@ -936,7 +980,6 @@ ipcMain.on('audience:update', (event, data) => {
     }
 });
 
-
 // MODIFIED: The 'playback:load-song' handler now accepts the measureMap.
 ipcMain.on('playback:load-song', (event, { songMetadata, measureMap }) => {
     playbackManager.loadSong(songMetadata, measureMap);
@@ -971,6 +1014,16 @@ ipcMain.on('playback:sync-beat', (event, { timestamp, interpolationDuration }) =
     playbackManager.syncBeat(timestamp, interpolationDuration);
 });
 
+// ADDED: IPC handler for synced jumps
+ipcMain.on('playback:jump-synced', (event, { direction, timestamp }) => {
+    playbackManager.jumpSynced(direction, timestamp);
+});
+
+// ADDED: IPC handler for the new 'undo' signal
+ipcMain.on('playback:undo-beat', (event) => {
+    playbackManager.undoBeat();
+});
+
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
@@ -1002,4 +1055,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

@@ -3,7 +3,7 @@ import { DomManager } from '../renderer/domManager.js';
 import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { initSongsManager, addSongFromPath, songPlaylist } from './songsManager.js';
-import { initPlayerPlayback, handlePlaybackUpdate } from './playback.js';
+import { initPlayerPlayback, handlePlaybackUpdate, localPlaybackState } from './playback.js';
 import { initAlertDialog } from '../editor/alertDialog.js';
 import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
@@ -112,55 +112,137 @@ function setupPanels() {
     });
 }
 
-// --- RE-IMPLEMENTED: Display Settings Logic ---
+// --- REVISED: Display Settings Logic ---
+
+let lastDisplayInfo = null; // Cache for UI updates
+let viewedDisplayId = null; // Which monitor's details are being viewed.
+let monitorLatencies = new Map(); // Store latency per display ID
 
 /**
- * Renders the segmented buttons for display selection.
+ * REVISED: Renders monitor tabs and their corresponding option panels.
  * @param {object} displayInfo - The display info object from the main process.
  * @param {Electron.Display[]} displayInfo.allDisplays - An array of all display objects.
  * @param {Electron.Display} displayInfo.presenterDisplay - The display the player window is currently on.
  */
 function renderDisplayTabs({ allDisplays, presenterDisplay }) {
     const tabsContainer = DOM.presenterMonitorTabs;
-    if (!tabsContainer) return;
+    const optionsContainer = document.getElementById('monitor-options-container');
+    if (!tabsContainer || !optionsContainer) return;
 
-    tabsContainer.innerHTML = ''; // Clear existing buttons
+    // If no display is being viewed, or the viewed one was removed, default to the presenter display.
+    if (viewedDisplayId === null || !allDisplays.some(d => d.id === viewedDisplayId)) {
+        viewedDisplayId = presenterDisplay.id;
+    }
+
+    tabsContainer.innerHTML = '';
+    optionsContainer.innerHTML = '';
 
     allDisplays.forEach((display) => {
+        const isPresenter = display.id === presenterDisplay.id;
+        const isBeingViewed = display.id === viewedDisplayId;
+
+        // 1. Create the tab button
         const displayBtn = document.createElement('button');
         displayBtn.className = 'tab-btn';
         displayBtn.textContent = display.label || `Display ${display.id}`;
         displayBtn.title = `${display.size.width}x${display.size.height}`;
         displayBtn.dataset.displayId = display.id;
 
-        if (display.id === presenterDisplay.id) {
-            displayBtn.classList.add('active');
+        // Apply class for presenter (underline)
+        if (isPresenter) {
+            displayBtn.classList.add('presenter');
         }
 
+        // Apply class for the currently selected/viewed tab (blue background)
+        if (isBeingViewed) {
+            displayBtn.classList.add('active');
+        }
         tabsContainer.appendChild(displayBtn);
+
+        // 2. Create the options panel for this monitor
+        const optionsPanel = document.createElement('div');
+        optionsPanel.className = 'monitor-options';
+        optionsPanel.dataset.displayId = display.id;
+        if (isBeingViewed) {
+            optionsPanel.classList.add('active'); // This class makes it visible (display: flex)
+        }
+
+        const role = isPresenter ? 'Presenter' : 'Audience';
+        let makePresenterBtnHtml = '';
+        if (!isPresenter) {
+            makePresenterBtnHtml = `<button class="action-btn secondary-btn make-presenter-btn" data-display-id="${display.id}">Make Presenter</button>`;
+        }
+
+        const currentLatency = monitorLatencies.get(display.id) || 0;
+        const latencyControlHtml = `
+            <div class="latency-control">
+                <label for="latency-input-${display.id}">Latency:</label>
+                <input type="number" id="latency-input-${display.id}" class="form-input" value="${currentLatency}" min="0" step="1" data-display-id="${display.id}">
+                <span class="unit-label">ms</span>
+            </div>
+        `;
+
+        optionsPanel.innerHTML = `
+            <div class="monitor-role-info">
+                <span class="monitor-role-label">Role:</span>
+                <span>${role}</span>
+            </div>
+            ${latencyControlHtml}
+            ${makePresenterBtnHtml}
+        `;
+        optionsContainer.appendChild(optionsPanel);
     });
 }
 
+
+/**
+ * REVISED: Sets up event listeners for the new display settings UI.
+ */
 function initDisplaySettings() {
     const tabsContainer = DOM.presenterMonitorTabs;
-    if (!tabsContainer) return;
+    const optionsContainer = document.getElementById('monitor-options-container');
+    if (!tabsContainer || !optionsContainer) return;
 
     // Listen for display changes from the main process.
     window.playerAPI.onDisplaysChanged((displayInfo) => {
         console.log('Displays changed, updating UI.', displayInfo);
+        lastDisplayInfo = displayInfo; // Cache the latest info
         renderDisplayTabs(displayInfo);
     });
 
-    // Add event listener for the whole container.
+    // Event listener for clicking on tabs
     tabsContainer.addEventListener('click', (e) => {
-        const targetBtn = e.target.closest('.tab-btn');
-        if (!targetBtn || targetBtn.classList.contains('active')) return;
+        const tabTarget = e.target.closest('.tab-btn');
+        if (tabTarget) {
+            const displayId = Number(tabTarget.dataset.displayId);
+            if (displayId === viewedDisplayId) return; // Already viewing this one.
 
-        const displayId = targetBtn.dataset.displayId;
-        window.playerAPI.setPresenterDisplay(displayId);
-        // The main process will move the window, which triggers a 'move' event.
-        // The 'move' event handler in main.js will then call sendDisplaysUpdate,
-        // which will cause the UI to update with the correct active button.
+            viewedDisplayId = displayId;
+            // Re-render with the cached data to update which options panel is visible.
+            if (lastDisplayInfo) {
+                renderDisplayTabs(lastDisplayInfo);
+            }
+        }
+    });
+
+    // Event listener for actions inside the options panels
+    optionsContainer.addEventListener('click', (e) => {
+        const buttonTarget = e.target.closest('.make-presenter-btn');
+        if (buttonTarget) {
+            const displayId = buttonTarget.dataset.displayId;
+            viewedDisplayId = Number(displayId);
+            window.playerAPI.setPresenterDisplay(displayId);
+        }
+    });
+
+    optionsContainer.addEventListener('input', (e) => {
+        const latencyInput = e.target;
+        if (latencyInput.type === 'number' && latencyInput.id.startsWith('latency-input-')) {
+            const displayId = Number(latencyInput.dataset.displayId);
+            const latency = Math.max(0, parseInt(latencyInput.value, 10) || 0);
+            monitorLatencies.set(displayId, latency);
+            window.playerAPI.setLatency(displayId, latency);
+        }
     });
 }
 
@@ -210,7 +292,8 @@ function setupPlayerBPMControls() {
 
         // Send a single command to the main process. The main process will handle
         // creating the timestamped event and broadcasting it to all windows.
-        window.playerAPI.updateBpm(newBpm, newBpmUnit, performance.timeOrigin + performance.now());
+        const timestamp = performance.timeOrigin + performance.now();
+        window.playerAPI.updateBpm(newBpm, newBpmUnit, timestamp);
     };
 
     // --- BPM Input Listener ---
@@ -268,7 +351,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             // When going back from player, we should tell the main process to pause playback
             // so audience windows don't keep playing.
-            window.playerAPI.pause({ timestamp: performance.timeOrigin + performance.now() });
+            const timestamp = performance.timeOrigin + performance.now();
+            window.playerAPI.pause({ timestamp });
             window.playerAPI.goToMainMenu();
         });
     }

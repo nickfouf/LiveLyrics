@@ -301,13 +301,11 @@ body {
     flex-grow: 1; /* Make body fill available space */
 }
 
-/* ADDED: Drawer Group styles (from editor.css) */
+/* MODIFIED: Drawer Group styles */
 .configuration-panel .drawer-group {
     display: flex;
     flex-direction: column;
-    flex-grow: 1;
-    flex-basis: 0;
-    min-height: 0; /* Prevents content from overflowing its container */
+    flex-shrink: 0; /* Prevent the group from shrinking */
 }
 
 .drawer-group h4 {
@@ -319,37 +317,78 @@ body {
     border-bottom: 1px solid #444;
 }
 
-/* ADDED: Styles for the new Display Status section */
-.display-status-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    font-size: 0.85rem;
-    color: #ccc;
+/* --- MODIFIED & ADDED: Styles for new Display Settings --- */
+/* The selected/viewed tab gets the blue background */
+.segmented-tabs .tab-btn.active {
+    background-color: rgb(0, 123, 255);
+    color: white;
 }
-.display-status-list li {
-    padding: 4px 0;
+
+/* The presenter tab gets an underline */
+.segmented-tabs .tab-btn.presenter {
+    text-decoration: underline;
+    text-underline-offset: 4px;
 }
-.display-status-list .display-label {
+
+#monitor-options-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #333;
+    border-radius: 4px;
+    border: 1px solid #444;
+    min-height: 60px;
+}
+
+.monitor-options {
+    display: none;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.monitor-options.active {
+    display: flex;
+}
+
+.monitor-role-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #ddd;
+}
+
+.monitor-role-label {
     font-weight: bold;
     color: #aaa;
 }
-.display-status-list .display-name {
-    padding: 4px 8px;
-    background-color: #3c3c3c;
-    border-radius: 4px;
-    display: inline-block;
-    margin-top: 4px;
-}
-.audience-display-list {
-    list-style: disc;
-    padding-left: 20px;
-    margin-top: 4px;
-}
-.audience-display-list li {
-    padding: 2px 0;
+
+.make-presenter-btn {
+    width: fit-content;
 }
 
+/* ADDED: Latency control styles */
+.latency-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.latency-control label {
+    font-size: 0.9rem;
+    color: #ddd;
+    flex-shrink: 0;
+}
+
+.latency-control .form-input {
+    width: 60px; /* A small, fixed width for the number input */
+    padding: 0.4rem;
+    text-align: right;
+}
+
+.latency-control .unit-label {
+    font-size: 0.9rem;
+    color: #aaa;
+}
 
 /* ADDED: Volume Slider Styles */
 .volume-slider-container {
@@ -553,4 +592,4 @@ body {
 /* Indexing */
 .player-header {
     z-index: 10;
-}
+}

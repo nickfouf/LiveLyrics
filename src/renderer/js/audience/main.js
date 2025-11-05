@@ -13,6 +13,7 @@ let localPlaybackState = {
     referenceTime: 0,
     referenceTimeOffset: 0,
     song: null, // To store the authoritative song state from main
+    latency: 0,
 };
 // State for handling smooth tempo interpolation
 let activeInterpolation = null;
@@ -29,8 +30,12 @@ function getAuthoritativeTime() {
     if (!state.song || localPlaybackState.status !== 'playing') {
         return localPlaybackState.timeAtReference;
     }
-    const mainNow = performance.now() - localPlaybackState.referenceTimeOffset;
-    const elapsed = mainNow - localPlaybackState.referenceTime;
+    // CORRECTED LOGIC:
+    // 1. Get the renderer's current time: performance.now()
+    // 2. Sync it with the main process's clock: (performance.now() - localPlaybackState.referenceTimeOffset)
+    // 3. Add the latency to "look ahead" in time: (... + localPlaybackState.latency)
+    const syncedNow = (performance.now() - localPlaybackState.referenceTimeOffset) + localPlaybackState.latency;
+    const elapsed = syncedNow - localPlaybackState.referenceTime;
     return localPlaybackState.timeAtReference + elapsed;
 }
 
@@ -47,11 +52,6 @@ function stopRenderLoop() {
 }
 
 function renderLoop() {
-    if (localPlaybackState.status !== 'playing') {
-        stopRenderLoop();
-        return;
-    }
-
     let currentTime;
     const now = performance.now();
 
@@ -59,34 +59,49 @@ function renderLoop() {
         const elapsed = now - activeInterpolation.localStartTime;
         const progress = easeInOutQuad(Math.min(1, elapsed / activeInterpolation.duration));
 
-        // The authoritative time is our moving target.
-        const authoritativeTime = getAuthoritativeTime();
+        if (activeInterpolation.isPausing) {
+            // Handle the new pause interpolation
+            currentTime = activeInterpolation.startMs + (activeInterpolation.endMs - activeInterpolation.startMs) * progress;
 
-        // The remaining offset to correct for shrinks over time.
-        const remainingOffset = activeInterpolation.initialOffset * (1 - progress);
+            if (elapsed >= activeInterpolation.duration) {
+                // Interpolation is finished. Render the final frame and stop.
+                renderFrameAtTime(activeInterpolation.endMs);
+                activeInterpolation = null;
+                stopRenderLoop();
+                return; // Exit the loop function
+            }
+        } else {
+            // Handle syncBeat interpolation (the normal 'playing' interpolation)
+            const authoritativeTime = getAuthoritativeTime();
+            const remainingOffset = activeInterpolation.initialOffset * (1 - progress);
+            currentTime = authoritativeTime - remainingOffset;
 
-        // Our rendered time is the target minus the shrinking offset.
-        currentTime = authoritativeTime - remainingOffset;
+            const interpolatedBpm = activeInterpolation.startBpm + (activeInterpolation.endBpm - activeInterpolation.startBpm) * progress;
+            if (state.song.bpm !== interpolatedBpm) {
+                updateState({ song: { ...state.song, bpm: interpolatedBpm } });
+            }
 
-        // Interpolate BPM as well for smooth visual feedback.
-        const interpolatedBpm = activeInterpolation.startBpm + (activeInterpolation.endBpm - activeInterpolation.startBpm) * progress;
-        if (state.song.bpm !== interpolatedBpm) {
-            updateState({ song: { ...state.song, bpm: interpolatedBpm } });
-        }
-
-        if (elapsed >= activeInterpolation.duration) {
-            activeInterpolation = null;
-            // Final sync to ensure the rendering state's BPM matches the authoritative one.
-            if (state.song.bpm !== localPlaybackState.song.bpm) {
-                updateState({ song: { ...state.song, bpm: localPlaybackState.song.bpm } });
+            if (elapsed >= activeInterpolation.duration) {
+                activeInterpolation = null;
+                // Final sync to ensure the rendering state's BPM matches the authoritative one.
+                if (state.song.bpm !== localPlaybackState.song.bpm) {
+                    updateState({ song: { ...state.song, bpm: localPlaybackState.song.bpm } });
+                }
             }
         }
     } else {
-        // No interpolation, just use the authoritative time.
+        // This part runs only for normal 'playing' status without any interpolation.
+        if (localPlaybackState.status !== 'playing') {
+            stopRenderLoop();
+            return;
+        }
         currentTime = getAuthoritativeTime();
     }
 
-    renderFrameAtTime(currentTime);
+    if (currentTime !== undefined) {
+        renderFrameAtTime(currentTime);
+    }
+    
     animationFrameId = requestAnimationFrame(renderLoop);
 }
 
@@ -241,17 +256,48 @@ async function handlePlaybackUpdate(newState) {
         }
     }
 
-    // --- REVISED: Handle interpolation for synced playback ---
-    if (newState.type === 'synced' && newState.interpolation) {
-        // Capture the visual time right before we update our authoritative state.
-        const visualTimeBeforeUpdate = getAuthoritativeTime();
+    // Capture the visual time right before we update our authoritative state.
+    // This is only needed for syncBeat interpolation.
+    const visualTimeBeforeUpdate = getAuthoritativeTime();
 
-        // Update the authoritative state tracker FIRST.
-        localPlaybackState.timeAtReference = newState.timeAtReference;
-        localPlaybackState.referenceTime = newState.referenceTime;
-        localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
+    // Always update the authoritative state tracker first.
+    localPlaybackState.status = newState.status;
+    localPlaybackState.timeAtReference = newState.timeAtReference;
+    localPlaybackState.referenceTime = newState.referenceTime;
+    localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
+    localPlaybackState.latency = newState.latency || 0;
+    if (newState.song) {
+        localPlaybackState.song = newState.song;
+    }
 
-        // Now, calculate the authoritative time at this exact moment.
+    // Clear any previous interpolation state
+    activeInterpolation = null;
+
+    // Update the rendering state's BPM unless a syncBeat interpolation is about to start
+    if (state.song && newState.song) {
+        const newBpm = newState.song.bpm;
+        const newBpmUnit = newState.song.bpmUnit;
+        if (!newState.interpolation && (state.song.bpm !== newBpm || state.song.bpmUnit !== newBpmUnit)) {
+            updateState({ song: { ...state.song, bpm: newBpm, bpmUnit: newBpmUnit } });
+            rebuildAllEventTimelines();
+            reprogramAllPageTransitions();
+        }
+    }
+
+    // Now, decide if we need to start the render loop based on special instructions
+    if (newState.interpolationOnPause) {
+        // This is a special pause command that requires an animation.
+        activeInterpolation = {
+            localStartTime: performance.now(),
+            duration: newState.interpolationOnPause.duration,
+            startMs: newState.interpolationOnPause.startMs,
+            endMs: newState.interpolationOnPause.endMs,
+            isPausing: true, // A flag to tell the render loop what to do
+        };
+        startRenderLoop(); // Start the loop to perform the animation.
+    } else if (newState.type === 'synced' && newState.interpolation) {
+        // This is a sync beat command that requires interpolation.
+        // Now, calculate the authoritative time at this exact moment with the NEW state.
         const authoritativeTimeNow = getAuthoritativeTime();
         const offset = authoritativeTimeNow - visualTimeBeforeUpdate;
 
@@ -261,38 +307,17 @@ async function handlePlaybackUpdate(newState) {
             initialOffset: offset,
             startBpm: state.song.bpm, // The BPM we were just rendering with.
             endBpm: newState.interpolation.endBpm,
+            isPausing: false,
         };
-    } else {
-        activeInterpolation = null;
-    }
-
-    // Always update the rest of the authoritative state.
-    localPlaybackState.status = newState.status;
-    if (!activeInterpolation) { // Don't overwrite if we just set it above
-        localPlaybackState.timeAtReference = newState.timeAtReference;
-        localPlaybackState.referenceTime = newState.referenceTime;
-        localPlaybackState.referenceTimeOffset = performance.now() - newState.syncTime;
-    }
-    if (newState.song) {
-        localPlaybackState.song = newState.song;
-    }
-
-    if (state.song && newState.song) {
-        const newBpm = newState.song.bpm;
-        const newBpmUnit = newState.song.bpmUnit;
-        // Only update the rendering state's BPM if not interpolating.
-        if (!activeInterpolation && (state.song.bpm !== newBpm || state.song.bpmUnit !== newBpmUnit)) {
-            updateState({ song: { ...state.song, bpm: newBpm, bpmUnit: newBpmUnit } });
-            rebuildAllEventTimelines();
-            reprogramAllPageTransitions();
-        }
-    }
-
-    if (newState.status === 'playing') {
         startRenderLoop();
     } else {
-        stopRenderLoop();
-        renderFrameAtTime(newState.timeAtReference);
+        // This is a normal state update.
+        if (newState.status === 'playing') {
+            startRenderLoop();
+        } else {
+            stopRenderLoop();
+            renderFrameAtTime(newState.timeAtReference);
+        }
     }
 }
 

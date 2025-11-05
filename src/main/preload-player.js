@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('playerAPI', {
 
     // --- Audience/Display Controls ---
     setPresenterDisplay: (displayId) => ipcRenderer.send('player:set-presenter-display', displayId),
+    setLatency: (displayId, latency) => ipcRenderer.send('player:set-latency', { displayId, latency }),
     onDisplaysChanged: (callback) => ipcRenderer.on('displays-changed', (_event, data) => callback(data)),
 
     // --- Playback Commands (MODIFIED) ---

@@ -2,8 +2,7 @@
 
 import { state, updateState } from '../editor/state.js';
 import { DOM } from './dom.js';
-import { buildMeasureMap } from '../editor/utils.js';
-import { getQuarterNoteDurationMs } from './events.js';
+import { jumpToPage_Player } from './playback.js';
 
 /**
  * Renders the page thumbnails for the player window.
@@ -103,42 +102,4 @@ export function setActivePage_Player(newPage) {
     // The actual DOM manipulation is handled by `updateVisiblePagesForTime` in playback.js.
     // This function's only responsibility now is to update the state and the UI thumbnails.
     renderPageManager_Player();
-}
-
-/**
- * Jumps the timeline to the beginning of a specific page.
- * @param {VirtualPage} newPage The page to jump to.
- */
-export function jumpToPage_Player(newPage) {
-    const newPageIndex = state.song.pages.indexOf(newPage);
-    if (newPageIndex === -1 && newPage !== state.song.thumbnailPage) return;
-
-    setActivePage_Player(newPage);
-
-    const measureMap = buildMeasureMap();
-    const firstMeasureOfPage = measureMap.find(m => m.pageIndex === newPageIndex);
-
-    let timeOfNewPageInBeats = 0;
-    if (firstMeasureOfPage) {
-        timeOfNewPageInBeats = firstMeasureOfPage.startTime;
-    } else if (newPageIndex > 0) { // If jumping to a page with no measures, go to the end of the previous page
-        const lastMeasureBeforePage = [...measureMap].reverse().find(m => m.pageIndex < newPageIndex);
-        if (lastMeasureBeforePage) {
-            timeOfNewPageInBeats = lastMeasureBeforePage.startTime + lastMeasureBeforePage.duration;
-        }
-    }
-
-    const beatDurationMs = getQuarterNoteDurationMs();
-    const newTimeAtPause = timeOfNewPageInBeats * beatDurationMs;
-
-    updateState({
-        playback: {
-            ...state.playback,
-            timeAtPause: newTimeAtPause
-        }
-    });
-
-    // FIXED: Instead of calling the old function, send a command to the main process.
-    // The main process will then send a 'tick' event back, which triggers the render.
-    window.playerAPI.jumpToTime(newTimeAtPause);
 }

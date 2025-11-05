@@ -11,6 +11,8 @@
             --primary-hover-color: #0056b3;
             --disabled-color: #555;
             --input-background: #3a3a3a;
+            --secondary-color: #6c757d;
+            --secondary-hover-color: #5a6268;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -54,6 +56,16 @@
         }
         #beat-btn:hover:not(:disabled) {
             background-color: #218838;
+        }
+        /* ADDED: Undo button style */
+        #undo-btn {
+            background-color: var(--secondary-color);
+            color: white;
+            font-size: 18px; /* A bit smaller */
+            padding: 12px;
+        }
+        #undo-btn:hover:not(:disabled) {
+            background-color: var(--secondary-hover-color);
         }
         button:disabled {
             background-color: var(--disabled-color);
@@ -99,24 +111,55 @@
             border-radius: 4px;
             text-align: center;
         }
+        /* ADDED: Styles for jump controls */
+        .jump-controls {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 220px; /* A bit wider to fit content */
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .jump-controls button {
+            flex-grow: 1;
+            margin-bottom: 0; /* Remove margin from individual buttons */
+            font-size: 18px;
+            padding: 15px 10px;
+        }
+        #beat-btn {
+            flex-grow: 2; /* Make the beat button bigger */
+            font-size: 24px;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
     <h1>Tempo Sync</h1>
     <button id="play-btn">Play</button>
-    <button id="beat-btn" disabled>Beat</button>
+    <div class="jump-controls">
+        <button id="backward-btn" disabled>Backward</button>
+        <button id="beat-btn" disabled>Beat</button>
+        <button id="forward-btn" disabled>Forward</button>
+    </div>
+    <button id="undo-btn" disabled>Undo</button>
     <div class="bpm-display">BPM: <span id="bpm-value" class="bpm-value">--</span></div>
     <!-- ADDED: Interpolation duration input -->
     <div class="interpolation-control">
         <label for="interpolation-duration">Smooth (s):</label>
-        <input type="number" id="interpolation-duration" value="0.5" step="0.1" min="0">
+        <input type="number" id="interpolation-duration" value="1.0" step="0.1" min="0">
     </div>
 
     <script>
         const playBtn = document.getElementById('play-btn');
         const beatBtn = document.getElementById('beat-btn');
+        const undoBtn = document.getElementById('undo-btn');
+        const backwardBtn = document.getElementById('backward-btn');
+        const forwardBtn = document.getElementById('forward-btn');
         const bpmValue = document.getElementById('bpm-value');
         const interpolationInput = document.getElementById('interpolation-duration');
+
+        let isCurrentlyPlaying = false; // Local state tracker
 
         function getInterpolationDuration() {
             const duration = parseFloat(interpolationInput.value);
@@ -124,11 +167,27 @@
         }
 
         playBtn.addEventListener('click', () => {
-            window.tempoSyncAPI.play();
+            if (isCurrentlyPlaying) {
+                window.tempoSyncAPI.pause();
+            } else {
+                window.tempoSyncAPI.play();
+            }
         });
 
         beatBtn.addEventListener('click', () => {
             window.tempoSyncAPI.beat(getInterpolationDuration());
+        });
+
+        undoBtn.addEventListener('click', () => {
+            window.tempoSyncAPI.undo();
+        });
+
+        backwardBtn.addEventListener('click', () => {
+            window.tempoSyncAPI.jumpBackward();
+        });
+
+        forwardBtn.addEventListener('click', () => {
+            window.tempoSyncAPI.jumpForward();
         });
 
         // MODIFIED: Unified spacebar handler
@@ -136,7 +195,7 @@
             if (e.code === 'Space') {
                 e.preventDefault(); // Prevent default browser action (e.g., scrolling)
 
-                // If the play button is active, trigger a click on it.
+                // If the play/pause button is active, trigger a click on it.
                 if (!playBtn.disabled) {
                     playBtn.classList.add('active');
                     playBtn.click();
@@ -170,13 +229,26 @@
             }
 
             // Update button states
-            const isPlayingSynced = state.status === 'playing' && state.type === 'synced';
             const isSongLoaded = state.status !== 'unloaded';
+            isCurrentlyPlaying = state.status === 'playing';
+            const isSyncedMode = state.type === 'synced';
 
-            playBtn.disabled = isPlayingSynced || !isSongLoaded;
-            beatBtn.disabled = !isPlayingSynced;
+            // --- REVISED Control Logic ---
+            // Play/Pause button is disabled if playing in NORMAL mode, or if no song is loaded.
+            playBtn.disabled = !isSongLoaded || (isCurrentlyPlaying && !isSyncedMode);
+            playBtn.textContent = isCurrentlyPlaying ? 'Pause' : 'Play';
 
-            if (isPlayingSynced) {
+            // Beat button is only enabled when actively playing in SYNC mode.
+            beatBtn.disabled = !(isCurrentlyPlaying && isSyncedMode);
+            
+            // Jump and Undo buttons are disabled if playing in NORMAL mode, or if no song is loaded.
+            const enableSyncControls = isSongLoaded && (!isCurrentlyPlaying || isSyncedMode);
+            backwardBtn.disabled = !enableSyncControls;
+            forwardBtn.disabled = !enableSyncControls;
+            undoBtn.disabled = !state.canUndo || !enableSyncControls;
+
+
+            if (isCurrentlyPlaying && isSyncedMode) {
                 beatBtn.focus();
             } else if (isSongLoaded) {
                 playBtn.focus();
@@ -184,4 +256,4 @@
         });
     </script>
 </body>
-</html>
+</html>

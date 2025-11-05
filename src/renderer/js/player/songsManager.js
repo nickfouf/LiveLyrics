@@ -10,6 +10,7 @@ import { VirtualTitle } from '../renderer/elements/title.js';
 import { VirtualText } from '../renderer/elements/text.js';
 import { DOM } from './dom.js';
 import { applyViewportScaling } from '../editor/rendering.js';
+import { updatePlayerControlsUI } from './playback.js';
 
 export let songPlaylist = []; // Array to hold { id, title, filePath, songData };
 let playlistElement;
@@ -74,10 +75,14 @@ function showDefaultPlayerView() {
     defaultPage.addElement(container);
 
     // Directly add the constructed page to the visible DOM.
-    // The regular rendering loop is bypassed when no song is loaded, so we do it manually.
     state.domManager.addToDom(defaultPage);
     
     // Update the global state to reflect that no song is loaded.
+    const unloadedState = {
+        status: 'unloaded',
+        type: 'normal',
+        song: null,
+    };
     updateState({
         song: null,
         activePage: defaultPage,
@@ -90,34 +95,17 @@ function showDefaultPlayerView() {
         DOM.pageThumbnailsContainer.innerHTML = '';
     }
     document.getElementById('window-title').innerText = "Player";
-    document.getElementById('play-pause-btn').disabled = true;
-    document.getElementById('backward-btn').disabled = true;
-    document.getElementById('forward-btn').disabled = true;
-    const bpmValueInput = document.getElementById('bpm-value-input');
-    const bpmNoteSelect = document.getElementById('bpm-note-select-custom');
-    if (bpmValueInput && bpmNoteSelect) {
-        bpmValueInput.disabled = true;
-        bpmValueInput.value = 120;
-        const selectedDiv = bpmNoteSelect.querySelector('.select-selected');
-        selectedDiv.setAttribute('tabindex', '-1');
-        const optionDiv = bpmNoteSelect.querySelector(`.select-items div[data-value="q_note"]`);
-        if (optionDiv) {
-            selectedDiv.dataset.value = 'q_note';
-            selectedDiv.innerHTML = optionDiv.innerHTML;
-        }
-    }
+    
+    // --- REVISED: Use the centralized UI update function ---
+    updatePlayerControlsUI(unloadedState);
 
     // Manually trigger a viewport scale calculation AND render the initial state.
-    // This is wrapped in a setTimeout to ensure the DOM has updated
-    // from the .clear() and .addToDom() calls before we try to measure and scale it.
     setTimeout(() => {
         if (DOM.slideViewportWrapper) {
             applyViewportScaling(DOM.slideViewportWrapper);
         }
         if (state.timelineManager) {
-            // Force the timeline manager to recalculate element sizes based on the new content.
             state.timelineManager.resize(true);
-            // Render the elements at their initial state (time = 0).
             state.timelineManager.renderAt(0, 0);
         }
     }, 0);
@@ -210,24 +198,8 @@ export async function handleSongActivated(songMetadata, songData) {
         document.getElementById('window-title').innerText = `Player - ${songMetadata.title}`;
         renderPlaylist();
 
-        const bpmValueInput = document.getElementById('bpm-value-input');
-        const bpmNoteSelect = document.getElementById('bpm-note-select-custom');
-        if (bpmValueInput && bpmNoteSelect) {
-            bpmValueInput.disabled = !songDataHasMeasures(songData);
-            bpmValueInput.value = songMetadata.bpm || 120;
-            const selectedDiv = bpmNoteSelect.querySelector('.select-selected');
-            selectedDiv.setAttribute('tabindex', songDataHasMeasures(songData) ? '0' : '-1');
-            const optionDiv = bpmNoteSelect.querySelector(`.select-items div[data-value="${songMetadata.bpmUnit || 'q_note'}"]`);
-            if (optionDiv) {
-                selectedDiv.dataset.value = songMetadata.bpmUnit || 'q_note';
-                selectedDiv.innerHTML = optionDiv.innerHTML;
-            }
-        }
-
-        const hasMeasures = songDataHasMeasures(songData);
-        document.getElementById('play-pause-btn').disabled = !hasMeasures;
-        document.getElementById('backward-btn').disabled = !hasMeasures;
-        document.getElementById('forward-btn').disabled = !hasMeasures;
+        // The UI controls will be updated by the handlePlaybackUpdate function,
+        // which receives the full state from main, so we don't need to do it here.
 
     } catch (error) {
         console.error('Failed to activate song in renderer:', error);
