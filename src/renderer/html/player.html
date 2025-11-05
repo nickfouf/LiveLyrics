@@ -159,34 +159,27 @@
                 </div>
             </div>
 
-            <!-- Group 3: Device Controller -->
+            <!-- MODIFIED: Group 3: Device Controller -->
             <div class="drawer-group">
                 <h4>Device Controller</h4>
-                <div class="device-info-container">
+                <div id="device-info-container" class="device-info-container">
                     <div class="info-item">
-                        <span class="info-label">Status</span>
-                        <div class="info-value status-value">
-                            <span class="status-indicator offline"></span>
-                            <span>Offline</span>
+                        <span class="info-label">Status:</span>
+                        <div id="device-status-value" class="info-value status-value">
+                            <span id="device-status-indicator" class="status-indicator offline"></span>
+                            <span id="device-status-text">Offline</span>
                         </div>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Device Name</span>
-                        <span class="info-value">Not Connected</span>
+                        <span class="info-label">Device Name:</span>
+                        <span id="device-name-value" class="info-value">Not Connected</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Connections</span>
-                        <span class="info-value">Out: 0 | In: 0</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Network</span>
-                        <span class="info-value">↓ 0 KB/s | ↑ 0 KB/s</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">IP Addresses</span>
-                        <span class="info-value">---</span>
+                        <span class="info-label">IP Addresses:</span>
+                        <span id="device-ip-value" class="info-value">---</span>
                     </div>
                 </div>
+                <button id="disconnect-device-btn" class="action-btn danger-btn noneDisplay" style="width: 100%; margin-bottom: 0.5rem;">Disconnect</button>
                 <button id="open-device-list-btn" class="action-btn secondary-btn" style="width: 100%;">Open Device List</button>
             </div>
         </div>
@@ -240,6 +233,20 @@
         </div>
         <div class="dialog-footer">
             <button id="close-device-list-btn" class="action-btn secondary-btn">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADDED: Dialog for Pairing Request -->
+<div id="pairing-dialog" class="dialog-overlay">
+    <div class="dialog-content" style="width: 450px;">
+        <div class="dialog-header">Pairing Request</div>
+        <div class="dialog-body">
+            <p>Accept connection from device: <strong id="pairing-device-id"></strong>?</p>
+        </div>
+        <div class="dialog-footer">
+            <button id="reject-pair-btn" class="action-btn secondary-btn">Reject</button>
+            <button id="accept-pair-btn" class="action-btn primary-btn">Accept</button>
         </div>
     </div>
 </div>

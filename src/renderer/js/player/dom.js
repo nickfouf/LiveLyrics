@@ -37,9 +37,6 @@ export function initDOM() {
     DOM.configurationPanelHandle = document.getElementById('configuration-panel-handle');
 
     // -- Configuration Controls --
-    // Device Controller (now inside Configuration)
-    DOM.openDeviceListBtn = document.getElementById('open-device-list-btn');
-
     // Display Settings
     DOM.presenterMonitorTabs = document.getElementById('presenter-monitor-tabs');
 
@@ -61,9 +58,23 @@ export function initDOM() {
     DOM.loadingDialog = document.getElementById('loading-dialog');
     DOM.loadingDialogMessage = document.getElementById('loading-dialog-message');
 
-    // Device Controller
+    // --- MODIFIED: Device Controller Elements ---
     DOM.openDeviceListBtn = document.getElementById('open-device-list-btn');
+    DOM.disconnectDeviceBtn = document.getElementById('disconnect-device-btn');
     DOM.deviceListDialog = document.getElementById('device-list-dialog');
     DOM.closeDeviceListBtn = document.getElementById('close-device-list-btn');
     DOM.deviceList = document.getElementById('device-list');
+
+    // Pairing Dialog
+    DOM.pairingDialog = document.getElementById('pairing-dialog');
+    DOM.pairingDeviceIdEl = document.getElementById('pairing-device-id');
+    DOM.acceptPairBtn = document.getElementById('accept-pair-btn');
+    DOM.rejectPairBtn = document.getElementById('reject-pair-btn');
+
+    // Status Display
+    DOM.deviceStatusValue = document.getElementById('device-status-value');
+    DOM.deviceStatusIndicator = document.getElementById('device-status-indicator');
+    DOM.deviceStatusText = document.getElementById('device-status-text');
+    DOM.deviceNameValue = document.getElementById('device-name-value');
+    DOM.deviceIpValue = document.getElementById('device-ip-value');
 }

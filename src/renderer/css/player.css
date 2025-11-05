@@ -438,10 +438,17 @@ body {
     text-align: right;
 }
 
+/* MODIFIED: Device Info Container styles for horizontal layout */
 .device-info-container {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
 }
 
@@ -449,6 +456,8 @@ body {
     font-weight: bold;
     color: #aaa;
     font-size: 0.85rem;
+    margin: 0;
+    padding: 0;
 }
 
 .info-item .info-value {
@@ -458,6 +467,9 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin: 0;
+    padding: 0;
+    max-width: 70%;
 }
 
 .status-value {
@@ -521,7 +533,7 @@ body {
     color: #e0e0e0;
 }
 
-.device-ips {
+.device-id-secondary {
     font-size: 0.8rem;
     color: #a0a0a0;
     white-space: nowrap;

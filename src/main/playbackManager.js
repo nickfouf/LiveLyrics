@@ -13,6 +13,7 @@ class PlaybackManager {
     #lastBeatTimestamp = 0; // For 'synced' mode
     #syncedMeasureIndex = 0; // For tracking progress in 'synced' mode
     #previousStateSnapshot = null; // ADDED: To store the state before the last beat for undo functionality.
+    #songData = null; // ADDED: To store the full song JSON
 
     constructor(broadcastFunction) {
         this.#broadcast = broadcastFunction;
@@ -75,7 +76,7 @@ class PlaybackManager {
         };
     }
 
-    loadSong(songMetadata, measureMap = []) {
+    loadSong(songMetadata, measureMap = [], songData = null) {
         this.#state.status = 'paused';
         this.#state.type = 'normal'; // Reset type on load
         this.#state.song = {
@@ -88,6 +89,7 @@ class PlaybackManager {
             originalBpmUnit: songMetadata.bpmUnit || 'q_note', // Store original
         };
         this.#measureMap = measureMap; // Store the measure map
+        this.#songData = songData; // Store the full song data
         this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
@@ -101,12 +103,18 @@ class PlaybackManager {
         this.#state.type = 'normal';
         this.#state.song = null;
         this.#measureMap = [];
+        this.#songData = null; // Clear the song data
         this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
         this.#syncedMeasureIndex = 0;
         this.#previousStateSnapshot = null; // Clear undo state
         this.#broadcastState();
+    }
+
+    // ADDED: New method to get the current song data
+    getCurrentSongData() {
+        return this.#songData;
     }
 
     updateBpm(bpm, bpmUnit, absoluteTimestamp) {
@@ -397,4 +405,4 @@ class PlaybackManager {
     }
 }
 
-module.exports = { PlaybackManager };
+module.exports = { PlaybackManager };

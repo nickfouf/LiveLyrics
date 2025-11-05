@@ -10,6 +10,10 @@ const crypto = require('crypto');
 const archiver = require('archiver');
 const extract = require('extract-zip');
 const { PlaybackManager } = require('./playbackManager');
+const { performance } = require('perf_hooks');
+const { ConnectionManager } = require('./connectionManager');
+const { machineIdSync } = require('node-machine-id');
+const os = require('os');
 
 // --- ADDED: Robust Updater Logging and Configuration ---
 // This will create a log file in the app's user data directory
@@ -43,6 +47,7 @@ let audienceWindows = new Map();
 let displayLatencies = new Map();
 // ADDED: Create the central conductor
 let playbackManager;
+let connectionManager = null;
 
 /**
  * Compares two semantic version strings.
@@ -218,6 +223,10 @@ function createPlayerWindow() {
     // ADDED: Create the tempo sync window alongside the player
     createTempoSyncWindow();
 
+    if (connectionManager) {
+        connectionManager.start();
+    }
+
     playerWindow.webContents.on('did-finish-load', () => {
         sendDisplaysUpdate();
         updateAudienceWindows();
@@ -239,6 +248,9 @@ function createPlayerWindow() {
             tempoSyncWindow.close();
         }
         playerWindow = null;
+        if (connectionManager) {
+            connectionManager.stop();
+        }
     });
 
     playerWindow.on('move', () => {
@@ -348,6 +360,154 @@ app.whenReady().then(() => {
     };
 
     playbackManager = new PlaybackManager(broadcastToAllWindows);
+
+    // --- REVISED: Device Controller Integration ---
+    const pairingRequests = new Map();
+    const discoverableDevices = new Map(); // State for discoverable devices
+
+    const handleRemoteCommand = (command) => {
+        if (!command || typeof command !== 'object' || !playbackManager) return;
+        const timestamp = performance.timeOrigin + performance.now();
+        switch (command.type) {
+            case 'play':
+                playbackManager.play(timestamp, 'synced');
+                break;
+            case 'pause':
+                playbackManager.pause({ timestamp });
+                break;
+            case 'beat':
+                const duration = command.interpolationDuration || 0.3;
+                playbackManager.syncBeat(timestamp, duration);
+                break;
+            case 'jump-backward':
+                playbackManager.jumpSynced(-1, timestamp);
+                break;
+            case 'jump-forward':
+                playbackManager.jumpSynced(1, timestamp);
+                break;
+            case 'undo':
+                playbackManager.undoBeat();
+                break;
+            default:
+                console.warn(`[Main] Received unknown remote command: ${command.type}`);
+        }
+    };
+
+    try {
+        const uniqueId = machineIdSync();
+        connectionManager = new ConnectionManager({
+            clientType: 'main',
+            deviceId: `LiveLyrics-Presenter-${uniqueId}`,
+            deviceName: os.hostname()
+        });
+
+        const broadcastDeviceList = () => {
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                const deviceList = Array.from(discoverableDevices.values());
+                playerWindow.webContents.send('device-controller:device-list-update', deviceList);
+            }
+        };
+
+        connectionManager.on('discoverableDeviceFound', (deviceInfo) => {
+            if (!discoverableDevices.has(deviceInfo.deviceId)) {
+                discoverableDevices.set(deviceInfo.deviceId, deviceInfo);
+                broadcastDeviceList();
+            }
+        });
+
+        connectionManager.on('discoverableDeviceLost', (deviceInfo) => {
+            if (discoverableDevices.has(deviceInfo.deviceId)) {
+                discoverableDevices.delete(deviceInfo.deviceId);
+                broadcastDeviceList();
+            }
+        });
+
+        connectionManager.on('pairingRequest', (device, accept, reject) => {
+            console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId}). Asking UI.`);
+            pairingRequests.set(device.deviceId, { accept, reject });
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('device-controller:pairing-request', { deviceId: device.deviceId, deviceName: device.deviceName });
+            }
+        });
+
+        connectionManager.on('deviceConnected', (device) => {
+            console.log(`[Main] Device fully connected: ${device.deviceName} (${device.deviceId})`);
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                const remoteInfo = { id: device.deviceId, name: device.deviceName, type: device.deviceType, ips: device.getRemoteAdvertisedIps() };
+                playerWindow.webContents.send('device-controller:connection-success', remoteInfo);
+            }
+            // ADDED: Send current song data on connect
+            if (playbackManager) {
+                const currentSongData = playbackManager.getCurrentSongData();
+                const currentSyncState = playbackManager.getCurrentSyncState();
+                if (currentSongData && currentSyncState.song) {
+                    console.log('[Main] Sending current song data to newly connected device.');
+                    // MODIFIED: Send hint message first
+                    connectionManager.sendMessageToPairedDevice({
+                        type: 'songUpdateHint',
+                        payload: { title: currentSyncState.song.title }
+                    });
+                    connectionManager.sendMessageToPairedDevice({
+                        type: 'songUpdate',
+                        payload: currentSongData
+                    });
+                }
+            }
+            device.on('message', (message) => {
+                console.log(`[Main] Received command from ${device.deviceId}:`, message.data);
+                handleRemoteCommand(message.data);
+            });
+            device.on('infoUpdated', (updatedDevice) => {
+                if (playerWindow && !playerWindow.isDestroyed()) {
+                    const updatedInfo = { id: updatedDevice.deviceId, name: updatedDevice.deviceName, type: updatedDevice.deviceType, ips: updatedDevice.getRemoteAdvertisedIps() };
+                    playerWindow.webContents.send('device-controller:info-update', updatedInfo);
+                }
+            });
+        });
+
+        connectionManager.on('deviceDisconnected', (device, payload) => {
+            console.log(`[Main] Device disconnected: ${device.deviceId}, Reason: ${payload.reason}`);
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('device-controller:disconnect', payload);
+            }
+        });
+
+        connectionManager.on('pairingFailed', ({ deviceId, reason }) => {
+            console.log(`[Main] Pairing failed with ${deviceId}: ${reason}`);
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('device-controller:error', `Pairing with ${deviceId} failed: ${reason}`);
+            }
+        });
+
+        connectionManager.on('error', (err) => {
+            console.error('[ConnectionManager] Error:', err);
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('device-controller:error', err.message);
+            }
+        });
+
+        ipcMain.on('device-controller:initiate-pairing', (event, deviceId) => connectionManager.pairWithDevice(deviceId));
+        ipcMain.on('device-controller:cancel-pairing', (event, deviceId) => connectionManager.cancelPairing(deviceId));
+        ipcMain.on('device-controller:respond-to-pairing', (event, { deviceId, accepted }) => {
+            const callbacks = pairingRequests.get(deviceId);
+            if (callbacks) {
+                if (accepted) callbacks.accept();
+                else callbacks.reject();
+                pairingRequests.delete(deviceId);
+            }
+        });
+        ipcMain.on('device-controller:disconnect-device', () => {
+            if (connectionManager) {
+                connectionManager.disconnectFromPairedDevice();
+            }
+        });
+        ipcMain.on('player:ready-for-devices', () => broadcastDeviceList());
+
+    } catch (error) {
+        log.error('Failed to initialize ConnectionManager:', error);
+    }
+    // --- END: Device Controller Integration ---
+
 
     // --- IPC handler for latency updates ---
     // MOVED here to have access to playbackManager and broadcastToAllWindows
@@ -980,13 +1140,34 @@ ipcMain.on('audience:update', (event, data) => {
     }
 });
 
-// MODIFIED: The 'playback:load-song' handler now accepts the measureMap.
-ipcMain.on('playback:load-song', (event, { songMetadata, measureMap }) => {
-    playbackManager.loadSong(songMetadata, measureMap);
+// MODIFIED: The 'playback:load-song' handler now accepts the songData.
+ipcMain.on('playback:load-song', (event, { songMetadata, measureMap, songData }) => {
+    playbackManager.loadSong(songMetadata, measureMap, songData);
+    // ADDED: Send the new song data to the connected device.
+    if (connectionManager) {
+        console.log('[Main] Sending new song data to connected device.');
+        // MODIFIED: Send hint message first
+        connectionManager.sendMessageToPairedDevice({
+            type: 'songUpdateHint',
+            payload: { title: songMetadata.title }
+        });
+        connectionManager.sendMessageToPairedDevice({
+            type: 'songUpdate',
+            payload: songData
+        });
+    }
 });
 
 ipcMain.on('playback:unload-song', () => {
     playbackManager.unloadSong();
+    // ADDED: Send an unload message to the connected device.
+    if (connectionManager) {
+        console.log('[Main] Sending unload signal to connected device.');
+        connectionManager.sendMessageToPairedDevice({
+            type: 'songUpdate',
+            payload: null // null payload signifies unload
+        });
+    }
 });
 
 ipcMain.on('playback:update-bpm', (event, { bpm, bpmUnit, timestamp }) => {
@@ -1055,4 +1236,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

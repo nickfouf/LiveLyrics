@@ -4,25 +4,40 @@ import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { initSongsManager, addSongFromPath, songPlaylist } from './songsManager.js';
 import { initPlayerPlayback, handlePlaybackUpdate, localPlaybackState } from './playback.js';
-import { initAlertDialog } from '../editor/alertDialog.js';
+import { initAlertDialog, showAlertDialog } from '../editor/alertDialog.js';
 import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
 import { applyViewportScaling } from '../editor/rendering.js';
 
-// --- Device Controller Logic ---
+// --- REWRITTEN: Device Controller Logic ---
 
-function getFakeDevices() {
-    return [
-        { id: 'dev-1', name: 'Studio Macbook Pro', ips: ['192.168.1.101', 'fe80::1c12:43ff:fe6e:8a2b'], paired: true },
-        { id: 'dev-2', name: 'Living Room PC', ips: ['192.168.1.150'], paired: false },
-        { id: 'dev-3', name: 'Sound_Board_iPad', ips: ['192.168.1.125'], paired: false },
-        { id: 'dev-4', name: 'Galaxy S23 Ultra', ips: ['192.168.1.204'], paired: false },
-    ].sort((a, b) => b.paired - a.paired); // Sort paired devices to the top
+// State
+let discoverableDevices = new Map();
+let connectingDeviceId = null; // MODIFIED: Tracks the device ID currently being paired.
+let pendingPairingDeviceId = null;
+let connectedDevice = null;
+let isManualDisconnect = false; // ADDED: Flag to track user-initiated disconnects
+
+function sendMessageToMain(type, payload) {
+    switch(type) {
+        case 'initiatePairing':
+            window.playerAPI.initiatePairing(payload.deviceId);
+            break;
+        case 'cancelPairing':
+            window.playerAPI.cancelPairing(payload.deviceId);
+            break;
+        case 'respondToPairingRequest':
+            window.playerAPI.respondToPairing(payload.deviceId, payload.accepted);
+            break;
+        case 'disconnectDevice':
+            window.playerAPI.disconnectDevice();
+            break;
+    }
 }
 
 function renderDeviceList() {
     if (!DOM.deviceList) return;
-    const devices = getFakeDevices();
+    const devices = Array.from(discoverableDevices.values());
     DOM.deviceList.innerHTML = '';
 
     if (devices.length === 0) {
@@ -31,21 +46,34 @@ function renderDeviceList() {
     }
 
     devices.forEach(device => {
+        const isConnected = connectedDevice && connectedDevice.id === device.deviceId;
+        const isConnecting = connectingDeviceId === device.deviceId;
         const li = document.createElement('li');
         li.className = 'device-list-item';
-        li.dataset.deviceId = device.id;
+        li.dataset.deviceId = device.deviceId;
 
-        const isPaired = device.paired;
-        const buttonState = isPaired ? 'disabled' : '';
-        const buttonText = isPaired ? 'Paired' : 'Pair';
-        const buttonClass = isPaired ? 'secondary-btn' : 'primary-btn';
+        let buttonClass, buttonText, buttonAction;
+
+        if (isConnected) {
+            buttonClass = 'danger-btn';
+            buttonText = 'Unpair';
+            buttonAction = 'unpair';
+        } else if (isConnecting) {
+            buttonClass = 'danger-btn';
+            buttonText = 'Cancel';
+            buttonAction = 'cancel';
+        } else {
+            buttonClass = 'primary-btn';
+            buttonText = 'Pair';
+            buttonAction = 'pair';
+        }
 
         li.innerHTML = `
             <div class="device-list-details">
-                <span class="device-name">${device.name}</span>
-                <span class="device-ips">${device.ips.join(' / ')}</span>
+                <span class="device-name">${device.deviceName}</span>
+                <span class="device-id-secondary">${device.deviceId}</span>
             </div>
-            <button class="action-btn pair-btn ${buttonClass}" ${buttonState}>${buttonText}</button>
+            <button class="action-btn pair-btn ${buttonClass}" data-action="${buttonAction}">${buttonText}</button>
         `;
         DOM.deviceList.appendChild(li);
     });
@@ -62,30 +90,193 @@ function hideDeviceListDialog() {
     DOM.deviceListDialog.classList.remove('visible');
 }
 
-function initDeviceController() {
-    if (!DOM.openDeviceListBtn) return; // Exit if the new elements aren't on the page
+function showPairingDialog({ deviceId, deviceName }) {
+    pendingPairingDeviceId = deviceId;
+    DOM.pairingDeviceIdEl.textContent = `${deviceName} (${deviceId})`;
+    DOM.pairingDialog.classList.add('visible');
+}
 
+function hidePairingDialog() {
+    DOM.pairingDialog.classList.remove('visible');
+    pendingPairingDeviceId = null;
+}
+
+function updateDeviceStatusUI(status, device = null) {
+    if (status === 'connected' && device) {
+        connectedDevice = device;
+        DOM.deviceStatusIndicator.classList.remove('offline');
+        DOM.deviceStatusIndicator.classList.add('online');
+        DOM.deviceStatusText.textContent = 'Connected';
+        DOM.deviceNameValue.textContent = device.name;
+        DOM.deviceIpValue.textContent = device.ips.join(', ');
+        DOM.disconnectDeviceBtn.classList.remove('noneDisplay');
+        DOM.openDeviceListBtn.textContent = 'Open Device List';
+    } else {
+        connectedDevice = null;
+        DOM.deviceStatusIndicator.classList.remove('online');
+        DOM.deviceStatusIndicator.classList.add('offline');
+        DOM.deviceStatusText.textContent = status === 'searching' ? 'Searching...' : 'Offline';
+        DOM.deviceNameValue.textContent = 'Not Connected';
+        DOM.deviceIpValue.textContent = '---';
+        DOM.disconnectDeviceBtn.classList.add('noneDisplay');
+        DOM.openDeviceListBtn.textContent = 'Open Device List';
+    }
+}
+
+// ADDED: Centralized function to handle the UI and state transition to disconnected.
+function handleDisconnectionUI() {
+    connectingDeviceId = null;
+    isManualDisconnect = false; // Reset the flag here, as this is the final state.
+    updateDeviceStatusUI('offline');
+    if (DOM.deviceListDialog.classList.contains('visible')) {
+        renderDeviceList();
+    }
+    // ADDED: Also hide the pairing dialog if it was open.
+    if (DOM.pairingDialog.classList.contains('visible')) {
+        hidePairingDialog();
+    }
+}
+
+function initDeviceController() {
+    // Initial state
+    updateDeviceStatusUI('searching');
+
+    // Listeners for UI actions
     DOM.openDeviceListBtn.addEventListener('click', showDeviceListDialog);
+    DOM.disconnectDeviceBtn.addEventListener('click', async () => {
+        if (!connectedDevice) return;
+        const confirmed = await showConfirmationDialog(
+            `Are you sure you want to disconnect from ${connectedDevice.name}?`,
+            'Confirm Disconnect'
+        );
+        if (confirmed) {
+            isManualDisconnect = true; // MODIFIED: Set flag before sending command
+            sendMessageToMain('disconnectDevice');
+        }
+    });
     DOM.closeDeviceListBtn.addEventListener('click', hideDeviceListDialog);
     DOM.deviceListDialog.addEventListener('click', (e) => {
-        // Close dialog if overlay is clicked
-        if (e.target === DOM.deviceListDialog) {
-            hideDeviceListDialog();
+        if (e.target === DOM.deviceListDialog) hideDeviceListDialog();
+    });
+
+    // Event delegation for pair/unpair buttons
+    DOM.deviceList.addEventListener('click', async (e) => {
+        const actionButton = e.target.closest('.pair-btn');
+        const deviceItem = e.target.closest('.device-list-item');
+        if (!actionButton || !deviceItem) return;
+
+        const deviceId = deviceItem.dataset.deviceId;
+        const action = actionButton.dataset.action;
+
+        if (action === 'pair') {
+            if (connectingDeviceId) return; // Prevent multiple pairing attempts at once
+            connectingDeviceId = deviceId;
+            renderDeviceList(); // Re-render to show the "Cancel" button
+            sendMessageToMain('initiatePairing', { deviceId });
+        } else if (action === 'unpair') {
+            const confirmed = await showConfirmationDialog(
+                `Are you sure you want to disconnect from ${connectedDevice.name}?`,
+                'Confirm Disconnect'
+            );
+            if (confirmed) {
+                isManualDisconnect = true; // MODIFIED: Set flag before sending command
+                sendMessageToMain('disconnectDevice');
+            }
+        } else if (action === 'cancel') {
+            sendMessageToMain('cancelPairing', { deviceId });
+            // The onDisconnect event triggered by the cancellation will handle resetting the UI.
         }
     });
 
-    // Event delegation for pair buttons
-    DOM.deviceList.addEventListener('click', (e) => {
-        const pairButton = e.target.closest('.pair-btn');
-        if (pairButton && !pairButton.disabled) {
-            // Fake pairing logic
-            pairButton.disabled = true;
-            pairButton.textContent = 'Paired';
-            pairButton.classList.remove('primary-btn');
-            pairButton.classList.add('secondary-btn');
-            // Here you would add real pairing logic
+    // Pairing dialog buttons
+    DOM.acceptPairBtn.addEventListener('click', () => {
+        if (pendingPairingDeviceId) {
+            sendMessageToMain('respondToPairingRequest', { deviceId: pendingPairingDeviceId, accepted: true });
+            hidePairingDialog();
         }
     });
+    DOM.rejectPairBtn.addEventListener('click', () => {
+        if (pendingPairingDeviceId) {
+            sendMessageToMain('respondToPairingRequest', { deviceId: pendingPairingDeviceId, accepted: false });
+            hidePairingDialog();
+        }
+    });
+
+    // Listeners for events from Main process
+    window.playerAPI.onDeviceUpdate((devices) => {
+        discoverableDevices.clear();
+        devices.forEach(d => discoverableDevices.set(d.deviceId, d));
+        if (DOM.deviceListDialog.classList.contains('visible')) {
+            renderDeviceList();
+        }
+    });
+
+    window.playerAPI.onInfoUpdate((device) => {
+        console.log('Received device info update:', device);
+        if (connectedDevice && connectedDevice.id === device.id) {
+            updateDeviceStatusUI('connected', device);
+        }
+    });
+
+    window.playerAPI.onPairingRequest(({ deviceId, deviceName }) => {
+        showPairingDialog({ deviceId, deviceName });
+    });
+
+    window.playerAPI.onConnectionSuccess((device) => {
+        connectingDeviceId = null;
+        isManualDisconnect = false; // MODIFIED: Reset flag on successful connection
+        hideDeviceListDialog();
+        updateDeviceStatusUI('connected', device);
+    });
+
+    window.playerAPI.onDisconnect((payload) => {
+        connectingDeviceId = null; // Always reset on disconnect
+        // MODIFIED: Check the flag to prevent showing a dialog on manual disconnect.
+        if (isManualDisconnect) {
+            handleDisconnectionUI();
+            return;
+        }
+
+        handleDisconnectionUI(); // Still update the UI to offline
+        if (payload) {
+            if (payload.reason === 'remote') {
+                showAlertDialog('Device Disconnected', 'The other device has disconnected.');
+            } else if (payload.reason === 'network') {
+                showAlertDialog('Connection Lost', 'The connection was lost due to a network failure.');
+            }
+        }
+    });
+
+    // REVISED: This is the critical fix. The UI will no longer assume every
+    // error means a disconnection.
+    window.playerAPI.onError((message) => {
+        // Errors related to the pairing process are fatal and should reset the UI.
+        const isPairingError = message && (
+            message.toLowerCase().includes('pairing') ||
+            message.toLowerCase().includes('rejected') ||
+            message.toLowerCase().includes('canceled by user')
+        );
+
+        if (isPairingError) {
+            console.warn(`[Device Controller] Pairing process failed or was canceled: ${message}`);
+            // Reset the pairing attempt state and UI to disconnected.
+            connectingDeviceId = null;
+            handleDisconnectionUI();
+            // Show a user-friendly message for these specific failures.
+            showAlertDialog('Pairing Failed', message);
+            return;
+        }
+
+        // For all other errors (like a temporary keep-alive timeout on one of multiple
+        // network paths), we should NOT change the UI state to disconnected. The main
+        // process is the source of truth for the connection status and will send a
+        // dedicated 'onDisconnect' event if the device is truly lost. We just log
+        // these non-fatal errors for debugging.
+        console.error(`[Device Controller] Received a non-fatal error from the main process: ${message}`);
+    });
+
+    // Tell main process we are ready
+    window.playerAPI.readyForDevices();
 }
 // --- End Device Controller Logic ---
 
@@ -419,4 +610,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     console.log("Player UI Initialized");
-});
+});

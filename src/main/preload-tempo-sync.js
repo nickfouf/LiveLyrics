@@ -44,4 +44,4 @@ contextBridge.exposeInMainWorld('tempoSyncAPI', {
         // Return a function to remove the listener, good practice for cleanup.
         return () => ipcRenderer.removeListener('playback:update', listener);
     }
-});
+});

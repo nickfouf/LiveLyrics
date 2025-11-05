@@ -130,6 +130,7 @@ async function loadSong(songId) {
         }
     });
     const measureMap = buildMeasureMap();
+    const songData = song.songData; // The full song data
 
     // Now, create the lean metadata object for the main process.
     const songMetadata = {
@@ -141,7 +142,7 @@ async function loadSong(songId) {
     };
 
     // Send the command to the main process.
-    window.playerAPI.loadSong({ songMetadata, measureMap });
+    window.playerAPI.loadSong({ songMetadata, measureMap, songData });
 }
 
 /**
