@@ -610,4 +610,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     console.log("Player UI Initialized");
-});
+});
