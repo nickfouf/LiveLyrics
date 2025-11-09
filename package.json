@@ -25,7 +25,6 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "@nickfouf/conduit-js": "^1.0.11",
     "archiver": "^7.0.1",
     "bonjour-service": "^1.3.0",
     "dnm-font-manager": "^0.5.13",
@@ -42,7 +41,7 @@
     },
     "files": [
       "src/**/*",
-      "node_modules/**/*",
+      "!src/main/build/**/*",
       "package.json"
     ],
     "win": {
@@ -82,5 +81,6 @@
         "releaseType": "release"
       }
     ]
-  }
+  },
+  "npmSkipDevDependencies": true
 }
