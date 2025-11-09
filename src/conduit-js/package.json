@@ -1,0 +1,36 @@
+{
+  "name": "@nickfouf/conduit-js",
+  "version": "1.0.11",
+  "description": "A reliable UDP communication library for Node.js with congestion control.",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "ConduitSocket.js",
+    "framer.js",
+    "congestionControl.js"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nickfouf/conduit-js.git"
+  },
+  "keywords": [
+    "udp",
+    "reliable-udp",
+    "rudp",
+    "congestion-control",
+    "nodejs",
+    "networking"
+  ],
+  "author": "Nick Foufopoulos",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nickfouf/conduit-js/issues"
+  },
+  "homepage": "https://github.com/nickfouf/conduit-js#readme",
+  "dependencies": {
+    "@nickfouf/conduit-js": "^1.0.10"
+  }
+}

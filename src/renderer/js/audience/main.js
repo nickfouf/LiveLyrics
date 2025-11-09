@@ -110,11 +110,22 @@ function renderFrameAtTime(timeInMs) {
     const beatDurationMs = getQuarterNoteDurationMs();
     const currentBeats = beatDurationMs > 0 ? timeInMs / beatDurationMs : 0;
     const measureMap = state.timelineManager.getMeasureMap();
+
+    if (measureMap.length === 0) {
+        // If there are no measures, we can't calculate musical time.
+        // Just ensure the thumbnail page is visible and render a "zero" state.
+        updateVisiblePagesForTime(0);
+        state.timelineManager.renderAt(0, 0);
+        return;
+    }
+
     let measureIndex = measureMap.findIndex(m => currentBeats >= m.startTime && currentBeats < m.startTime + m.duration);
     if (measureIndex === -1) {
-        const totalDuration = measureMap.length > 0 ? measureMap.at(-1).startTime + measureMap.at(-1).duration : 0;
-        measureIndex = (totalDuration > 0 && currentBeats >= totalDuration) ? measureMap.length - 1 : 0;
+        const totalDuration = measureMap.at(-1).startTime + measureMap.at(-1).duration;
+        // If past the end, snap to the last measure. Otherwise (if before the start), snap to the first.
+        measureIndex = (currentBeats >= totalDuration) ? measureMap.length - 1 : 0;
     }
+
     const currentMeasure = measureMap[measureIndex];
     const timeIntoMeasureBeats = currentBeats - (currentMeasure?.startTime || 0);
     const measureProgress = currentMeasure?.duration > 0 ? timeIntoMeasureBeats / currentMeasure.duration : 0;
@@ -337,4 +348,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.audienceAPI.onPlaybackUpdate(async (newState) => {
         await handlePlaybackUpdate(newState);
     });
-});
+});

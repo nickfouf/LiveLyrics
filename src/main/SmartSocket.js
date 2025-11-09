@@ -1,6 +1,6 @@
 const net = require('net');
 const EventEmitter = require('events');
-const { ConduitSocket } = require('@nickfouf/conduit-js');
+const { ConduitSocket } = require('../conduit-js');
 
 const HANDSHAKE_TIMEOUT = 40000;
 const KEEP_ALIVE_INTERVAL = 5000;
@@ -44,7 +44,11 @@ class SmartSocket extends EventEmitter {
         if (this._streamSocket) return;
         this._streamSocket = new ConduitSocket();
         this._streamSocket.bind(0, localAddress);
-        this._streamSocket.on('listening', () => { this._streamReady = true; this.emit('streamReady'); });
+        this._streamSocket.on('listening', () => {
+            this._streamReady = true;
+            // MODIFIED: The handshake is now sent from here, ensuring the stream socket is ready.
+            this._sendHandshake();
+        });
         this._streamSocket.on('message', (data, rinfo) => this.emit('streamData', data, rinfo));
         this._streamSocket.on('error', (err) => { this.emit('error', new Error(`Stream socket error: ${err.message}`)); });
         this._streamSocket.on('close', () => this.destroy());
@@ -64,7 +68,8 @@ class SmartSocket extends EventEmitter {
                 const message = JSON.parse(messageBody.toString());
 
                 if (!this._handshakeCompleted) {
-                    clearTimeout(this._handshakeTimeout);
+                    // MODIFIED: Clear the timeout if it exists
+                    if (this._handshakeTimeout) clearTimeout(this._handshakeTimeout);
                     if (this.destroyed) return;
 
                     if (message.type === 'pairingResponse') {
@@ -77,15 +82,18 @@ class SmartSocket extends EventEmitter {
                     if (this._isInitiator) {
                         this._completeHandshake(message);
                     } else {
-                        const accept = async () => {
+                        // MODIFIED: The 'accept' function is no longer async.
+                        const accept = () => {
                             if (this.destroyed) return;
                             console.log(`Pairing ACCEPTED for ${message.deviceId}`);
                             this._completeHandshake(message);
+                            // MODIFIED: We now either initialize the stream (which will then send the handshake)
+                            // or send the handshake directly if no stream is needed.
                             if (this._enableStream) {
                                 this._initializeStreamSocket(this.localAddress);
-                                await new Promise(resolve => this.once('streamReady', resolve));
+                            } else {
+                                this._sendHandshake();
                             }
-                            this._sendHandshake();
                         };
                         const reject = () => {
                             if (this.destroyed) return;
@@ -152,17 +160,22 @@ class SmartSocket extends EventEmitter {
         if (options != null && typeof options === 'object') {
             this._remoteAddressUnsafe = options.host; this._remotePortUnsafe = options.port;
         }
-        this._socket.connect(options, async () => {
+        this._socket.connect(options, () => {
+            // MODIFIED: Logic is now consistent with the server-side.
+            // Initialize stream first, which will then trigger the handshake.
             if (this._enableStream) {
                 this._initializeStreamSocket(this.localAddress);
-                await new Promise(resolve => this.once('streamReady', resolve));
+            } else {
+                this._sendHandshake();
             }
-            this._sendHandshake();
             if (callback) callback();
         });
+        // MODIFIED: The handshake timeout is now disabled to prevent this specific race condition.
+        /*
         this._handshakeTimeout = setTimeout(() => {
             this.destroy(new Error('Handshake timeout: Did not receive response from server.'));
         }, HANDSHAKE_TIMEOUT);
+        */
         return this;
     }
 
@@ -250,11 +263,14 @@ class SmartServer extends EventEmitter {
 
     _handleConnection(rawSocket) {
         const smartSocket = new SmartSocket(rawSocket, this._deviceId, this._deviceType, { ...this._options, ownDeviceName: this._deviceName, isInitiator: false });
+        // MODIFIED: The timeout is now handled on the server-side for incoming connections
         smartSocket._handshakeTimeout = setTimeout(() => {
             smartSocket.destroy(new Error('Handshake timeout: Did not receive identification from client.'));
         }, HANDSHAKE_TIMEOUT);
         this.emit('connection', smartSocket);
-        smartSocket.once('close', () => clearTimeout(smartSocket._handshakeTimeout));
+        smartSocket.once('close', () => {
+            if (smartSocket._handshakeTimeout) clearTimeout(smartSocket._handshakeTimeout);
+        });
     }
     listen(...args) { this._server.listen(...args); return this; }
     close(callback) { this._server.close(callback); return this; }

@@ -4,8 +4,24 @@ const os =require('os');
 const { Bonjour } = require('bonjour-service');
 const crypto = require('crypto');
 const { SocketDevice } = require("./SocketDevice.js");
+const { performance } = require('perf_hooks');
 
 const PAIRING_REQUEST_TIMEOUT = 35000;
+
+class RTTStats {
+    static MAX_SAMPLES = 20;
+    samples = [];
+    average = 0;
+
+    addSample(rtt) {
+        if (this.samples.length >= RTTStats.MAX_SAMPLES) {
+            this.samples.shift();
+        }
+        this.samples.push(rtt);
+        const sum = this.samples.reduce((a, b) => a + b, 0);
+        this.average = sum / this.samples.length;
+    }
+}
 
 class ConnectionManager extends EventEmitter {
     #bonjour = null;
@@ -20,7 +36,10 @@ class ConnectionManager extends EventEmitter {
     #clientType = 'unknown';
     #serviceVersion = 0;
     #connectionMaintainerInterval = null;
+    #syncInterval = null;
     #pairedDevice = null; // The single device we are paired with
+    #rttStats = new Map();
+    #pendingUiPairingRequests = new Set(); // MODIFIED: Added to track pending requests
 
     get deviceId() { return this.#deviceId; }
     get deviceName() { return this.#deviceName; }
@@ -64,6 +83,10 @@ class ConnectionManager extends EventEmitter {
         if (this.#connectionMaintainerInterval) {
             clearInterval(this.#connectionMaintainerInterval);
             this.#connectionMaintainerInterval = null;
+        }
+        if (this.#syncInterval) {
+            clearInterval(this.#syncInterval);
+            this.#syncInterval = null;
         }
 
         if (this.#browser) {
@@ -179,7 +202,16 @@ class ConnectionManager extends EventEmitter {
                     reject();
                 }
             } else {
+                // MODIFIED: Start of the fix
+                if (this.#pendingUiPairingRequests.has(remoteId)) {
+                    console.log(`[ConnectionManager] Ignoring duplicate pairing UI request for ${remoteId}`);
+                    return; // Ignore the duplicate request, preventing a second timeout.
+                }
+                // MODIFIED: End of the fix
+
                 console.log("Forwarding pairing request to application.");
+                this.#pendingUiPairingRequests.add(remoteId); // MODIFIED: Track this request
+
                 let potentialDevice = this.#devices.get(remoteId);
                 if (!potentialDevice) {
                     potentialDevice = new SocketDevice(remoteId, deviceType, deviceName);
@@ -194,6 +226,7 @@ class ConnectionManager extends EventEmitter {
                     if (!decided) {
                         decided = true;
                         console.log("Pairing request timed out. Rejecting.");
+                        this.#pendingUiPairingRequests.delete(remoteId); // MODIFIED: Clean up tracker
                         reject();
                     }
                 }, PAIRING_REQUEST_TIMEOUT);
@@ -202,6 +235,7 @@ class ConnectionManager extends EventEmitter {
                     if (!decided) {
                         decided = true;
                         clearTimeout(timeoutHandle);
+                        this.#pendingUiPairingRequests.delete(remoteId); // MODIFIED: Clean up tracker
                         console.log(`Application ACCEPTED pairing with ${remoteId}`);
                         if (this.#pairedDevice) this.#pairedDevice.destroyAllSockets();
                         this.#pairedDevice = potentialDevice;
@@ -215,6 +249,7 @@ class ConnectionManager extends EventEmitter {
                     if (!decided) {
                         decided = true;
                         clearTimeout(timeoutHandle);
+                        this.#pendingUiPairingRequests.delete(remoteId); // MODIFIED: Clean up tracker
                         console.log(`Application REJECTED pairing with ${remoteId}`);
                         reject();
                     }
@@ -231,11 +266,30 @@ class ConnectionManager extends EventEmitter {
 
         device.on('error', (dev, error) => this.emit('error', dev));
         device.on('deviceFound', (dev) => this.emit('deviceFound', dev));
-        device.on('deviceConnected', (dev) => this.emit('deviceConnected', dev));
+        device.on('deviceConnected', (dev) => {
+            this.emit('deviceConnected', dev);
+
+            if (this.#syncInterval) clearInterval(this.#syncInterval);
+
+            this.#syncInterval = setInterval(() => {
+                if (this.#pairedDevice && this.#pairedDevice.deviceId === dev.deviceId) {
+                    this.#pairedDevice.sendStreamData({
+                        type: 'clock_sync_ping_electron',
+                        t1: performance.now()
+                    });
+                }
+            }, 500);
+        });
         device.on('deviceDisconnected', (dev, payload) => {
             if (this.#pairedDevice && this.#pairedDevice.deviceId === dev.deviceId) {
                 console.log(`Paired device ${dev.deviceId} disconnected. Unpairing from ConnectionManager.`);
                 this.#pairedDevice = null;
+                this.#rttStats.clear();
+                if (this.#syncInterval) {
+                    clearInterval(this.#syncInterval);
+                    this.#syncInterval = null;
+                }
+                this.getPlayerWindow()?.webContents.send('device-controller:rtt-update', []);
             }
             this.emit('deviceDisconnected', dev, payload);
         });
@@ -254,6 +308,69 @@ class ConnectionManager extends EventEmitter {
                 dev.destroyAllSockets('remote');
             }
         });
+
+        device.on('message', (message, dev) => {
+            if (!message || !message.type) return;
+            const playbackCommands = ['play', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start'];
+        
+            if (message.type === 'selectSong') {
+                const songId = message.payload?.songId;
+                if (songId) {
+                    this.emit('songSelectionRequest', songId);
+                }
+            } else if (playbackCommands.includes(message.type)) {
+                this.emit('remoteCommand', message);
+            }
+        });
+
+        device.on('streamData', (data, dev, remoteIp) => {
+            const payload = data.data;
+            if (!payload || !this.#pairedDevice) return;
+
+            switch (payload.type) {
+                case 'clock_sync_pong_android': {
+                    // ======================= THE FIX IS HERE =======================
+                    // The `remoteIp` is the true source of the UDP packet (the Android interface).
+                    // The `payload.sourceIp` is what Android *thought* our IP was.
+                    // We MUST trust `remoteIp` as the key for our RTT stats.
+                    const rttKey = remoteIp; 
+                    
+                    const t4 = performance.now();
+                    const { t1, t2, t3 } = payload;
+                    const rtt = (t4 - t1) - (t3 - t2);
+
+                    if (!this.#rttStats.has(rttKey)) {
+                        this.#rttStats.set(rttKey, new RTTStats());
+                    }
+                    const stats = this.#rttStats.get(rttKey);
+                    stats.addSample(rtt);
+
+                    const rttDataForUI = Array.from(this.#rttStats.entries()).map(([ip, stat]) => ({
+                        ip: ip,
+                        avg: stat.average,
+                        samples: stat.samples.length
+                    }));
+                    this.getPlayerWindow()?.webContents.send('device-controller:rtt-update', rttDataForUI);
+                    break;
+                }
+                case 'clock_sync_ping_android': {
+                    this.#pairedDevice.sendStreamData({
+                        type: 'clock_sync_pong_electron',
+                        t1: payload.t1,
+                        t2: performance.now(),
+                        sourceIp: remoteIp
+                    });
+                    break;
+                }
+            }
+        });
+    }
+
+    // Helper method to get the player window reference from main.js
+    getPlayerWindow() {
+        const allWindows = require('electron').BrowserWindow.getAllWindows();
+        // This is a simple way; a more robust solution might involve window IDs or titles
+        return allWindows.find(win => win.getTitle().includes('Player'));
     }
 
     #handleNetworkChange() {
@@ -325,6 +442,9 @@ class ConnectionManager extends EventEmitter {
                 this.#pairedDevice.addOutgoingSocket(newSocket);
             }
         }
+
+        // REMOVED: The faulty pruning logic has been removed from this function.
+        // RTT stats will now only be cleared upon a full device disconnection.
     }
 
     #triggerConnectionMaintenance() {

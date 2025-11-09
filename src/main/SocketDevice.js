@@ -51,7 +51,7 @@ class SocketDevice extends EventEmitter {
 
         outgoing.forEach(socket => socket.destroy(new Error("Device is being unpaired.")));
         incoming.forEach(socket => socket.destroy(new Error("Device is being unpaired.")));
-        
+
         const wasConnectedOrConnecting = this.#connected || this.#found;
         this.#connected = false;
         this.#found = false;
@@ -67,7 +67,7 @@ class SocketDevice extends EventEmitter {
 
     updateRemoteInfo(ips, port, version, name) {
         if (version > -1 && version <= this.#lastSeenVersion) return;
-        
+
         if (version > -1) {
             console.log(`Updating remote info for ${this.#deviceId} to v${version}.`);
             this.#lastSeenVersion = version;
@@ -78,9 +78,9 @@ class SocketDevice extends EventEmitter {
             this.#remoteAdvertisedIps.clear();
             ips.forEach(ip => this.#remoteAdvertisedIps.add(ip));
         }
-        
+
         this.emit('infoUpdated', this); // Emit event for dynamic IP updates
-        
+
         // REMOVED: This loop was too aggressive. The socket's own keep-alive
         // mechanism is responsible for detecting if a specific path is truly dead.
         // Pruning connections based on a Bonjour update can cause false disconnects
@@ -155,6 +155,7 @@ class SocketDevice extends EventEmitter {
 
     addIncomingSocket(socket) {
         this.#incomingSockets.add(socket);
+        console.log('Incoming Sockets: ', this.#incomingSockets.size, 'Outgoing Sockets: ', this.#outgoingSockets.size);
         socket.on('close', () => this.#handleSocketClose(socket, true));
         socket.on('error', (err) => {
             if (err && err.message === 'Device is being unpaired.') {
@@ -166,11 +167,13 @@ class SocketDevice extends EventEmitter {
         socket.on('serviceUpdate', (data) => this.#handleSocketServiceUpdate(socket, data));
         socket.on('connect', () => this.#checkIfShouldFireEvent());
         socket.on('disconnect', (payload) => this.#handleManualDisconnect(socket, payload));
+        socket.on('streamData', (data) => this.emit('streamData', data, this, socket.remoteAddress));
         if (socket.connected) this.#checkIfShouldFireEvent();
     }
 
     addOutgoingSocket(socket) {
         this.#outgoingSockets.add(socket);
+        console.log('Incoming Sockets: ', this.#incomingSockets.size, 'Outgoing Sockets: ', this.#outgoingSockets.size);
         socket.on('close', () => this.#handleSocketClose(socket, false));
         socket.on('error', (err) => {
             if (!err || !err.message) return;
@@ -191,6 +194,7 @@ class SocketDevice extends EventEmitter {
         });
         socket.on('connect', () => this.#handleOutgoingSocketConnect(socket));
         socket.on('disconnect', (payload) => this.#handleManualDisconnect(socket, payload));
+        socket.on('streamData', (data) => this.emit('streamData', data, this, socket.remoteAddress));
         if (socket.connected) this.#handleOutgoingSocketConnect(socket);
     }
 

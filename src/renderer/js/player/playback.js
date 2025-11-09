@@ -135,11 +135,22 @@ function renderFrameAtTime(timeInMs) {
     const beatDurationMs = getQuarterNoteDurationMs();
     const currentBeats = beatDurationMs > 0 ? timeInMs / beatDurationMs : 0;
     const measureMap = state.timelineManager.getMeasureMap();
-    const totalDurationBeats = measureMap.length > 0 ? measureMap.at(-1).startTime + measureMap.at(-1).duration : 0;
+
+    if (measureMap.length === 0) {
+        // If there are no measures, render a "zero" state and update UI accordingly.
+        updateVisiblePagesForTime(0);
+        state.timelineManager.renderAt(0, 0);
+        updateTimelineUI({ measureIndex: 0, totalDurationBeats: 0, currentBeats: 0 });
+        return;
+    }
+
+    const totalDurationBeats = measureMap.at(-1).startTime + measureMap.at(-1).duration;
     let measureIndex = measureMap.findIndex(m => currentBeats >= m.startTime && currentBeats < m.startTime + m.duration);
     if (measureIndex === -1) {
-        measureIndex = (totalDurationBeats > 0 && currentBeats >= totalDurationBeats) ? measureMap.length - 1 : 0;
+        // If past the end, snap to the last measure. Otherwise (if before the start), snap to the first.
+        measureIndex = (currentBeats >= totalDurationBeats) ? measureMap.length - 1 : 0;
     }
+
     const currentMeasure = measureMap[measureIndex];
     const timeIntoMeasureBeats = currentBeats - (currentMeasure?.startTime || 0);
     const measureProgress = currentMeasure?.duration > 0 ? timeIntoMeasureBeats / currentMeasure.duration : 0;
@@ -467,4 +478,4 @@ export function jumpToPage_Player(newPage) {
 
     const timestamp = performance.timeOrigin + performance.now();
     window.playerAPI.jumpToTime(newTimeAtPause, timestamp);
-}
+}

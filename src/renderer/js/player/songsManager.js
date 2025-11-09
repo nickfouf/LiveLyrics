@@ -15,6 +15,18 @@ import { updatePlayerControlsUI } from './playback.js';
 export let songPlaylist = []; // Array to hold { id, title, filePath, songData };
 let playlistElement;
 
+/**
+ * Sends the current playlist state to the main process for synchronization.
+ */
+function syncPlaylistWithMain() {
+    if (window.playerAPI) {
+        window.playerAPI.sendPlaylistUpdate({
+            songs: songPlaylist,
+            activeSongId: state.activeSongId
+        });
+    }
+}
+
 function pageDataHasMeasures(pageData) {
     if (!pageData) return false;
     function findMusicElements(element) {
@@ -198,9 +210,7 @@ export async function handleSongActivated(songMetadata, songData) {
 
         document.getElementById('window-title').innerText = `Player - ${songMetadata.title}`;
         renderPlaylist();
-
-        // The UI controls will be updated by the handlePlaybackUpdate function,
-        // which receives the full state from main, so we don't need to do it here.
+        syncPlaylistWithMain(); // Sync with main process after activation
 
     } catch (error) {
         console.error('Failed to activate song in renderer:', error);
@@ -214,6 +224,7 @@ export function handleSongUnloaded() {
     updateState({ activeSongId: null });
     renderPlaylist();
     showDefaultPlayerView();
+    syncPlaylistWithMain(); // Sync with main process after unload
 }
 
 function renderPlaylist() {
@@ -316,6 +327,19 @@ export function initSongsManager() {
     playlistElement = document.getElementById('song-playlist');
     const addSongBtn = document.getElementById('add-song-btn');
     addSongBtn.addEventListener('click', handleAddSong);
+
+    // Listen for sync requests from the main process
+    window.playerAPI.onPlaylistRequestSync(() => {
+        console.log('[Player] Main process requested playlist sync.');
+        syncPlaylistWithMain();
+    });
+
+    // Listen for song selection requests from the main process (sent by Android)
+    window.playerAPI.onSongSelectRequest((songId) => {
+        console.log(`[Player] Received request to select song: ${songId}`);
+        loadSong(songId);
+    });
+
     playlistElement.addEventListener('click', e => {
         const songItem = e.target.closest('.song-item');
         if (!songItem) return;
@@ -326,6 +350,7 @@ export function initSongsManager() {
                 const wasActive = state.activeSongId === songId;
                 songPlaylist.splice(index, 1);
                 renderPlaylist();
+                syncPlaylistWithMain(); // Sync after deletion
                 if (songPlaylist.length === 0) {
                     window.playerAPI.unloadSong();
                 } else if (wasActive) {
@@ -384,5 +409,6 @@ export function initSongsManager() {
         }
         songPlaylist.splice(targetIndex, 0, draggedSong);
         renderPlaylist();
+        syncPlaylistWithMain(); // Sync after reordering
     });
 }

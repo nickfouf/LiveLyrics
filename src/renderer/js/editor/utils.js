@@ -1137,6 +1137,21 @@ export function deserializeElement(data) {
         // Music order will be set after all elements are created
     }
 
+    // --- FIX START: Manually restore playback state after construction ---
+    if (data.type === 'video' || data.type === 'audio') {
+        const savedPlaybackProp = data.properties?.playback;
+        // Check if a default value for the state was saved in the project file
+        if (savedPlaybackProp?.state?.value) {
+            const playbackProp = element.getProperty('playback');
+            if (playbackProp) {
+                // Manually set the default value on the newly created property object
+                // The saved object is { value, id }, which is what setDefaultValue expects.
+                playbackProp.getState().setDefaultValue(savedPlaybackProp.state);
+            }
+        }
+    }
+    // --- FIX END ---
+
     return element;
 }
 
@@ -1319,4 +1334,4 @@ export function deepEqual(a, b) {
         return true;
     }
     return false;
-}
+}

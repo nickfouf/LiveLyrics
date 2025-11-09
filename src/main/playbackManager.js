@@ -196,8 +196,17 @@ class PlaybackManager {
         const mainRelativeTimestamp = absoluteTimestamp ? absoluteTimestamp - performance.timeOrigin : undefined;
         const timeAtPause = (timeOverride !== undefined) ? timeOverride : this.#getCurrentTime(mainRelativeTimestamp);
     
-        if (this.#state.type === 'synced' && this.#measureMap.length > 0) {
-            const quarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
+        // Calculate the total duration to check if we're at the end.
+        const quarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song?.bpm, this.#state.song?.bpmUnit);
+        const totalDurationBeats = this.#measureMap.length > 0 ? this.#measureMap.at(-1).startTime + this.#measureMap.at(-1).duration : 0;
+        const totalDurationMs = totalDurationBeats * quarterNoteDuration;
+    
+        // Check if the pause is happening at or after the song's end.
+        // Use a small tolerance (e.g., 1ms) to account for floating point inaccuracies.
+        const isAtSongEnd = totalDurationMs > 0 && timeAtPause >= totalDurationMs - 1;
+    
+        // Only snap to the nearest measure if in 'synced' mode AND not at the end of the song.
+        if (this.#state.type === 'synced' && this.#measureMap.length > 0 && !isAtSongEnd) {
             const timeInBeats = quarterNoteDuration > 0 ? timeAtPause / quarterNoteDuration : 0;
     
             let closestMeasure = null;
@@ -232,6 +241,7 @@ class PlaybackManager {
             }
         }
     
+        // Fallback for normal pauses or end-of-song pauses.
         this.#state.status = 'paused';
         this.#state.timeAtReference = timeAtPause;
         this.#state.referenceTime = 0;
@@ -405,4 +415,4 @@ class PlaybackManager {
     }
 }
 
-module.exports = { PlaybackManager };
+module.exports = { PlaybackManager };

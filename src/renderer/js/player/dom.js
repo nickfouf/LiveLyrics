@@ -76,5 +76,5 @@ export function initDOM() {
     DOM.deviceStatusIndicator = document.getElementById('device-status-indicator');
     DOM.deviceStatusText = document.getElementById('device-status-text');
     DOM.deviceNameValue = document.getElementById('device-name-value');
-    DOM.deviceIpValue = document.getElementById('device-ip-value');
+    DOM.deviceRttList = document.getElementById('device-rtt-list'); // MODIFIED
 }

@@ -68,10 +68,8 @@ export class VirtualAudio extends VirtualElement {
                 this.audioElement.pause();
             }
             this.audioElement.currentTime = 0;
-        } else if (isPlaying) {
-            this.audioElement.currentTime = 0;
-            this.getProperty('playback').setState('paused');
         }
+        // The 'else if (isPlaying)' block that was resetting the time has been removed.
     }
 
     applyEvents(measureIndex, measureProgress, timingData) {
@@ -145,23 +143,24 @@ export class VirtualAudio extends VirtualElement {
             loopValue.markAsRendered();
         }
 
-        // Apply playback state (play/pause) only if it has been changed by an event.
-        if (stateValue.shouldRender) {
-            const state = stateValue.getValue();
-            if (state === 'playing') {
-                // When the state changes to 'playing', reset the audio to the beginning.
+        // Always check and enforce the playback state against the DOM element's actual state.
+        const intendedState = stateValue.getValue();
+        if (intendedState === 'playing') {
+            if (this.audioElement.ended) {
                 this.audioElement.currentTime = 0;
-                if (this.audioElement.paused) {
-                    this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
-                }
-            } else if (state === 'resume') {
-                if (this.audioElement.paused) {
-                    this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
-                }
-            } else if (state === 'paused' && !this.audioElement.paused) {
+            }
+            if (this.audioElement.paused) {
+                this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
+            }
+        } else if (intendedState === 'resume') {
+            if (this.audioElement.paused) {
+                this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
+            }
+        } else if (intendedState === 'paused') {
+            if (!this.audioElement.paused) {
                 this.audioElement.pause();
             }
-            stateValue.markAsRendered();
         }
+        stateValue.markAsRendered();
     }
-}
+}

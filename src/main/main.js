@@ -357,6 +357,14 @@ app.whenReady().then(() => {
             const stateForWindow = { ...stateObject, latency: 0 };
             tempoSyncWindow.webContents.send(channel, stateForWindow);
         }
+
+        // --- Send to connected Android device ---
+        if (connectionManager) {
+            connectionManager.sendMessageToPairedDevice({
+                type: 'playbackUpdate',
+                payload: stateObject
+            });
+        }
     };
 
     playbackManager = new PlaybackManager(broadcastToAllWindows);
@@ -367,6 +375,7 @@ app.whenReady().then(() => {
 
     const handleRemoteCommand = (command) => {
         if (!command || typeof command !== 'object' || !playbackManager) return;
+        console.log(`[Main] Handling remote command:`, command);
         const timestamp = performance.timeOrigin + performance.now();
         switch (command.type) {
             case 'play':
@@ -387,6 +396,9 @@ app.whenReady().then(() => {
                 break;
             case 'undo':
                 playbackManager.undoBeat();
+                break;
+            case 'jump-to-start':
+                playbackManager.jump(0, timestamp);
                 break;
             default:
                 console.warn(`[Main] Received unknown remote command: ${command.type}`);
@@ -430,11 +442,23 @@ app.whenReady().then(() => {
             }
         });
 
+        connectionManager.on('songSelectionRequest', (songId) => {
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('playlist:select-song', songId);
+            }
+        });
+
+        connectionManager.on('remoteCommand', (command) => {
+            handleRemoteCommand(command);
+        });
+
         connectionManager.on('deviceConnected', (device) => {
             console.log(`[Main] Device fully connected: ${device.deviceName} (${device.deviceId})`);
             if (playerWindow && !playerWindow.isDestroyed()) {
                 const remoteInfo = { id: device.deviceId, name: device.deviceName, type: device.deviceType, ips: device.getRemoteAdvertisedIps() };
                 playerWindow.webContents.send('device-controller:connection-success', remoteInfo);
+                // Request the current playlist from the player window to sync the new device
+                playerWindow.webContents.send('playlist:request-sync');
             }
             // ADDED: Send current song data on connect
             if (playbackManager) {
@@ -453,10 +477,7 @@ app.whenReady().then(() => {
                     });
                 }
             }
-            device.on('message', (message) => {
-                console.log(`[Main] Received command from ${device.deviceId}:`, message.data);
-                handleRemoteCommand(message.data);
-            });
+            
             device.on('infoUpdated', (updatedDevice) => {
                 if (playerWindow && !playerWindow.isDestroyed()) {
                     const updatedInfo = { id: updatedDevice.deviceId, name: updatedDevice.deviceName, type: updatedDevice.deviceType, ips: updatedDevice.getRemoteAdvertisedIps() };
@@ -819,6 +840,9 @@ ipcMain.handle('project:addAsset', async (event, originalPath) => {
     }
 
     try {
+        // Ensure the target directory exists before proceeding.
+        await fs.promises.mkdir(assetsTempPath, { recursive: true });
+
         const checksum = await generateFileChecksum(originalPath);
         const extension = path.extname(originalPath);
         const newFileName = `${checksum}${extension}`;
@@ -1205,6 +1229,21 @@ ipcMain.on('playback:undo-beat', (event) => {
     playbackManager.undoBeat();
 });
 
+// ADDED: IPC handler for playlist updates from the player renderer
+ipcMain.on('playlist:updated', (event, { songs, activeSongId }) => {
+    if (connectionManager) {
+        console.log(`[Main] Playlist updated. Active song: ${activeSongId}. Sending to device.`);
+        const payload = {
+            songs: songs.map(s => ({ id: s.id, title: s.title })),
+            activeSongId: activeSongId
+        };
+        connectionManager.sendMessageToPairedDevice({
+            type: 'playlistUpdate',
+            payload: payload
+        });
+    }
+});
+
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
@@ -1236,4 +1275,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

@@ -79,6 +79,28 @@ function renderDeviceList() {
     });
 }
 
+// NEW: Function to render the RTT list.
+function renderRttList(stats = []) {
+    if (!DOM.deviceRttList) return;
+
+    // Sort by IP address for a consistent order
+    stats.sort((a, b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
+
+    if (stats.length === 0) {
+        DOM.deviceRttList.innerHTML = '---';
+        return;
+    }
+
+    DOM.deviceRttList.innerHTML = ''; // Clear previous entries
+    stats.forEach(stat => {
+        const statElement = document.createElement('div');
+        const avgText = stat.avg > 0 ? `${stat.avg.toFixed(1)}ms` : '---';
+        statElement.textContent = `${stat.ip}: ${avgText}`;
+        DOM.deviceRttList.appendChild(statElement);
+    });
+}
+
+
 function showDeviceListDialog() {
     if (!DOM.deviceListDialog) return;
     renderDeviceList();
@@ -108,7 +130,6 @@ function updateDeviceStatusUI(status, device = null) {
         DOM.deviceStatusIndicator.classList.add('online');
         DOM.deviceStatusText.textContent = 'Connected';
         DOM.deviceNameValue.textContent = device.name;
-        DOM.deviceIpValue.textContent = device.ips.join(', ');
         DOM.disconnectDeviceBtn.classList.remove('noneDisplay');
         DOM.openDeviceListBtn.textContent = 'Open Device List';
     } else {
@@ -117,9 +138,9 @@ function updateDeviceStatusUI(status, device = null) {
         DOM.deviceStatusIndicator.classList.add('offline');
         DOM.deviceStatusText.textContent = status === 'searching' ? 'Searching...' : 'Offline';
         DOM.deviceNameValue.textContent = 'Not Connected';
-        DOM.deviceIpValue.textContent = '---';
         DOM.disconnectDeviceBtn.classList.add('noneDisplay');
         DOM.openDeviceListBtn.textContent = 'Open Device List';
+        renderRttList([]); // Clear RTT on disconnect
     }
 }
 
@@ -216,6 +237,11 @@ function initDeviceController() {
         if (connectedDevice && connectedDevice.id === device.id) {
             updateDeviceStatusUI('connected', device);
         }
+    });
+
+    // NEW: Listen for RTT updates from the main process.
+    window.playerAPI.onRttUpdate((stats) => {
+        renderRttList(stats);
     });
 
     window.playerAPI.onPairingRequest(({ deviceId, deviceName }) => {

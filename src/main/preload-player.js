@@ -39,6 +39,11 @@ contextBridge.exposeInMainWorld('playerAPI', {
     // --- File Opening from Main Process ---
     onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
 
+    // --- ADDED: Playlist Sync API ---
+    sendPlaylistUpdate: (data) => ipcRenderer.send('playlist:updated', data),
+    onPlaylistRequestSync: (callback) => ipcRenderer.on('playlist:request-sync', (_event) => callback()),
+    onSongSelectRequest: (callback) => ipcRenderer.on('playlist:select-song', (_event, songId) => callback(songId)),
+
     // --- ADDED: Device Controller API ---
     onDeviceUpdate: (callback) => ipcRenderer.on('device-controller:device-list-update', (_event, devices) => callback(devices)),
     onInfoUpdate: (callback) => ipcRenderer.on('device-controller:info-update', (_event, device) => callback(device)),
@@ -46,6 +51,8 @@ contextBridge.exposeInMainWorld('playerAPI', {
     onConnectionSuccess: (callback) => ipcRenderer.on('device-controller:connection-success', (_event, device) => callback(device)),
     onDisconnect: (callback) => ipcRenderer.on('device-controller:disconnect', (_event, payload) => callback(payload)),
     onError: (callback) => ipcRenderer.on('device-controller:error', (_event, message) => callback(message)),
+    // NEW: Listener for RTT updates.
+    onRttUpdate: (callback) => ipcRenderer.on('device-controller:rtt-update', (_event, stats) => callback(stats)),
     initiatePairing: (deviceId) => ipcRenderer.send('device-controller:initiate-pairing', deviceId),
     cancelPairing: (deviceId) => ipcRenderer.send('device-controller:cancel-pairing', deviceId),
     respondToPairing: (deviceId, accepted) => ipcRenderer.send('device-controller:respond-to-pairing', { deviceId, accepted }),
