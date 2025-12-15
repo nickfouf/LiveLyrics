@@ -76,7 +76,7 @@ export function renderEventsPanel() {
         totalMeasuresDisplay.textContent = `Total measures: ${totalMeasures}`;
 
         // --- RENDER "TRANSITION" VIEW ---
-        const initialTransition = activePage.transition || { type: 'fade', duration: 2, durationUnit: 'beats', direction: 'left', perspective: { value: 2000, unit: 'px' } };
+        const initialTransition = activePage.transition || { type: 'fade', duration: 2, durationUnit: 'beats', offsetBeats: 0, direction: 'left', perspective: { value: 2000, unit: 'px' } };
 
         const transitionGroup = document.createElement('div');
         transitionGroup.className = 'drawer-group';
@@ -117,6 +117,10 @@ export function renderEventsPanel() {
                             </select>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label for="page-transition-offset">Offset Beats</label>
+                        <input type="number" id="page-transition-offset" class="form-input" step="1" value="${transition.offsetBeats || 0}">
+                    </div>
                 `;
             }
 
@@ -153,6 +157,7 @@ export function renderEventsPanel() {
             // Add event listeners to the newly created elements
             const durationInput = document.getElementById('page-transition-duration');
             const unitSelect = document.getElementById('page-transition-unit');
+            const offsetInput = document.getElementById('page-transition-offset');
 
             if (durationInput && unitSelect) {
                 const updateDuration = () => {
@@ -163,6 +168,15 @@ export function renderEventsPanel() {
                 };
                 durationInput.addEventListener('change', updateDuration);
                 unitSelect.addEventListener('change', updateDuration);
+            }
+
+            if (offsetInput) {
+                const updateOffset = () => {
+                    activePage.transition.offsetBeats = parseInt(offsetInput.value, 10) || 0;
+                    markAsDirty();
+                    reprogramAllPageTransitions();
+                };
+                offsetInput.addEventListener('change', updateOffset);
             }
 
             const directionSelect = document.getElementById('page-transition-direction');
@@ -223,15 +237,10 @@ export function renderEventsPanel() {
                 const globalMeasureOffset = firstMeasureOfPage ? firstMeasureOfPage.globalIndex : 0;
 
                 openEventsEditor(selectedElement.id, currentData, globalMeasureOffset, (newState) => {
-                    let finalState = newState;
-
-                    // Compatibility Layer: Convert new map format back to the array format
-                    // that the legacy setEventsData method expects.
-                    if (newState.format === 'map') {
-                        const pageMeasures = getPageMeasuresStructure(state.activePage);
-                        const contentArray = pageMeasures.map(measure => newState.content[measure.id] || []);
-                        finalState = { content: contentArray };
-                    }
+                    // Pass the raw state map directly to the element.
+                    // The VirtualElement class is now capable of handling the map structure
+                    // and resolving global measure IDs correctly.
+                    const finalState = newState;
 
                     window.elementSC = selectedElement;
                     console.log('Updated events data:', finalState);
@@ -348,4 +357,4 @@ export function initEventsPanelInteractions() {
             }, 1000);
         }
     });
-}
+}

@@ -21,6 +21,12 @@ import { showLoadingDialog } from './loadingDialog.js';
 
 let scrollTimeout = null;
 
+const BLEND_MODES = [
+    'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 
+    'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 
+    'exclusion', 'hue', 'saturation', 'color', 'luminosity'
+];
+
 /**
  * Initializes event listeners for the properties panel to save its UI state.
  */
@@ -1933,8 +1939,18 @@ function buildEffectsProperties(element, isCollapsed) {
     propGroup.id = 'prop-group-effects';
     propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
     const effectsProp = element.getProperty('effects');
+    
     const opacityVal = effectsProp.getOpacity();
     const defaultOpacity = opacityVal.getDefaultValue();
+
+    // ADDED: Get mixBlendMode value
+    const blendModeVal = effectsProp.getMixBlendMode();
+    const defaultBlendMode = blendModeVal.getDefaultValue();
+
+    // Generate options HTML
+    const blendOptions = BLEND_MODES.map(mode => 
+        `<option value="${mode}" ${defaultBlendMode === mode ? 'selected' : ''}>${mode.charAt(0).toUpperCase() + mode.slice(1)}</option>`
+    ).join('');
 
     propGroup.innerHTML = `
         ${createPropHeader('Effects')}
@@ -1947,11 +1963,20 @@ function buildEffectsProperties(element, isCollapsed) {
                     <span class="unit-label">%</span>
                 </div>
             </div>
+            <!-- ADDED: Blend Mode UI -->
+            <div class="form-group" data-prop-key="mixBlendMode">
+                <label>Blending Mode</label>
+                <select id="prop-effects-blend-mode" class="form-select">
+                    ${blendOptions}
+                </select>
+            </div>
         </div>`;
     DOM.propertiesPanelBody.appendChild(propGroup);
 
-    checkAndSetEventControl(propGroup.querySelector('.form-group'), opacityVal);
+    checkAndSetEventControl(propGroup.querySelector('[data-prop-key="opacity"]'), opacityVal);
+    checkAndSetEventControl(propGroup.querySelector('[data-prop-key="mixBlendMode"]'), blendModeVal);
 
+    // Opacity Logic
     const slider = propGroup.querySelector('input[type="range"]');
     const numberInput = propGroup.querySelector('input[type="number"]');
 
@@ -1968,6 +1993,13 @@ function buildEffectsProperties(element, isCollapsed) {
         const val = Math.max(0, Math.min(100, parseInt(numberInput.value, 10) || 0)) / 100;
         slider.value = val;
         updateOpacity(val);
+    });
+
+    // Blend Mode Logic
+    const blendSelect = propGroup.querySelector('#prop-effects-blend-mode');
+    blendSelect.addEventListener('change', (e) => {
+        setPropertyAsDefaultValue(state.selectedElement, 'mixBlendMode', e.target.value);
+        renderPropertiesPanel(); // Re-render to update UI state if controlled by events
     });
 }
 
@@ -2173,4 +2205,4 @@ export function renderPropertiesPanel(element = state.selectedElement) {
             DOM.propertiesPanelBody.scrollTop = savedScroll;
         }
     });
-}
+}

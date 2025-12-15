@@ -7,7 +7,11 @@ export class PerspectiveScaleProperty extends VirtualProperty {
 
     constructor(options={}) {
         super('perspectiveScale', 'Perspective Scale');
-        if (options.direction) {
+        
+        // FIX: Handle both object input and string input (from JSON serialization)
+        if (typeof options === 'string') {
+            this.setDirection(options, true);
+        } else if (options && options.direction) {
             this.setDirection(options.direction, true);
         }
     }

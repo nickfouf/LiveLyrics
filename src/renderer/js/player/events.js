@@ -135,22 +135,54 @@ export function reprogramAllPageTransitions() {
         const firstMeasureOfDestPage = measureMap.find(m => m.pageIndex === i);
         if (!firstMeasureOfDestPage) continue; // Skip pages with no measures
 
-        const transitionStartMeasure = firstMeasureOfDestPage.globalIndex;
-        const transitionStartBeat = firstMeasureOfDestPage.startTime;
+        // MODIFIED: Incorporate offsetBeats into the transition start time
+        // We calculate the transition start time in BEATS first.
+        const transitionStartBeat = firstMeasureOfDestPage.startTime + (transition.offsetBeats || 0);
+        
+        // Find the measure that corresponds to this beat time to get the index.
+        const startMeasureInfo = measureMap.find(m => m.startTime <= transitionStartBeat && (m.startTime + m.duration) > transitionStartBeat) 
+            || (transitionStartBeat < 0 ? measureMap[0] : measureMap[measureMap.length - 1]);
+            
+        // Fallback: if we are way off the map, just use a sensible default (though UI should prevent this usually)
+        if (!startMeasureInfo) continue;
+
+        const transitionStartMeasure = startMeasureInfo.globalIndex;
+        // Calculate progress into that measure.
+        const transitionStartProgress = startMeasureInfo.duration > 0 ? (transitionStartBeat - startMeasureInfo.startTime) / startMeasureInfo.duration : 0;
 
         let transitionEndMeasure, transitionEndProgress, transitionEndBeat;
         let transitionMidMeasure, transitionMidProgress;
 
         if (transition.durationUnit === 'beats') {
             transitionEndBeat = transitionStartBeat + (transition.duration || 1);
-            const endMeasureInfo = measureMap.find(m => m.startTime <= transitionEndBeat && (m.startTime + m.duration) > transitionEndBeat) || measureMap[measureMap.length - 1];
+            const endMeasureInfo = measureMap.find(m => m.startTime <= transitionEndBeat && (m.startTime + m.duration) > transitionEndBeat) 
+                || (transitionEndBeat < 0 ? measureMap[0] : measureMap[measureMap.length - 1]);
+            
             transitionEndMeasure = endMeasureInfo.globalIndex;
             transitionEndProgress = endMeasureInfo.duration > 0 ? (transitionEndBeat - endMeasureInfo.startTime) / endMeasureInfo.duration : 0;
         } else { // Default to measures
-            transitionEndMeasure = transitionStartMeasure + (transition.duration || 1);
-            transitionEndProgress = 0;
-            const endMeasureInfo = measureMap[transitionEndMeasure] || measureMap[measureMap.length - 1];
-            transitionEndBeat = endMeasureInfo.startTime;
+            // IMPORTANT: If unit is 'measures', we still need to respect the offset.
+            // A measure-based duration is slightly ambiguous with an offset. 
+            // We'll treat it as: Start at (Start + offset), run for N measures worth of time.
+            
+            // Calculate total duration in beats based on the measures following the start point
+            let durationInBeats = 0;
+            // Find where we are in the measure map
+            let currentMeasureIdx = measureMap.findIndex(m => m === startMeasureInfo);
+            if (currentMeasureIdx === -1) currentMeasureIdx = 0;
+
+            for (let j = 0; j < (transition.duration || 1); j++) {
+                if (measureMap[currentMeasureIdx + j]) {
+                    durationInBeats += measureMap[currentMeasureIdx + j].duration;
+                }
+            }
+            
+            transitionEndBeat = transitionStartBeat + durationInBeats;
+            const endMeasureInfo = measureMap.find(m => m.startTime <= transitionEndBeat && (m.startTime + m.duration) > transitionEndBeat) 
+                || measureMap[measureMap.length - 1];
+
+            transitionEndMeasure = endMeasureInfo.globalIndex;
+            transitionEndProgress = endMeasureInfo.duration > 0 ? (transitionEndBeat - endMeasureInfo.startTime) / endMeasureInfo.duration : 0;
         }
 
         // Calculate midpoint for two-part transitions like Flip
@@ -182,12 +214,12 @@ export function reprogramAllPageTransitions() {
         // --- Program Destination Page Events ---
         if (transition.type === 'fade') {
             const opacity = destPage.getProperty('effects').getOpacity();
-            opacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            opacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             opacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
         } else if (transition.type === 'dip-to-black') {
             const destOpacity = destPage.getProperty('effects').getOpacity();
             // To page is invisible for the first half, then fades in
-            destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionMidMeasure, measureProgress: transitionMidProgress }));
             destOpacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
         } else if (transition.type === 'push') {
@@ -200,7 +232,7 @@ export function reprogramAllPageTransitions() {
                 case 'down': startValue = { value: -100, unit: 'ph' }; endValue = { value: 0, unit: 'ph' }; transformProp = transform.getTranslateY(); break;
             }
             if(transformProp) {
-                transformProp.addEvent(new UnitEvent({ value: startValue.value, unit: startValue.unit, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                transformProp.addEvent(new UnitEvent({ value: startValue.value, unit: startValue.unit, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 transformProp.addEvent(new UnitEvent({ value: endValue.value, unit: endValue.unit, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
             }
         } else if (transition.type === 'flip') {
@@ -210,7 +242,7 @@ export function reprogramAllPageTransitions() {
 
             // Program opacity to be 0 for the first half and 1 for the second.
             const destOpacity = destPage.getProperty('effects').getOpacity();
-            destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destOpacity.addEvent(new NumberEvent({ value: 0, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             destOpacity.addEvent(new NumberEvent({ value: 1, ease: 'instant', measureIndex: transitionMidMeasure, measureProgress: transitionMidProgress }));
             destOpacity.addEvent(new NumberEvent({ value: 1, ease: 'instant', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
 
@@ -219,10 +251,10 @@ export function reprogramAllPageTransitions() {
             destTransform.setValue('backface-visibility', 'hidden', true);
 
             // Enable parent perspective and transform for the duration
-            destParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-            destParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-            destParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-            destTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+            destParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+            destParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+            destTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
 
             // Determine rotation axis and direction
             let parentRotator, transformRotator, rotationEnd, destInitialRotation;
@@ -255,12 +287,12 @@ export function reprogramAllPageTransitions() {
 
             // Set the initial rotation for the destination page so it starts facing away
             if (transformRotator) {
-                transformRotator.addEvent(new NumberEvent({ value: destInitialRotation, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                transformRotator.addEvent(new NumberEvent({ value: destInitialRotation, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             }
 
             // Animate the parent's rotation
             if (parentRotator) {
-                parentRotator.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                parentRotator.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 parentRotator.addEvent(new NumberEvent({ value: rotationEnd, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
             }
 
@@ -293,16 +325,16 @@ export function reprogramAllPageTransitions() {
 
             // --- Program Destination Page Events ---
             const destParentPerspective = destPage.getProperty('parentPerspective');
-            destParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-            destParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-            destParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+            destParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+            destParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
 
             if (destPerspectiveScale) {
-                destPerspectiveScale.getDirection().addEvent(new StringEvent({ value: transition.direction, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                destPerspectiveScale.getDirection().addEvent(new StringEvent({ value: transition.direction, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 destPerspectiveScale.getDirection().addEvent(new StringEvent({ value: 'none', ease: 'instant', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
             }
 
-            destTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             let destStartRotateProp, destStartRotateVal;
             switch (transition.direction) {
                 case 'left': destStartRotateProp = destTransform.getRotateY(); destStartRotateVal = -90; break;
@@ -311,12 +343,12 @@ export function reprogramAllPageTransitions() {
                 case 'down': destStartRotateProp = destTransform.getRotateX(); destStartRotateVal = -90; break;
             }
             if (destStartRotateProp) {
-                destStartRotateProp.addEvent(new NumberEvent({ value: destStartRotateVal, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                destStartRotateProp.addEvent(new NumberEvent({ value: destStartRotateVal, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             }
-            destTransform.getTranslateZ().addEvent(new UnitEvent({ value: translateZ_val.value, unit: translateZ_val.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destTransform.getTranslateZ().addEvent(new UnitEvent({ value: translateZ_val.value, unit: translateZ_val.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
 
             const destRotator = destParentPerspective[rotatorProp === 'rotateY' ? 'getRotateY' : 'getRotateX']();
-            destRotator.addEvent(new NumberEvent({ value: rotationStart, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+            destRotator.addEvent(new NumberEvent({ value: rotationStart, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
             destRotator.addEvent(new NumberEvent({ value: rotationEnd, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
 
             // Reset events at the end
@@ -330,20 +362,20 @@ export function reprogramAllPageTransitions() {
                 const sourceParentPerspective = sourcePage.getProperty('parentPerspective');
                 const sourcePerspectiveScale = sourcePage.getProperty('perspectiveScale');
 
-                sourceParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-                sourceParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-                sourceParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+                sourceParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+                sourceParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
 
                 if (sourcePerspectiveScale) {
-                    sourcePerspectiveScale.getDirection().addEvent(new StringEvent({ value: transition.direction, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                    sourcePerspectiveScale.getDirection().addEvent(new StringEvent({ value: transition.direction, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                     sourcePerspectiveScale.getDirection().addEvent(new StringEvent({ value: 'none', ease: 'instant', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
                 }
 
-                sourceTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-                sourceTransform.getTranslateZ().addEvent(new UnitEvent({ value: translateZ_val.value, unit: translateZ_val.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+                sourceTransform.getTranslateZ().addEvent(new UnitEvent({ value: translateZ_val.value, unit: translateZ_val.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
 
                 const sourceRotator = sourceParentPerspective[rotatorProp === 'rotateY' ? 'getRotateY' : 'getRotateX']();
-                sourceRotator.addEvent(new NumberEvent({ value: rotationStart, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceRotator.addEvent(new NumberEvent({ value: rotationStart, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 sourceRotator.addEvent(new NumberEvent({ value: rotationEnd, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
 
                 // Reset events at the end
@@ -352,16 +384,16 @@ export function reprogramAllPageTransitions() {
             }
         }
 
-        // --- Program Source Page Events ---
+        // --- Program Source Page Events (Standard) ---
         if (sourcePage) {
             if (transition.type === 'fade') {
                 const opacity = sourcePage.getProperty('effects').getOpacity();
-                opacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                opacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 opacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
             } else if (transition.type === 'dip-to-black') {
                 const sourceOpacity = sourcePage.getProperty('effects').getOpacity();
                 // From page fades out completely in the first half
-                sourceOpacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceOpacity.addEvent(new NumberEvent({ value: 1, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 sourceOpacity.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionMidMeasure, measureProgress: transitionMidProgress }));
             } else if (transition.type === 'push') {
                 const transform = sourcePage.getProperty('transform');
@@ -373,7 +405,7 @@ export function reprogramAllPageTransitions() {
                     case 'down': startValue = { value: 0, unit: 'ph' }; endValue = { value: 100, unit: 'ph' }; transformProp = transform.getTranslateY(); break;
                 }
                 if(transformProp) {
-                    transformProp.addEvent(new UnitEvent({ value: startValue.value, unit: startValue.unit, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                    transformProp.addEvent(new UnitEvent({ value: startValue.value, unit: startValue.unit, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                     transformProp.addEvent(new UnitEvent({ value: endValue.value, unit: endValue.unit, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
                 }
             } else if (transition.type === 'flip') {
@@ -383,7 +415,7 @@ export function reprogramAllPageTransitions() {
 
                 // Program opacity to be 1 for the first half and 0 for the second.
                 const sourceOpacity = sourcePage.getProperty('effects').getOpacity();
-                sourceOpacity.addEvent(new NumberEvent({ value: 1, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceOpacity.addEvent(new NumberEvent({ value: 1, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                 sourceOpacity.addEvent(new NumberEvent({ value: 0, ease: 'instant', measureIndex: transitionMidMeasure, measureProgress: transitionMidProgress }));
                 // At the end of the transition, restore opacity to 1 to "undo" the change.
                 sourceOpacity.addEvent(new NumberEvent({ value: 1, ease: 'instant', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
@@ -392,10 +424,10 @@ export function reprogramAllPageTransitions() {
                 sourceTransform.setValue('backface-visibility', 'hidden', true);
 
                 // Enable parent perspective and transform for the duration
-                sourceParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-                sourceParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-                sourceParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
-                sourceTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                sourceParentPerspective.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+                sourceParentPerspective.getPerspective().addEvent(new UnitEvent({ value: perspective.value, unit: perspective.unit, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+                sourceParentPerspective.getTransformStyle().addEvent(new StringEvent({ value: 'preserve-3d', ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
+                sourceTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ease: 'instant', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
 
                 // Determine rotation axis and direction
                 let parentRotator, rotationEnd;
@@ -420,7 +452,7 @@ export function reprogramAllPageTransitions() {
 
                 // Animate the parent's rotation (identically to the destination page)
                 if (parentRotator) {
-                    parentRotator.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: 0 }));
+                    parentRotator.addEvent(new NumberEvent({ value: 0, ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress }));
                     parentRotator.addEvent(new NumberEvent({ value: rotationEnd, ease: 'linear', measureIndex: transitionEndMeasure, measureProgress: transitionEndProgress }));
                 }
 
@@ -430,5 +462,4 @@ export function reprogramAllPageTransitions() {
             }
         }
     }
-}
-
+}

@@ -3,6 +3,7 @@ import { lerpColor  } from './utils.js';
 import { generateCSSGradient, parseColorString, generateCSSColor } from '../renderer/utils.js';
 import { openColorPicker } from './colorPicker.js';
 import { openOpaqueColorPicker } from './opaqueColorPicker.js';
+import { makeDraggable } from './draggable.js';
 
 let gradientState = {
     useOpaquePicker: false,
@@ -68,7 +69,8 @@ function renderGradientEditor() {
     const stopPositionInput = stopDetails.querySelector('input');
     const midpointPositionInput = midpointDetails.querySelector('input');
 
-    console.log(gradientState, generateCSSGradient(gradientState));
+    makeDraggable('gradient-editor-dialog');
+
     gradientBar.style.background = generateCSSGradient(gradientState);
     stopsArea.innerHTML = '';
 
@@ -312,4 +314,5 @@ export function openGradientEditor(initialGradient, callback, useOpaquePicker = 
     updateState({ gradientEditorCallback: callback });
     renderGradientEditor();
     dialog.classList.add('visible');
-}
+}
+

@@ -169,6 +169,9 @@ export class VirtualOrchestra extends VirtualElement {
         } else if (measureIndex > lastMeasureIdx) {
             this.setProgress(100); // Playback is after this element.
         } else {
+            // FIX: Ensure the measure exists before calculation
+            if (!measureMap[measureIndex]) return;
+
             // Playback is within this element. Calculate the percentage.
             const measuresIntoElement = (measureIndex - firstMeasureIdx) + measureProgress;
             const percentage = (measuresIntoElement / totalMeasuresInElement) * 100;
@@ -185,4 +188,4 @@ function findLastIndex(array, predicate) {
         }
     }
     return -1;
-}
+}

@@ -10,7 +10,7 @@ import { PerspectiveScaleProperty } from "../properties/perspectiveScale.js";
 
 export class VirtualPage extends VirtualContainer {
     #musicElementsOrder = []; // Array of element IDs
-    transition = { type: 'fade', duration: 2, durationUnit: 'beats', direction: 'left', perspective: { value: 2000, unit: 'px' } };
+    transition = { type: 'fade', duration: 2, durationUnit: 'beats', offsetBeats: 0, direction: 'left', perspective: { value: 2000, unit: 'px' } };
     constructor(options = {}) {
         super({ name: 'Page', ...options });
 

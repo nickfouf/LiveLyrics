@@ -415,4 +415,4 @@ class PlaybackManager {
     }
 }
 
-module.exports = { PlaybackManager };
+module.exports = { PlaybackManager };

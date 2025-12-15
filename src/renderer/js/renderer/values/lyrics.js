@@ -1,13 +1,15 @@
 // src/renderer/js/renderer/values/lyrics.js
 
-import {compareLyricsObjects, compareLyricsLayouts} from "../utils.js";
+import {compareLyricsObjects, compareLyricsLayouts, deepEqual} from "../utils.js";
 import {getTextMetrics} from "../textMetrics.js";
 import { getCharInfo } from '../language_parser.js';
 
 export class LyricsValue {
     #shouldRender = false;
     #lyricsObject = {
-        measures: []
+        measures: [],
+        foreignContent: {},
+        measureIdOrder: []
     };
 
     get shouldRender() {
@@ -26,11 +28,16 @@ export class LyricsValue {
     }
 
     setLyricsObject(lyricsObject) {
-        lyricsObject = structuredClone(lyricsObject);
-        const isDifferent = !compareLyricsObjects(this.#lyricsObject, lyricsObject);
+        const newObject = {
+            measures: lyricsObject.measures || [],
+            foreignContent: lyricsObject.foreignContent || {},
+            measureIdOrder: lyricsObject.measureIdOrder || []
+        };
+
+        const isDifferent = !compareLyricsObjects(this.#lyricsObject, newObject);
 
         if (isDifferent) {
-            this.#lyricsObject = lyricsObject;
+            this.#lyricsObject = newObject;
             this.#shouldRender = true;
             return true;
         }
@@ -231,7 +238,32 @@ export class LyricsLayout {
 
     getSpansFromLyricsObject(lyricsObject) {
         const spans = [];
-        const allNotes = lyricsObject.measures.flatMap(measure => measure.content);
+        let allNotes = [];
+
+        // NEW LOGIC: Use measureIdOrder if available to ensure correct visual sequence
+        if (lyricsObject.measureIdOrder && lyricsObject.measureIdOrder.length > 0) {
+            // Create lookups
+            const ownMeasuresMap = new Map(lyricsObject.measures.map(m => [m.id, m.content]));
+            
+            lyricsObject.measureIdOrder.forEach(measureId => {
+                if (ownMeasuresMap.has(measureId)) {
+                    allNotes = allNotes.concat(ownMeasuresMap.get(measureId));
+                } else if (lyricsObject.foreignContent && lyricsObject.foreignContent[measureId]) {
+                    allNotes = allNotes.concat(lyricsObject.foreignContent[measureId]);
+                }
+            });
+        } else {
+            // Fallback for legacy data: Owned then Foreign
+            allNotes = lyricsObject.measures.flatMap(measure => measure.content);
+            if (lyricsObject.foreignContent) {
+                 Object.values(lyricsObject.foreignContent).forEach(notes => {
+                     if (Array.isArray(notes)) {
+                         allNotes = allNotes.concat(notes);
+                     }
+                 });
+            }
+        }
+
         for (let i = 0; i < allNotes.length; i++) {
             const note = allNotes[i];
             if (note.text === '∅') {
@@ -847,4 +879,4 @@ export class LyricsLayout {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}

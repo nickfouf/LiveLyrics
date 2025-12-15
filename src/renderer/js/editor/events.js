@@ -1,3 +1,5 @@
+// src/renderer/js/editor/events.js
+
 import { state, updateState } from './state.js';
 import { triggerActivePageRender } from './pageManager.js';
 import { DOM } from './dom.js';
@@ -64,6 +66,7 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
 
     const keyToPath = {
         opacity: { prop: 'effects', valueKey: 'opacity' },
+        mixBlendMode: { prop: 'effects', valueKey: 'mixBlendMode' },
         width: { prop: 'dimensions', valueKey: 'width' },
         height: { prop: 'dimensions', valueKey: 'height' },
         marginEnabled: { prop: 'margin', valueKey: 'enabled' },
@@ -179,6 +182,8 @@ export function rebuildAllEventTimelines() {
  * @returns {{measureIndex: number, measureProgress: number}}
  */
 function _timeInBeatsToMeasureInfo(timeInBeats, measureMap) {
+    // FIX: Handle negative beat times by clamping or finding the start
+    if (timeInBeats < 0 && measureMap.length > 0) return { measureIndex: 0, measureProgress: 0 };
     if (timeInBeats <= 0) return { measureIndex: 0, measureProgress: 0 };
 
     let measureIndex = measureMap.findIndex(m => timeInBeats >= m.startTime && timeInBeats < m.startTime + m.duration);
@@ -224,7 +229,7 @@ function sharedReprogramAllPageTransitions() {
 
     for (let toPageIndex = 0; toPageIndex < state.song.pages.length; toPageIndex++) {
         const toPage = state.song.pages[toPageIndex];
-        const transition = toPage.transition || { type: 'instant', duration: 0 };
+        const transition = toPage.transition || { type: 'instant', duration: 0, offsetBeats: 0 };
 
         if (transition.type === 'instant' || !transition.duration || transition.duration <= 0) {
             continue;
@@ -233,7 +238,8 @@ function sharedReprogramAllPageTransitions() {
         const firstMeasureOfPage = measureMap.find(m => m.pageIndex === toPageIndex);
         if (!firstMeasureOfPage) continue;
 
-        const transitionStartTimeBeats = firstMeasureOfPage.startTime;
+        // MODIFIED: Incorporate offsetBeats into the transition start time
+        const transitionStartTimeBeats = firstMeasureOfPage.startTime + (transition.offsetBeats || 0);
         let durationInBeats;
 
         if (transition.durationUnit === 'beats') {
@@ -868,21 +874,16 @@ export function initSlideInteractivity() {
     });
 }
 
-// --- Boilerplate Setup ---
-
-/**
- * Shows a confirmation dialog if there are unsaved changes.
- * @returns {Promise<boolean>} True if the user confirms or if there are no changes, false otherwise.
- */
-async function confirmCloseIfNeeded() {
+// ... (remaining boilerplate functions setupTitleBar, setupDrawerControls, etc.)
+// ... (rest of the file remains unchanged)
+function confirmCloseIfNeeded() {
     if (state.song.isDirty) {
-        const confirmed = await showConfirmationDialog(
+        return showConfirmationDialog(
             "You have unsaved changes that will be lost. Do you want to continue?",
             "Unsaved Changes"
         );
-        return confirmed;
     }
-    return true; // No unsaved changes, so it's safe to proceed.
+    return Promise.resolve(true);
 }
 
 function setupTitleBar() {

@@ -8,6 +8,7 @@ import { initAlertDialog, showAlertDialog } from '../editor/alertDialog.js';
 import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
 import { applyViewportScaling } from '../editor/rendering.js';
+import { makeDraggable } from '../editor/draggable.js';
 
 // --- REWRITTEN: Device Controller Logic ---
 
@@ -161,6 +162,8 @@ function handleDisconnectionUI() {
 function initDeviceController() {
     // Initial state
     updateDeviceStatusUI('searching');
+    
+    makeDraggable('device-list-dialog');
 
     // Listeners for UI actions
     DOM.openDeviceListBtn.addEventListener('click', showDeviceListDialog);
@@ -636,4 +639,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     console.log("Player UI Initialized");
-});
+});
+

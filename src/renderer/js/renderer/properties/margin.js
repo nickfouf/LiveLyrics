@@ -154,4 +154,4 @@ export class MarginProperty extends VirtualProperty {
         const leftChanged = this.updateLeft(dimensions);
         return topChanged || rightChanged || bottomChanged || leftChanged;
     }
-}
+}

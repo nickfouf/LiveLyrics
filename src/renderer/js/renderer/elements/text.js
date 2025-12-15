@@ -61,7 +61,8 @@ export class VirtualText extends VirtualElement {
         };
         const finalTextStyle = { ...defaultTextStyle, ...(options.textStyle || {}) };
 
-        this.setProperty('background', new BackgroundProperty({ enabled: false }));
+        // FIX: Pass options.background
+        this.setProperty('background', new BackgroundProperty(options.background || { enabled: false }));
         this.setProperty('textContent', new TextContentProperty(initialText));
         this.setProperty('textStyle', new TextStyleProperty(finalTextStyle));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
@@ -72,4 +73,4 @@ export class VirtualText extends VirtualElement {
         this.setProperty('inner_padding', new InnerPaddingProperty(options.inner_padding));
         this.setProperty('transform', new TransformProperty(options.transform));
     }
-}
+}

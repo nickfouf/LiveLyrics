@@ -2009,6 +2009,26 @@ input:checked + .toggle-slider:before {
     transition: opacity 0.2s ease-in-out;
 }
 
+/* ADDED: Styles for foreign measures in editors */
+.measure-box.foreign-measure {
+    background-color: #313131; /* A slightly different shade */
+    border-color: #4a4a4a;
+}
+
+.measure-box.foreign-measure .measure-header {
+    background-color: #3c3c3c;
+    cursor: not-allowed; /* Indicate it can't be dragged */
+}
+
+/* Hide action buttons on foreign measures */
+.measure-box.foreign-measure .delete-measure-btn,
+.measure-box.foreign-measure .duplicate-measure-btn,
+.measure-box.foreign-measure .copy-measure-btn,
+.measure-box.foreign-measure .paste-measure-btn {
+    display: none;
+}
+
+
 #events-editor-dialog .measure-box {
     height: auto;
 }
@@ -3031,4 +3051,4 @@ body.is-playing .slide-wrapper {
 .delete-measure-btn {
     right: -8px;
     background-color: #cc3333;
-}
+}

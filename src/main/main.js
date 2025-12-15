@@ -179,9 +179,10 @@ function createTempoSyncWindow() {
     console.log(`[Main] Loading tempoSyncWindow. Preload path: ${preloadScriptPath}`);
 
     tempoSyncWindow = new BrowserWindow({
-        width: 300,
+        width: 400,
         height: 450, // Increased height for the new button
         title: 'Tempo Sync',
+        autoHideMenuBar: true,
         webPreferences: {
             preload: preloadScriptPath,
             nodeIntegration: false,
@@ -373,12 +374,24 @@ app.whenReady().then(() => {
     const pairingRequests = new Map();
     const discoverableDevices = new Map(); // State for discoverable devices
 
-    const handleRemoteCommand = (command) => {
+    // MODIFICATION: This function now handles latency compensation.
+    const handleRemoteCommand = (command, remoteIp) => {
         if (!command || typeof command !== 'object' || !playbackManager) return;
-        console.log(`[Main] Handling remote command:`, command);
-        const timestamp = performance.timeOrigin + performance.now();
+        console.log(`[Main] Handling remote command from ${remoteIp}:`, command);
+    
+        // --- ADDED: Latency Compensation ---
+        const rttStats = connectionManager.getRttStats();
+        const stats = rttStats.get(remoteIp);
+        const avgRtt = stats ? stats.average : 0;
+        const latency = avgRtt / 2; // One-way latency
+        const timestamp = (performance.timeOrigin + performance.now()) - latency;
+        // --- END: Latency Compensation ---
+    
         switch (command.type) {
             case 'play':
+                playbackManager.play(timestamp); // FIX: Default to 'normal' playback
+                break;
+            case 'play-synced':
                 playbackManager.play(timestamp, 'synced');
                 break;
             case 'pause':
@@ -399,6 +412,9 @@ app.whenReady().then(() => {
                 break;
             case 'jump-to-start':
                 playbackManager.jump(0, timestamp);
+                break;
+            case 'jump':
+                playbackManager.jump(command.timeInMs, timestamp);
                 break;
             default:
                 console.warn(`[Main] Received unknown remote command: ${command.type}`);
@@ -448,8 +464,16 @@ app.whenReady().then(() => {
             }
         });
 
-        connectionManager.on('remoteCommand', (command) => {
-            handleRemoteCommand(command);
+        connectionManager.on('remoteBpmUpdate', ({ bpm, bpmUnit }) => {
+            if (playbackManager) {
+                const timestamp = performance.timeOrigin + performance.now();
+                playbackManager.updateBpm(bpm, bpmUnit, timestamp);
+            }
+        });
+
+        // MODIFICATION: The listener now accepts `remoteIp`.
+        connectionManager.on('remoteCommand', (command, remoteIp) => {
+            handleRemoteCommand(command, remoteIp);
         });
 
         connectionManager.on('deviceConnected', (device) => {
@@ -465,7 +489,7 @@ app.whenReady().then(() => {
                 const currentSongData = playbackManager.getCurrentSongData();
                 const currentSyncState = playbackManager.getCurrentSyncState();
                 if (currentSongData && currentSyncState.song) {
-                    console.log('[Main] Sending current song data to newly connected device.');
+                    console.log('[Main] Sending current song data and playback state to newly connected device.');
                     // MODIFIED: Send hint message first
                     connectionManager.sendMessageToPairedDevice({
                         type: 'songUpdateHint',
@@ -474,6 +498,11 @@ app.whenReady().then(() => {
                     connectionManager.sendMessageToPairedDevice({
                         type: 'songUpdate',
                         payload: currentSongData
+                    });
+                    // Also send the current playback state
+                    connectionManager.sendMessageToPairedDevice({
+                        type: 'playbackUpdate',
+                        payload: currentSyncState
                     });
                 }
             }
@@ -1179,6 +1208,12 @@ ipcMain.on('playback:load-song', (event, { songMetadata, measureMap, songData })
             type: 'songUpdate',
             payload: songData
         });
+        // Also send the initial playback state after loading
+        const initialSyncState = playbackManager.getCurrentSyncState();
+        connectionManager.sendMessageToPairedDevice({
+            type: 'playbackUpdate',
+            payload: initialSyncState
+        });
     }
 });
 
@@ -1275,4 +1310,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

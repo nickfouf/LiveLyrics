@@ -7,7 +7,7 @@ import { updateTimelineAndEditorView, rebuildAllEventTimelines, reprogramAllPage
 import { renderLayersPanel } from "./layersPanel.js";
 import { renderPropertiesPanel } from "./propertiesPanel.js";
 import { renderEventsPanel } from "./eventsPanel.js";
-import { buildMeasureMap, pageHasMeasures, findVirtualElementById, serializeElement, deserializeElement } from './utils.js';
+import { buildMeasureMap, pageHasMeasures, findVirtualElementById, serializeElement, deserializeElement, buildLyricsTimingMap } from './utils.js';
 import { updateEmptyPageHintVisibility } from './rendering.js';
 import { generateUUID } from '../renderer/utils.js';
 
@@ -368,6 +368,14 @@ export function triggerActivePageRender(useResize = true) {
     const currentMusicalTimeInBeats = beatDurationMs > 0 ? state.playback.timeAtPause / beatDurationMs : 0;
     const totalDuration = measureMap.length > 0 ? measureMap.at(-1).startTime + measureMap.at(-1).duration : 0;
 
+    // --- FIX START ---
+    // Update the timeline manager's internal maps before any calculations are done with them.
+    // This prevents a race condition where a stale map is used with a fresh measure index.
+    const lyricsTimingMap = buildLyricsTimingMap(measureMap);
+    state.timelineManager.setMeasureMap(measureMap);
+    state.timelineManager.setLyricsTimingMap(lyricsTimingMap);
+    // --- FIX END ---
+
     let currentMeasureIndex = measureMap.findIndex(m => currentMusicalTimeInBeats >= m.startTime && currentMusicalTimeInBeats < m.startTime + m.duration);
     if (currentMeasureIndex === -1) {
         currentMeasureIndex = totalDuration > 0 && currentMusicalTimeInBeats >= totalDuration ? measureMap.length - 1 : 0;
@@ -508,4 +516,4 @@ function handlePageDrop(e) {
     updateTimelineAndEditorView();
 }
 
-export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };
+export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };

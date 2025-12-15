@@ -1,16 +1,22 @@
+// src/renderer/js/renderer/properties/lyricsContent.js
+
 import {VirtualProperty} from "./property.js";
 import {LyricsValue} from "../values/lyrics.js";
 import {NumberValue} from "../values/number.js";
 
 export class LyricsContentProperty extends VirtualProperty {
     #lyricsValue = new LyricsValue({
-        measures: []
+        measures: [],
+        foreignContent: {},
+        measureIdOrder: [] // Ensure default initialization
     });
 
     #highlightedPercentageValue = new NumberValue(0);
 
     constructor(lyricsContent = {
-        measures: []
+        measures: [],
+        foreignContent: {},
+        measureIdOrder: [] // Ensure default initialization
     }) {
         super('lyricsContent', 'Lyrics Content');
         this.setLyricsObject(lyricsContent);

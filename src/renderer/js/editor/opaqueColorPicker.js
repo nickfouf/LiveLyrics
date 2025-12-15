@@ -1,5 +1,6 @@
 import { state, updateState } from './state.js';
 import { hsvToRgb, hexToRgb, rgbToHex, rgbToHsv, parseColorString } from '../renderer/utils.js';
+import {makeDraggable} from "./draggable.js";
 
 // Simplified state without alpha
 let pickerState = { h: 0, s: 100, v: 100 };
@@ -116,6 +117,8 @@ export function initOpaqueColorPicker() {
         r: document.getElementById('ocp-r-in'), g: document.getElementById('ocp-g-in'), b: document.getElementById('ocp-b-in'),
         hex: document.getElementById('ocp-hex-in')
     };
+
+    makeDraggable('opaque-color-picker-dialog');
 
     function handleDrag(element, onMove) {
         const onMouseMove = (e) => { e.preventDefault(); onMove(e); };
@@ -241,4 +244,5 @@ export function openOpaqueColorPicker(initialColor, callback) {
 
     updateState({ opaqueColorPickerCallback: callback });
     dialog.classList.add('visible');
-}
+}
+

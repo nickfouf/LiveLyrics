@@ -263,6 +263,14 @@ export function updatePlayerControlsUI(playbackState) {
             bpmValueInput.value = 120;
         }
     }
+
+    // --- Page Thumbnail Controls ---
+    // Add a 'disabled' class to the container when playing.
+    // You will need to add CSS to handle this class, e.g.:
+    // .page-thumbnails-container.disabled .page-thumbnail { pointer-events: none; opacity: 0.6; }
+    if (DOM.pageThumbnailsContainer) {
+        DOM.pageThumbnailsContainer.classList.toggle('disabled', isPlaying);
+    }
 }
 
 
@@ -478,4 +486,4 @@ export function jumpToPage_Player(newPage) {
 
     const timestamp = performance.timeOrigin + performance.now();
     window.playerAPI.jumpToTime(newTimeAtPause, timestamp);
-}
+}

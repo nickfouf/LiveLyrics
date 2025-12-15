@@ -34,14 +34,15 @@ export class VirtualImage extends VirtualElement {
         this.domElement.appendChild(effectsElement);
         this.effectsElement = effectsElement;
 
-        this.setProperty('background', new BackgroundProperty({ enabled: false }));
+        // FIX: Pass options to properties so they are not reset to defaults
+        this.setProperty('background', new BackgroundProperty(options.background || { enabled: false }));
         this.setProperty('src', new ImageSrcProperty(options.src));
         this.setProperty('objectFit', new ObjectFitProperty(options.objectFit));
-        this.setProperty('boxShadow', new BoxShadowProperty());
+        this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions));
-        this.setProperty('margin', new MarginProperty());
-        this.setProperty('effects', new EffectsProperty());
-        this.setProperty('border', new BorderProperty());
+        this.setProperty('margin', new MarginProperty(options.margin));
+        this.setProperty('effects', new EffectsProperty(options.effects));
+        this.setProperty('border', new BorderProperty(options.border));
         this.setProperty('transform', new TransformProperty(options.transform));
     }
 }

@@ -98,8 +98,13 @@ export class VirtualAudio extends VirtualElement {
             return;
         }
 
-        // Calculate the current global musical time.
+        // FIX: Ensure the measure index is valid for the current map to prevent crashes
         const currentMeasureInfo = measureMap[measureIndex];
+        if (!currentMeasureInfo) {
+            return;
+        }
+
+        // Calculate the current global musical time.
         const currentMusicalTimeInBeats = currentMeasureInfo.startTime + (measureProgress * currentMeasureInfo.duration);
 
         // Calculate how far into the element's timeline we are.
@@ -163,4 +168,4 @@ export class VirtualAudio extends VirtualElement {
         }
         stateValue.markAsRendered();
     }
-}
+}

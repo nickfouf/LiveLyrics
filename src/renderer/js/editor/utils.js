@@ -56,12 +56,10 @@ export function findAllAtPoint(root, x, y, conditionFn = () => true) {
             foundElements.push({ element: el, depth: depth });
         }
 
-        // --- MODIFICATION START ---
         // Recurse into children in reverse order to find top-most elements first
         for (let i = el.children.length - 1; i >= 0; i--) {
             dfs(el.children[i], depth + 1);
         }
-        // --- MODIFICATION END ---
     }
 
     dfs(root, 0);
@@ -815,28 +813,53 @@ export function buildLyricsTimingMap(measureMap) {
 
 
     for (const [elementId, lyricsData] of allLyricsElements.entries()) {
-        if (!lyricsData.measures) continue;
+        if (!lyricsData) continue;
 
-        lyricsData.measures.forEach(measure => {
-            // Find all instances of this measure in the playback map (for repeated sections, etc.)
-            const measureInstances = measureMap.filter(m => m.originalMeasureId === measure.id && m.elementId === elementId);
-
-            measureInstances.forEach(measureInfo => {
-                let timeWithinMeasure = 0;
-                if (measure.content) {
-                    measure.content.forEach(note => {
-                        const duration = NOTE_DURATIONS_IN_BEATS[note.type] || 0;
-                        lyricsMap.push({
-                            elementId: elementId,
-                            noteId: note.id,
-                            startTime: measureInfo.startTime + timeWithinMeasure,
-                            duration: duration,
+        // Process measures owned by the element
+        if (lyricsData.measures) {
+            lyricsData.measures.forEach(measure => {
+                const measureInstances = measureMap.filter(m => m.originalMeasureId === measure.id && m.elementId === elementId);
+                measureInstances.forEach(measureInfo => {
+                    let timeWithinMeasure = 0;
+                    if (measure.content) {
+                        measure.content.forEach(note => {
+                            const duration = NOTE_DURATIONS_IN_BEATS[note.type] || 0;
+                            lyricsMap.push({
+                                elementId: elementId,
+                                noteId: note.id,
+                                startTime: measureInfo.startTime + timeWithinMeasure,
+                                duration: duration,
+                            });
+                            timeWithinMeasure += duration;
                         });
-                        timeWithinMeasure += duration;
-                    });
-                }
+                    }
+                });
             });
-        });
+        }
+
+        // Process foreign content
+        if (lyricsData.foreignContent) {
+            for (const measureId in lyricsData.foreignContent) {
+                const measureInstances = measureMap.filter(m => m.originalMeasureId === measureId);
+                const foreignNotes = lyricsData.foreignContent[measureId];
+
+                measureInstances.forEach(measureInfo => {
+                    let timeWithinMeasure = 0;
+                    if (foreignNotes) {
+                        foreignNotes.forEach(note => {
+                            const duration = NOTE_DURATIONS_IN_BEATS[note.type] || 0;
+                            lyricsMap.push({
+                                elementId: elementId,
+                                noteId: note.id,
+                                startTime: measureInfo.startTime + timeWithinMeasure,
+                                duration: duration,
+                            });
+                            timeWithinMeasure += duration;
+                        });
+                    }
+                });
+            }
+        }
     }
 
     lyricsMap.sort((a, b) => a.startTime - b.startTime);
@@ -874,7 +897,7 @@ export function findActiveTransition(musicalTime, measureMap, pages) {
     // Iterate through each page to check if the musicalTime falls into its transition period
     for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
-        const transition = page.transition || { type: 'instant', duration: 0 };
+        const transition = page.transition || { type: 'instant', duration: 0, offsetBeats: 0 };
 
         // We only care about transitions that have a duration
         if (transition.type === 'instant' || !transition.duration || transition.duration <= 0) {
@@ -885,7 +908,8 @@ export function findActiveTransition(musicalTime, measureMap, pages) {
         const firstMeasureOfPage = measureMap.find(m => m.pageIndex === i);
         if (!firstMeasureOfPage) continue; // Skip pages with no measures
 
-        const transitionStartTime = firstMeasureOfPage.startTime;
+        // MODIFIED: Incorporate offsetBeats into the calculation
+        const transitionStartTime = firstMeasureOfPage.startTime + (transition.offsetBeats || 0);
 
         let durationInBeats;
 
@@ -1006,6 +1030,36 @@ export function getPageMeasuresStructure(page) {
 }
 
 /**
+ * ADDED: Gets the measure structure for an entire song.
+ * @returns {Array<{id: string, timeSignature: object, pageIndex: number, elementId: string}>} An array of measure objects with page and element context.
+ */
+export function getSongMeasuresStructure() {
+    if (!state.song || !state.song.pages) return [];
+
+    const measures = [];
+    state.song.pages.forEach((page, pageIndex) => {
+        const orderedMusicElements = page.getMusicElementsOrder();
+        const orderedIds = new Set(orderedMusicElements.map(el => el.id));
+        const allMusicChildren = findMusicElementsRecursively(page);
+        const unorderedMusicElements = allMusicChildren.filter(el => !orderedIds.has(el.id));
+        const musicElements = [...orderedMusicElements, ...unorderedMusicElements];
+
+        musicElements.forEach(element => {
+            const elementMeasures = getElementMeasuresStructure(element);
+            elementMeasures.forEach(measure => {
+                measures.push({
+                    ...measure,
+                    pageIndex: pageIndex,
+                    elementId: element.id
+                });
+            });
+        });
+    });
+
+    return measures;
+}
+
+/**
  * Recursively finds all virtual elements within a given container.
  * @param {VirtualContainer} container The container to search within.
  * @returns {VirtualElement[]} An array of all descendant elements.
@@ -1076,9 +1130,21 @@ export function serializeElement(element) {
     }
 
     const eventsData = element.getEventsData();
-    if (eventsData && eventsData.content && eventsData.content.length > 0) {
-        serialized.eventsData = eventsData;
+    // --- FIX START ---
+    // Check if content exists
+    if (eventsData && eventsData.content) {
+        let hasContent = false;
+        if (Array.isArray(eventsData.content)) {
+            hasContent = eventsData.content.length > 0;
+        } else if (typeof eventsData.content === 'object') {
+            hasContent = Object.keys(eventsData.content).length > 0;
+        }
+
+        if (hasContent) {
+            serialized.eventsData = eventsData;
+        }
     }
+    // --- FIX END ---
 
     if (element instanceof VirtualContainer) {
         serialized.children = element.getChildren().map(child => serializeElement(child));
@@ -1233,8 +1299,8 @@ export function compareLyricsObjects(lyricsA, lyricsB) {
         return false;
     }
 
-    const measuresA = lyricsA.measures;
-    const measuresB = lyricsB.measures;
+    const measuresA = lyricsA.measures || [];
+    const measuresB = lyricsB.measures || [];
 
     if (measuresA.length !== measuresB.length) {
         return false;
@@ -1244,6 +1310,11 @@ export function compareLyricsObjects(lyricsA, lyricsB) {
         if (!compareMeasureObjects(measuresA[i], measuresB[i])) {
             return false;
         }
+    }
+
+    // Also compare foreignContent
+    if (!deepEqual(lyricsA.foreignContent || {}, lyricsB.foreignContent || {})) {
+        return false;
     }
 
     return true;

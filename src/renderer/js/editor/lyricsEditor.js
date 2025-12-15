@@ -1,10 +1,14 @@
 // src/renderer/js/editor/lyricsEditor.js
 
 import { state, updateState } from './state.js';
-import { getNoteIconHTML, showConfirmationDialog, measuresHaveEvents, pageHasMeasures } from './utils.js';
+import {
+    getNoteIconHTML, showConfirmationDialog, measuresHaveEvents, pageHasMeasures, getSongMeasuresStructure,
+    findMusicElementsRecursively
+} from './utils.js';
 import { generateUUID } from "../renderer/utils.js";
 import { jumpToPage } from "./pageManager.js";
 import {updateTimelineAndEditorView, rebuildAllEventTimelines, reprogramAllPageTransitions, markAsDirty} from './events.js';
+import { makeDraggable } from './draggable.js';
 
 // --- Constants and Helpers ---
 const NOTE_DURATIONS = {
@@ -41,12 +45,26 @@ let lyricsState = {
     measures: [],
     selectedNoteId: null,
     globalMeasureOffset: 0,
+    elementPageIndex: -1,
+    elementId: null, // ADDED: Track the ID of the element being edited
 };
 let lyricsEditorDialog, addMeasureDialog, measuresContainer, toolPalette, deleteNoteBtn, dotBtn, sNoteBtn;
 let draggedNoteType = null;
 let currentlyEditingInput = null;
 let noteTextSizer = null;
 let draggedMeasureIndex = null;
+
+function findElementPage(element) {
+    if (!element) return null;
+    let parent = element.parent;
+    while (parent) {
+        if (parent.type === 'page') {
+            return parent;
+        }
+        parent = parent.parent;
+    }
+    return null;
+}
 
 
 // --- Data Helper ---
@@ -106,14 +124,21 @@ function renderMeasures() {
         measuresContainer.removeChild(measuresContainer.firstElementChild);
     }
     const addButton = document.getElementById('le-add-measure-btn');
-    let localMeasureCounter = 0;
+    let globalMeasureCounter = 0;
 
     lyricsState.measures.forEach((measure, index) => {
         const measureBox = document.createElement('div');
         measureBox.className = 'measure-box';
         measureBox.dataset.index = index;
 
-        const globalMeasureNumber = lyricsState.globalMeasureOffset + localMeasureCounter + 1;
+        // A measure is foreign if it belongs to a different page OR a different element
+        const isForeign = measure.pageIndex !== lyricsState.elementPageIndex || measure.elementId !== lyricsState.elementId;
+        
+        if (isForeign) {
+            measureBox.classList.add('foreign-measure');
+        }
+
+        const globalMeasureNumber = globalMeasureCounter + 1;
 
         const contentHTML = `
             <button class="duplicate-measure-btn" title="Duplicate Measure">
@@ -122,7 +147,7 @@ function renderMeasures() {
             <button class="delete-measure-btn" title="Delete Measure">
                 <img src="../../icons/delete.svg" alt="Delete">
             </button>
-            <div class="measure-header" draggable="true">
+            <div class="measure-header" draggable="${!isForeign}">
                 <span class="measure-global-number">${globalMeasureNumber}</span>
                 <span class="measure-time-signature">${measure.timeSignature.numerator}/${measure.timeSignature.denominator}</span>
             </div>
@@ -132,7 +157,7 @@ function renderMeasures() {
         measureBox.innerHTML = contentHTML;
         renderMeasureContent(measureBox, measure);
         measuresContainer.insertBefore(measureBox, addButton);
-        localMeasureCounter++;
+        globalMeasureCounter++;
     });
 }
 
@@ -517,6 +542,46 @@ function handleConfirmAddMeasure() {
     const measureCountInput = document.getElementById('le-measure-count');
     const count = parseInt(measureCountInput.value, 10) || 1;
 
+    let insertIndex = lyricsState.measures.length; // Default to end of song
+
+    // Find the last measure belonging to the current element on the current page.
+    let lastOwnMeasureIndex = -1;
+    for (let i = lyricsState.measures.length - 1; i >= 0; i--) {
+        const measure = lyricsState.measures[i];
+        if (measure.elementId === lyricsState.elementId && measure.pageIndex === lyricsState.elementPageIndex) {
+            lastOwnMeasureIndex = i;
+            break;
+        }
+    }
+
+    if (lastOwnMeasureIndex !== -1) {
+        // If we found measures for this element, insert after the last one.
+        insertIndex = lastOwnMeasureIndex + 1;
+    } else {
+        // If the element has no measures yet, find the last measure of the element's page.
+        let lastMeasureOfPageIndex = -1;
+        for (let i = lyricsState.measures.length - 1; i >= 0; i--) {
+            if (lyricsState.measures[i].pageIndex === lyricsState.elementPageIndex) {
+                lastMeasureOfPageIndex = i;
+                break;
+            }
+        }
+        if (lastMeasureOfPageIndex !== -1) {
+            insertIndex = lastMeasureOfPageIndex + 1;
+        } else {
+            // If the page itself is empty, find the last measure of any previous page.
+            let lastMeasureOfPreviousPageIndex = -1;
+            for (let i = lyricsState.measures.length - 1; i >= 0; i--) {
+                if (lyricsState.measures[i].pageIndex < lyricsState.elementPageIndex) {
+                    lastMeasureOfPreviousPageIndex = i;
+                    break;
+                }
+            }
+            insertIndex = lastMeasureOfPreviousPageIndex + 1;
+        }
+    }
+
+
     for (let i = 0; i < count; i++) {
         const newMeasure = {
             id: `measure-${generateUUID()}`,
@@ -524,9 +589,11 @@ function handleConfirmAddMeasure() {
                 numerator: parseInt(splits[0], 10),
                 denominator: parseInt(splits[1], 10)
             },
-            content: []
+            content: [],
+            pageIndex: lyricsState.elementPageIndex, // Assign to current page
+            elementId: lyricsState.elementId, // Assign to current element
         };
-        lyricsState.measures.push(newMeasure);
+        lyricsState.measures.splice(insertIndex + i, 0, newMeasure);
     }
 
     renderMeasures();
@@ -621,16 +688,68 @@ export function initLyricsEditor() {
     dotBtn = document.getElementById('le-dot-btn');
     sNoteBtn = toolPalette.querySelector('[data-tool="s_note"]');
 
+    makeDraggable('lyrics-editor-dialog');
+    makeDraggable('add-measure-dialog');
+
     document.getElementById('le-ok-btn').addEventListener('click', () => {
         if (state.lyricsEditorCallback) {
             const activePage = state.activePage;
             const hadMeasuresBefore = pageHasMeasures(activePage);
+    
+            const ownMeasures = [];
+            const foreignContent = {};
+            const measureIdOrder = [];
 
-            state.lyricsEditorCallback(lyricsState);
+            for (const measure of lyricsState.measures) {
+                // Record the measure ID in the order they appear in the editor
+                // Only if the measure has content (either owned or foreign)
+                if (measure.content && measure.content.length > 0) {
+                    measureIdOrder.push(measure.id);
+                }
+
+                // If the measure belongs to the current element, save it as an owned measure.
+                if (measure.elementId === lyricsState.elementId) {
+                    ownMeasures.push({
+                        id: measure.id,
+                        timeSignature: measure.timeSignature,
+                        content: measure.content
+                    });
+                } else {
+                    // If the measure belongs to another element, save its content as foreign content
+                    // for the current element, keyed by the measure ID.
+                    // Only save if there is actually content to save.
+                    if (measure.content && measure.content.length > 0) {
+                        foreignContent[measure.id] = measure.content;
+                    }
+                }
+            }
+
+            // Find the element by ID to ensure we save to the correct one
+            // searching recursively in the active page
+            const allElements = findMusicElementsRecursively(state.activePage);
+            const element = allElements.find(el => el.id === lyricsState.elementId);
+
+            if (element && element.hasProperty('lyricsContent')) {
+                element.getProperty('lyricsContent').setLyricsObject({
+                    measures: ownMeasures,
+                    foreignContent: foreignContent,
+                    measureIdOrder: measureIdOrder
+                });
+            } else {
+                console.error("Could not find the element being edited to save lyrics.");
+            }
+
+            // Call the callback to trigger UI updates for the selected element
+            state.lyricsEditorCallback({
+                measures: ownMeasures,
+                foreignContent: foreignContent,
+                measureIdOrder: measureIdOrder
+            });
+    
             markAsDirty();
-
+    
             const hasMeasuresAfter = pageHasMeasures(activePage);
-
+    
             if (hadMeasuresBefore !== hasMeasuresAfter) {
                 jumpToPage(activePage);
             } else {
@@ -714,8 +833,12 @@ export function initLyricsEditor() {
     toolPalette.addEventListener('dragend', handleNoteDragEnd);
 
     measuresContainer.addEventListener('dragstart', (e) => {
-        if (!e.target.classList.contains('measure-header')) return;
         const measureBox = e.target.closest('.measure-box');
+        if (measureBox && measureBox.classList.contains('foreign-measure')) {
+            e.preventDefault();
+            return;
+        }
+        if (!e.target.classList.contains('measure-header')) return;
         if (!measureBox) return;
 
         draggedMeasureIndex = parseInt(measureBox.dataset.index, 10);
@@ -729,8 +852,6 @@ export function initLyricsEditor() {
         clone.style.left = '-9999px';
         clone.style.width = `${measureBox.offsetWidth}px`;
         clone.style.height = `${measureBox.offsetHeight}px`;
-        clone.style.backgroundColor = 'rgba(60, 60, 60, 0.7)';
-        clone.style.boxSizing = 'border-box';
         document.body.appendChild(clone);
         e.dataTransfer.setDragImage(clone, e.offsetX, e.offsetY);
 
@@ -739,12 +860,8 @@ export function initLyricsEditor() {
 
     measuresContainer.addEventListener('dragend', (e) => {
         if (draggedMeasureIndex === null) return;
-
         const clone = document.getElementById('measure-drag-clone');
-        if (clone) {
-            clone.remove();
-        }
-
+        if (clone) clone.remove();
         const draggedElement = measuresContainer.querySelector('.measure-box.dragging');
         if (draggedElement) draggedElement.classList.remove('dragging');
         clearDropIndicators();
@@ -790,7 +907,7 @@ export function initLyricsEditor() {
         } else if (draggedMeasureIndex !== null) {
             const targetMeasure = e.target.closest('.measure-box');
             clearDropIndicators();
-            if (!targetMeasure || parseInt(targetMeasure.dataset.index, 10) === draggedMeasureIndex) {
+            if (!targetMeasure || parseInt(targetMeasure.dataset.index, 10) === draggedMeasureIndex || targetMeasure.classList.contains('foreign-measure')) {
                 return;
             }
             const rect = targetMeasure.getBoundingClientRect();
@@ -813,7 +930,7 @@ export function initLyricsEditor() {
         } else if (draggedMeasureIndex !== null) {
             const dropTarget = e.target.closest('.measure-box');
             clearDropIndicators();
-            if (!dropTarget || parseInt(dropTarget.dataset.index, 10) === draggedMeasureIndex) return;
+            if (!dropTarget || dropTarget.classList.contains('foreign-measure') || parseInt(dropTarget.dataset.index, 10) === draggedMeasureIndex) return;
 
             const dropIndex = parseInt(dropTarget.dataset.index, 10);
             const rect = dropTarget.getBoundingClientRect();
@@ -843,14 +960,45 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
         console.error("Could not parse lyrics data. Falling back to default.", e);
         parsedData = {};
     }
+    
+    // Map of own measures: ID -> Content
+    const ownMeasuresContent = new Map((parsedData.measures || []).map(m => [m.id, m.content]));
+    // Map of foreign measures: MeasureID -> Content
+    const foreignContent = parsedData.foreignContent || {};
+
+    const element = state.selectedElement;
+    const elementPage = findElementPage(element);
+    const elementPageIndex = state.song.pages.indexOf(elementPage);
+
+    const allSongMeasures = getSongMeasuresStructure();
+
+    const editorMeasures = allSongMeasures.map(measureStructure => {
+        let content = [];
+        
+        // 1. Check if this is one of our own measures
+        if (ownMeasuresContent.has(measureStructure.id)) {
+            content = ownMeasuresContent.get(measureStructure.id);
+        } 
+        // 2. Check if we have foreign content mapped to this measure ID
+        else if (foreignContent[measureStructure.id]) {
+            content = foreignContent[measureStructure.id];
+        }
+
+        return {
+            ...measureStructure,
+            content: content.map(note => ({
+                ...note,
+                id: note.id || `note-${generateUUID()}`
+            }))
+        };
+    });
 
     lyricsState = {
-        measures: (parsedData.measures || []).map(m => ({
-            ...m,
-            id: m.id || `measure-${generateUUID()}`
-        })),
+        measures: editorMeasures,
         selectedNoteId: null,
-        globalMeasureOffset: globalMeasureOffset || 0,
+        globalMeasureOffset: 0,
+        elementPageIndex: elementPageIndex,
+        elementId: element.id, // Store the ID of the element we are editing
     };
 
     if (dotBtn) dotBtn.classList.remove('active');
@@ -863,4 +1011,5 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     renderMeasures();
     updateDeleteButtonState();
     lyricsEditorDialog.classList.add('visible');
-}
+}
+

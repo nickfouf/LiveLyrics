@@ -44,6 +44,11 @@ class ConnectionManager extends EventEmitter {
     get deviceId() { return this.#deviceId; }
     get deviceName() { return this.#deviceName; }
 
+    // ADDED: Public getter for RTT stats.
+    getRttStats() {
+        return this.#rttStats;
+    }
+
     canPairWith(type) {
         return (this.#clientType === 'main' && type === 'connector') || (this.#clientType === 'connector' && type === 'main');
     }
@@ -309,17 +314,24 @@ class ConnectionManager extends EventEmitter {
             }
         });
 
-        device.on('message', (message, dev) => {
+        // MODIFICATION: The listener now accepts `remoteIp`.
+        device.on('message', (message, dev, remoteIp) => {
             if (!message || !message.type) return;
-            const playbackCommands = ['play', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start'];
+            const playbackCommands = ['play', 'play-synced', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start', 'jump'];
         
             if (message.type === 'selectSong') {
                 const songId = message.payload?.songId;
                 if (songId) {
                     this.emit('songSelectionRequest', songId);
                 }
+            } else if (message.type === 'updateBpm') {
+                const { bpm, bpmUnit } = message;
+                if (bpm !== undefined && bpmUnit) {
+                    this.emit('remoteBpmUpdate', { bpm, bpmUnit });
+                }
             } else if (playbackCommands.includes(message.type)) {
-                this.emit('remoteCommand', message);
+                // MODIFICATION: Pass the `remoteIp` with the command event.
+                this.emit('remoteCommand', message, remoteIp);
             }
         });
 
@@ -358,6 +370,7 @@ class ConnectionManager extends EventEmitter {
                         type: 'clock_sync_pong_electron',
                         t1: payload.t1,
                         t2: performance.now(),
+                        t3: performance.now(),
                         sourceIp: remoteIp
                     });
                     break;

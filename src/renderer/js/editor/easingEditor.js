@@ -1,4 +1,5 @@
 import { state, updateState } from './state.js';
+import { makeDraggable } from './draggable.js';
 
 let dialog, okBtn, cancelBtn, optionsContainer;
 let localState = {
@@ -58,6 +59,8 @@ export function initEasingEditor() {
     cancelBtn = document.getElementById('ee-dialog-cancel-btn');
     optionsContainer = document.getElementById('easing-options-container');
 
+    makeDraggable('easing-editor-dialog');
+
     okBtn.addEventListener('click', () => {
         if (localState.callback) {
             localState.callback(localState.currentSelection);
@@ -89,4 +92,5 @@ export function openEasingEditor(currentEasing, callback, isInstantChange = fals
 
     renderOptions();
     dialog.classList.add('visible');
-}
+}
+

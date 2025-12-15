@@ -1,6 +1,7 @@
 // src/renderer/js/editor/propertiesDialog.js
 
 import { getAvailablePropertiesForElement } from './utils.js';
+import { makeDraggable } from './draggable.js';
 
 let propertiesDialog, propertiesListContainer, totalPropsDisplay;
 let localState = {
@@ -68,6 +69,8 @@ export function initPropertiesDialog() {
     propertiesListContainer = document.getElementById('properties-dialog-body');
     totalPropsDisplay = document.getElementById('total-props-display');
 
+    makeDraggable('properties-dialog');
+
     document.getElementById('pd-ok-btn').addEventListener('click', () => {
         if (localState.callback) {
             localState.callback(localState.selectedProperties);
@@ -123,4 +126,5 @@ export function openPropertiesDialog(element, currentSelection, callback) {
     });
 
     propertiesDialog.classList.add('visible');
-}
+}
+

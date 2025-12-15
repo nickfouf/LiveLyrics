@@ -47,7 +47,8 @@ export class VirtualLyrics extends VirtualElement {
         };
         const finalTextStyle = { ...defaultTextStyle, ...(options.textStyle || {}) };
 
-        this.setProperty('background', new BackgroundProperty({ enabled: false }));
+        // FIX: Pass options.background
+        this.setProperty('background', new BackgroundProperty(options.background || { enabled: false }));
         this.setProperty('lyricsContent', new LyricsContentProperty(lyricsContentData));
         this.setProperty('textStyle', new TextStyleLyricsProperty(finalTextStyle));
         this.setProperty('highlightedPercentage', new HighlightedPercentage(options.highlightedPercentage));
@@ -99,8 +100,13 @@ export class VirtualLyrics extends VirtualElement {
             return;
         }
 
-        // 1. Calculate the current global musical time in beats.
+        // FIX: Ensure the measure index is valid for the current map to prevent crashes during deletions
         const measureInfo = measureMap[measureIndex];
+        if (!measureInfo) {
+            return;
+        }
+
+        // 1. Calculate the current global musical time in beats.
         const currentMusicalTimeInBeats = measureInfo.startTime + (measureProgress * measureInfo.duration);
 
         // 2. Find all notes in the timing map that belong to this specific lyrics element.

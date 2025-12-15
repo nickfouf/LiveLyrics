@@ -252,6 +252,7 @@ export class VirtualElement {
         // --- 1. Build a map of property keys to their actual Value objects ---
         const keyToPath = {
             opacity: { prop: 'effects', value: 'opacity' },
+            mixBlendMode: { prop: 'effects', value: 'mixBlendMode' }, // ADDED
             width: { prop: 'dimensions', value: 'width' },
             height: { prop: 'dimensions', value: 'height' },
             top: { prop: 'margin', value: 'top' },
@@ -340,14 +341,9 @@ export class VirtualElement {
         const NOTE_DURATIONS_IN_BEATS = { w_note: 4.0, h_note: 2.0, q_note: 1.0, e_note: 0.5, s_note: 0.25, w_note_dotted: 6.0, h_note_dotted: 3.0, q_note_dotted: 1.5, e_note_dotted: 0.75 };
         const { content = [] } = this.#eventsData;
 
-        content.forEach((measureNotes, localMeasureIndex) => {
-            const actualMeasureIndex = localMeasureIndex + globalMeasureOffset;
-            const measureInfo = measureMap[actualMeasureIndex];
-
-            // If the measure doesn't exist in the global timeline, we can't process its events.
-            if (!measureInfo) {
-                return; // continue to next measure
-            }
+        // Define a helper to process a single measure's notes given the measure's global info
+        const processMeasureContent = (measureNotes, measureInfo) => {
+            if (!measureInfo) return;
 
             let noteTimeOffsetInBeats = 0;
 
@@ -369,7 +365,7 @@ export class VirtualElement {
                         const event = this._createEventForProperty(propKey, {
                             value,
                             ease,
-                            measureIndex: actualMeasureIndex,
+                            measureIndex: measureInfo.globalIndex,
                             measureProgress
                         });
 
@@ -380,6 +376,25 @@ export class VirtualElement {
                 }
                 noteTimeOffsetInBeats += NOTE_DURATIONS_IN_BEATS[note.type] || 0;
             });
+        };
+
+        // --- Handle Object (Map) format (New System) ---
+        if (content && typeof content === 'object' && !Array.isArray(content)) {
+            for (const [measureId, measureNotes] of Object.entries(content)) {
+                if (!measureNotes || measureNotes.length === 0) continue;
+
+                // Lookup by originalMeasureId is robust across pages
+                const measureInfo = measureMap.find(m => m.originalMeasureId === measureId);
+                processMeasureContent(measureNotes, measureInfo);
+            }
+            return;
+        }
+
+        // --- Handle Array format (Legacy / Local Offset System) ---
+        content.forEach((measureNotes, localMeasureIndex) => {
+            const actualMeasureIndex = localMeasureIndex + globalMeasureOffset;
+            const measureInfo = measureMap[actualMeasureIndex];
+            processMeasureContent(measureNotes, measureInfo);
         });
     }
 }

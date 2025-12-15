@@ -94,6 +94,7 @@ export function getPropertyType(propKey) {
         case 'audioSrc':
         case 'transform-style':
         case 'backface-visibility':
+        case 'mixBlendMode': // ADDED
             return 'string';
         
         // Dynamic String (value + id to trigger actions)
@@ -392,6 +393,14 @@ export function compareLyricsObjects(lyricsA, lyricsB) {
         }
     }
 
+    // Check measureIdOrder
+    const orderA = lyricsA.measureIdOrder || [];
+    const orderB = lyricsB.measureIdOrder || [];
+    if (orderA.length !== orderB.length) return false;
+    for(let i=0; i<orderA.length; i++) {
+        if(orderA[i] !== orderB[i]) return false;
+    }
+
     return true;
 }
 
@@ -480,4 +489,248 @@ export function deepEqual(a, b) {
         return true;
     }
     return false;
+}
+
+export function getIconForElementType(type) {
+    const icons = {
+        'vcontainer': '<img src="../../icons/vcontainer.svg" alt="VContainer">',
+        'hcontainer': '<img src="../../icons/hcontainer.svg" alt="HContainer">',
+        'acontainer': '<img src="../../icons/acontainer.svg" alt="AContainer">',
+        'lyrics': '<img src="../../icons/lyrics.svg" alt="Lyrics">',
+        'image': '<img src="../../icons/image.svg" alt="Image">',
+        'default': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16,20H20V16H16M16,14H20V10H16M14,20H10V16H14M14,14H10V10H14M8,20H4V16H8M8,14H4V10H8M16,8H20V4H16M14,8H10V4H14M8,8H4V4H8V8Z" /></svg>',
+        'title': '<img src="../../icons/title.svg" alt="Title">',
+        'text': '<img src="../../icons/text.svg" alt="Text">',
+        'orchestra': '<img src="../../icons/orchestra.svg" alt="Orchestra">',
+        'smart-effect': '<img src="../../icons/smart-effect.svg" alt="Smart Effect">',
+        'video': '<img src="../../icons/video.svg" alt="Video">',
+        'audio': '<img src="../../icons/audio.svg" alt="Audio">',
+    };
+    return icons[type] || icons['default'];
+}
+
+export function getNameForElementType(type) {
+    const names = {'page': 'Page', 'vcontainer': 'VContainer', 'hcontainer': 'HContainer', 'acontainer': 'AContainer', 'lyrics': 'Lyrics', 'title': 'Title', 'text': 'Text', 'image': 'Image', 'orchestra': 'Orchestra', 'smart-effect': 'Smart Effect', 'video': 'Video', 'audio': 'Audio'};
+    return names[type] || 'Element';
+}
+
+export function getNoteIconHTML(noteType) {
+    if (!noteType || typeof noteType !== 'string' || !noteType.endsWith('_note') && !noteType.endsWith('_note_dotted')) {
+        return `<img src="../../icons/delete_red.svg" alt="Invalid Note" class="lyrics-render-note-icon">`;
+    }
+    return `<img src="../../icons/${noteType}.svg" alt="${noteType}" class="lyrics-render-note-icon">`;
+}
+
+export function getAvailablePropertiesForElement(element) {
+    if (!element) return {};
+    const elementType = element.dataset.elementType;
+
+    let props = {};
+
+    // Define common property groups to avoid repetition
+    const commonEffects = { "Effects": { 
+        "opacity": "Opacity",
+        "mixBlendMode": "Blending Mode" // ADDED
+    }};
+    const commonDimensions = { "Dimensions": { "width": "Width", "height": "Height" } };
+    const commonMargin = { "Margin": { "top": "Top", "left": "Left", "bottom": "Bottom", "right": "Right" } };
+    const commonInnerPadding = { "Inner Padding": { "paddingTop": "Top", "paddingLeft": "Left", "paddingBottom": "Bottom", "paddingRight": "Right" } };
+    const commonBackground = { "Background": { "bgEnabled": "Enabled", "bgColor": "Color/Gradient" } };
+    const commonBorder = { "Border": { "borderEnabled": "Enabled", "borderSize": "Width", "borderRadius": "Radius", "borderColor": "Color" } };
+    const commonBoxShadow = { "Box Shadow": { "shadowEnabled": "Enabled", "shadowInset": "Inset", "shadowOffsetX": "OffsetX", "shadowOffsetY": "OffsetY", "shadowBlur": "Blur", "shadowSpread": "Spread", "shadowColor": "Color" } };
+    const commonTextStyle = { "Text Style": {
+            "fontFamily": "Font Family",
+            "fontWeight": "Weight",
+            "fontStyle": "Style",
+            "fontSize": "Size",
+            "textColor": "Text Color/Gradient",
+            "lineHeight": "Line Height",
+            "letterSpacing": "Letter Spacing",
+            "wordSpacing": "Word Spacing",
+            "textAlign": "Alignment",
+            "justifyText": "Justify"
+        }};
+    const commonTransform2D = { "Transform 2D": {
+        "translateX": "Translate X",
+        "translateY": "Translate Y",
+        "scaleX": "Scale X",
+        "scaleY": "Scale Y",
+        "rotate": "Rotate",
+        "skewX": "Skew X",
+        "skewY": "Skew Y",
+        "transform-origin-x": "Origin X",
+        "transform-origin-y": "Origin Y"
+    }};
+    const commonTransform3D = { "Transform 3D": {
+        "translateZ": "Translate Z",
+        "scaleZ": "Scale Z",
+        "rotateX": "Rotate X",
+        "rotateY": "Rotate Y",
+        "rotateZ": "Rotate Z",
+        "transform-origin-z": "Origin Z",
+        "transform-style": "Transform Style",
+        "selfPerspective": "Self-perspective",
+        "childrenPerspective": "Children Perspective",
+        "backface-visibility": "Backface Visibility"
+    }};
+
+    if (elementType === 'page') {
+        props["Parent's Perspective"] = {
+            "perspective": "Perspective",
+            "parent-transform-style": "Transform Style",
+            "parent-rotateX": "Rotate X",
+            "parent-rotateY": "Rotate Y",
+            "parent-rotateZ": "Rotate Z"
+        };
+    }
+
+    switch (elementType) {
+        case 'lyrics':
+            props = {
+                ...props,
+                ...commonTextStyle,
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonInnerPadding,
+                ...commonBackground,
+                ...commonBorder,
+                ...commonBoxShadow,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            props["Text Style"]["karaokeColor"] = "Karaoke Color/Gradient";
+            break;
+
+        case 'orchestra':
+            props = {
+                ...props,
+                "Bar Style": {
+                    "progressBgColor": "Background Color/Gradient",
+                    "progressFillColor": "Fill Color/Gradient"
+                },
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonInnerPadding,
+                ...commonBorder,
+                ...commonBoxShadow,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            break;
+
+        case 'title':
+        case 'text':
+            props = {
+                ...props,
+                ...commonTextStyle,
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonInnerPadding,
+                ...commonBackground,
+                ...commonBorder,
+                ...commonBoxShadow,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            break;
+
+        case 'image':
+            props = {
+                ...props,
+                "Object Fit": { "objectFit": "Fit" },
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonBackground,
+                ...commonBorder,
+                ...commonBoxShadow,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            break;
+
+        case 'video':
+            props = {
+                ...props,
+                "Playback": { "videoState": "State", "videoSpeed": "Speed", "videoLoop": "Loop" },
+                "Object Fit": { "objectFit": "Fit" },
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonBackground,
+                ...commonBorder,
+                ...commonBoxShadow,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            break;
+
+        case 'audio':
+            props = {
+                ...props,
+                "Playback": {
+                    "audioState": "State",
+                    "audioVolume": "Volume",
+                    "audioLoop": "Loop"
+                },
+                ...commonEffects,
+                ...commonMargin
+            };
+            break;
+
+        case 'smart-effect':
+            props = {
+                ...props,
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            if (element.dataset.effectJson) {
+                try {
+                    const effectData = JSON.parse(element.dataset.effectJson);
+                    if (effectData.parameters) {
+                        props["Effect Parameters"] = {};
+                        for (const [key, config] of Object.entries(effectData.parameters)) {
+                            if (['number', 'color', 'gradient', 'svg_color', 'svg_gradient', 'size', 'boolean', 'string'].includes(config.type)) {
+                                props["Effect Parameters"][key] = config.name || key;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Could not parse effect JSON for properties dialog:", e);
+                }
+            }
+            break;
+
+        case 'container':
+        case 'acontainer':
+        case 'vcontainer':
+        case 'hcontainer':
+            props = {
+                ...props,
+                "Gravity": { "justifyContent": "Justify Content", "alignItems": "Align Items" },
+                "Layout": { "gap": "Gap" },
+                ...commonInnerPadding,
+                ...commonDimensions,
+                ...commonMargin,
+                ...commonBackground,
+                ...commonBorder,
+                ...commonBoxShadow,
+                ...commonEffects,
+                ...commonTransform2D,
+                ...commonTransform3D
+            };
+            break;
+
+        default:
+            props = {};
+            break;
+    }
+
+    return props;
 }

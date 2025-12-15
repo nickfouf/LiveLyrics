@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { makeDraggable } from './draggable.js';
 
 let dialog, searchInput, previewTextInput, list, cancelBtn;
 let localState = {
@@ -50,6 +51,8 @@ export function initFontPicker() {
         console.error('Font Picker dialog elements not found in the DOM.');
         return;
     }
+
+    makeDraggable('font-picker-dialog');
 
     // Event listener for the search bar
     searchInput.addEventListener('input', filterFonts);
@@ -130,3 +133,4 @@ export function openFontPicker(currentFont, callback, initialPreviewText = '') {
 
     dialog.classList.add('visible');
 }
+

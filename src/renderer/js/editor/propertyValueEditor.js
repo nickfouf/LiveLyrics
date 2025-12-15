@@ -1,11 +1,12 @@
 // src/renderer/js/editor/propertyValueEditor.js
 
 import { state } from './state.js';
-import { getAvailablePropertiesForElement, getPropertyType, findVirtualElementById } from './utils.js'; // MODIFIED
+import { getAvailablePropertiesForElement, getPropertyType, findVirtualElementById } from './utils.js';
 import { openColorPicker } from './colorPicker.js';
 import { openGradientEditor } from './gradientEditor.js';
-import { openFontPicker } from './fontPicker.js'; // ADDED
+import { openFontPicker } from './fontPicker.js';
 import { generateCSSGradient, parseColorString, generateCSSColor } from "../renderer/utils.js";
+import { makeDraggable } from "./draggable.js";
 
 let dialog, header, body, okBtn, cancelBtn, inheritBtn;
 let localState = {
@@ -19,6 +20,12 @@ let localState = {
 const COLOR_ONLY_PROPERTIES = new Set([
     'borderColor', 'shadowColor', 'textStrokeColor', 'textShadowColor'
 ]);
+
+const BLEND_MODES = [
+    'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 
+    'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 
+    'exclusion', 'hue', 'saturation', 'color', 'luminosity'
+];
 
 /**
  * Checks if a gradient object represents a single solid color.
@@ -173,6 +180,18 @@ function buildDialogUI() {
                         <select id="eep-string-select" class="form-select">
                             <option value="visible" ${value === 'visible' ? 'selected' : ''}>Visible</option>
                             <option value="hidden" ${value === 'hidden' ? 'selected' : ''}>Hidden</option>
+                        </select>
+                    </div>`;
+            } else if (localState.propKey === 'mixBlendMode') {
+                const optionsHTML = BLEND_MODES.map(mode => 
+                    `<option value="${mode}" ${value === mode ? 'selected' : ''}>${mode.charAt(0).toUpperCase() + mode.slice(1)}</option>`
+                ).join('');
+                
+                body.innerHTML = `
+                    <div class="form-group">
+                        <label for="eep-string-select">Blending Mode</label>
+                        <select id="eep-string-select" class="form-select">
+                            ${optionsHTML}
                         </select>
                     </div>`;
             } else {
@@ -576,9 +595,15 @@ function getValueFromUI() {
             if (localState.propKey === 'audioState' || localState.propKey === 'videoState') {
                 const activeBtn = body.querySelector('#eep-state-tabs .tab-btn.active');
                 return activeBtn ? activeBtn.dataset.state : 'paused';
-            } else if (localState.propKey === 'transform-style' || localState.propKey === 'backface-visibility') {
+            } else if (localState.propKey === 'transform-style') {
                 const selectInput = body.querySelector('#eep-string-select');
                 return selectInput ? selectInput.value : '';
+            } else if (localState.propKey === 'backface-visibility') {
+                const selectInput = body.querySelector('#eep-string-select');
+                return selectInput ? selectInput.value : '';
+            } else if (localState.propKey === 'mixBlendMode') {
+                const selectInput = body.querySelector('#eep-string-select');
+                return selectInput ? selectInput.value : 'normal';
             }
             // Fallback for other string types
             const stringInput = body.querySelector('#eep-string-input');
@@ -622,6 +647,8 @@ export function initPropertyValueEditor() {
     inheritBtn.className = 'action-btn inherit-btn';
     inheritBtn.textContent = 'Inherit';
     cancelBtn.parentElement.insertBefore(inheritBtn, cancelBtn);
+
+    makeDraggable('edit-event-property-dialog');
 
     okBtn.addEventListener('click', () => {
         if (localState.callback) {
@@ -682,4 +709,4 @@ export function openPropertyValueEditor(elementId, propKey, currentEffectiveValu
     header.textContent = `Edit '${propName}'`;
     buildDialogUI();
     dialog.classList.add('visible');
-}
+}

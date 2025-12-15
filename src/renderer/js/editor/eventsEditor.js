@@ -1,7 +1,9 @@
+// src/renderer/js/editor/eventsEditor.js
+
 import { state, updateState } from './state.js';
 import {
     getNoteIconHTML, getAvailablePropertiesForElement, lerp, lerpColor, findMusicElementsRecursively, getPropertyType,
-    findVirtualElementById, getElementMeasuresStructure, getPageMeasuresStructure
+    findVirtualElementById, getElementMeasuresStructure, getPageMeasuresStructure, getSongMeasuresStructure
 } from './utils.js';
 import { DOM } from './dom.js';
 import { openPropertiesDialog } from './propertiesDialog.js';
@@ -10,12 +12,13 @@ import { openEasingEditor } from './easingEditor.js';
 import { generateUUID } from "../renderer/utils.js";
 import { generateCSSGradient } from "../renderer/utils.js";
 import { markAsDirty } from './events.js';
+import { makeDraggable } from './draggable.js';
 
 // --- START: NEW CACHE AND STATE MANAGEMENT ---
 /**
  * A cache to store the detailed state of the events editor for each element.
  * This allows the editor to remember its state without polluting the renderer elements.
- * @type {Map<string, object[]>}
+ * @type {Map<string, object>}
  */
 let editorDataCache = new Map();
 
@@ -26,6 +29,23 @@ export function clearEventsEditorCache() {
     editorDataCache.clear();
 }
 // --- END: NEW CACHE AND STATE MANAGEMENT ---
+
+/**
+ * ADDED: Helper to find the page an element belongs to.
+ * @param {VirtualElement} element
+ * @returns {VirtualPage|null}
+ */
+function findElementPage(element) {
+    if (!element) return null;
+    let parent = element.parent;
+    while (parent) {
+        if (parent.type === 'page') {
+            return parent;
+        }
+        parent = parent.parent;
+    }
+    return null;
+}
 
 
 // --- Constants and Helpers ---
@@ -488,6 +508,7 @@ let eventsState = {
     selectedNoteId: null,
     globalMeasureOffset: 0,
     selectedProperties: [],
+    elementPageIndex: -1, // ADDED
 };
 let eventsEditorDialog, measuresContainer, toolPalette, deleteNoteBtn, dotBtn, sNoteBtn;
 let draggedNoteType = null;
@@ -863,14 +884,19 @@ function refreshEditorView() {
 function renderMeasures() {
     if (!measuresContainer) return;
     measuresContainer.innerHTML = '';
-    let localMeasureCounter = 0;
+    let globalMeasureCounter = 0;
 
     eventsState.measures.forEach((measure, index) => {
         const measureBox = document.createElement('div');
         measureBox.className = 'measure-box';
         measureBox.dataset.index = index;
-        const globalMeasureNumber = eventsState.globalMeasureOffset + localMeasureCounter + 1;
+        const globalMeasureNumber = globalMeasureCounter + 1;
         const pasteDisabled = eventsMeasureClipboard === null ? 'disabled' : '';
+
+        const isForeign = measure.pageIndex !== eventsState.elementPageIndex;
+        if (isForeign) {
+            measureBox.classList.add('foreign-measure');
+        }
 
         measureBox.innerHTML = `
             <button class="copy-measure-btn" title="Copy Measure Content">
@@ -879,14 +905,14 @@ function renderMeasures() {
             <button class="paste-measure-btn" title="Paste Measure Content" ${pasteDisabled}>
                 <img src="../../icons/paste.svg" alt="Paste">
             </button>
-            <div class="measure-header">
+            <div class="measure-header" draggable="${!isForeign}">
                 <span class="measure-global-number">${globalMeasureNumber}</span>
                 <span class="measure-time-signature">${measure.timeSignature.numerator + '/' + measure.timeSignature.denominator}</span>
             </div>
             <div class="measure-content"></div>`;
         renderMeasureContent(measureBox, measure);
         measuresContainer.appendChild(measureBox);
-        localMeasureCounter++;
+        globalMeasureCounter++;
     });
 }
 
@@ -1023,6 +1049,8 @@ export function initEventsEditor() {
     dotBtn = document.getElementById('ee-dot-btn');
     sNoteBtn = toolPalette.querySelector('[data-tool="s_note"]');
 
+    makeDraggable('events-editor-dialog');
+
     document.getElementById('ee-properties-btn').addEventListener('click', () => {
         if (!eventsState.virtualElement || !eventsState.virtualElement.domElement) return;
 
@@ -1053,22 +1081,31 @@ export function initEventsEditor() {
 
     document.getElementById('ee-ok-btn').addEventListener('click', () => {
         if (state.eventsEditorCallback) {
-            editorDataCache.set(eventsState.elementId, structuredClone(eventsState.measures));
+            
+            // --- FIX START ---
+            // Construct the eventsToSave object correctly without mangling IDs.
+            const eventsToSave = {
+                content: {},
+                format: 'map'
+            };
+
+            // FIX: Removed the filter that was incorrectly excluding measures for non-musical elements.
+            // We now check ALL measures in the state to see if they have content for this element.
+            eventsState.measures.forEach(measure => {
+                if (measure.content && measure.content.length > 0) {
+                    // Use the measure.id directly. Do NOT strip the suffix.
+                    eventsToSave.content[measure.id] = measure.content;
+                }
+            });
+
+            // Save the ID-mapped content object to the cache, NOT the raw array.
+            editorDataCache.set(eventsState.elementId, structuredClone(eventsToSave.content));
+            // --- FIX END ---
 
             const element = document.getElementById(eventsState.elementId);
             if (element) {
                 element.dataset.selectedEventProperties = JSON.stringify(eventsState.selectedProperties);
             }
-
-            const eventsToSave = {
-                content: {},
-                format: 'map'
-            };
-            eventsState.measures.forEach(measure => {
-                if (measure.content && measure.content.length > 0) {
-                    eventsToSave.content[measure.id] = measure.content;
-                }
-            });
 
             state.eventsEditorCallback(eventsToSave);
             markAsDirty();
@@ -1227,53 +1264,66 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
     const element = findVirtualElementById(state.activePage, elementId);
     if (!element) return;
 
-    const pageMeasures = getPageMeasuresStructure(state.activePage);
-    const eventDataLookup = new Map();
     let selectedProperties = [];
-
     try {
         selectedProperties = JSON.parse(element.domElement.dataset.selectedEventProperties || '[]');
     } catch (e) { /* use default empty array */ }
 
-    // 1. Determine the source of truth: cache or initialData
-    let sourceMeasures;
+    // 1. Determine the source of truth for event data
+    let eventDataContent;
     if (editorDataCache.has(elementId)) {
-        sourceMeasures = editorDataCache.get(elementId);
+        eventDataContent = editorDataCache.get(elementId);
     } else {
-        // Build the lookup from initialData if there's no cache
-        const sourceData = initialData || {};
-        const sourceContent = sourceData.content || {};
-        if (Array.isArray(sourceContent)) { // Backwards compatibility for old array format
-            pageMeasures.forEach((measure, index) => {
-                if (sourceContent[index]) eventDataLookup.set(measure.id, sourceContent[index]);
-            });
-        } else { // New map format
-            for (const measureId in sourceContent) {
-                eventDataLookup.set(measureId, sourceContent[measureId]);
+        eventDataContent = initialData?.content || {};
+    }
+
+    // --- FIX START ---
+    // Handle legacy array format from loaded files
+    if (Array.isArray(eventDataContent)) {
+        const legacyArray = eventDataContent;
+        eventDataContent = {}; // Convert to map
+        
+        // Get the element's own measure structure to map array indices to IDs
+        const elementMeasures = getElementMeasuresStructure(element);
+        
+        // Map array content to measure IDs
+        elementMeasures.forEach((measureInfo, index) => {
+            if (legacyArray[index]) {
+                eventDataContent[measureInfo.id] = legacyArray[index];
             }
-        }
-        // Construct the measure array from the page structure and the lookup
-        sourceMeasures = pageMeasures.map(measureStructure => ({
-            id: measureStructure.id,
-            timeSignature: measureStructure.timeSignature,
-            content: (eventDataLookup.get(measureStructure.id) || []).map(note => ({
+        });
+    }
+    // --- FIX END ---
+
+    const eventDataLookup = new Map(Object.entries(eventDataContent));
+
+    // 2. Get the structure of all measures in the song
+    const allSongMeasures = getSongMeasuresStructure();
+    const elementPage = findElementPage(element);
+    const elementPageIndex = state.song.pages.indexOf(elementPage);
+
+    // 3. Construct the combined measure list for the editor
+    const editorMeasures = allSongMeasures.map(measureStructure => {
+        const content = eventDataLookup.get(measureStructure.id) || [];
+        return {
+            ...measureStructure,
+            content: content.map(note => ({
                 ...note,
                 events: note.events || { enabled: false, values: {} }
             }))
-        }));
-    }
+        };
+    });
 
-    // 2. Create the temporary working state for this editor session by deep-cloning the source
     eventsState = {
         elementId: elementId,
         virtualElement: element,
-        globalMeasureOffset: globalMeasureOffset || 0,
-        measures: structuredClone(sourceMeasures), // <-- THE CRITICAL DEEP CLONE
+        globalMeasureOffset: 0,
+        measures: editorMeasures,
         selectedNoteId: null,
         selectedProperties: selectedProperties,
+        elementPageIndex: elementPageIndex,
     };
 
-    // --- The rest of the function remains the same ---
     if (dotBtn) dotBtn.classList.remove('active');
     if (sNoteBtn) { sNoteBtn.disabled = false; sNoteBtn.draggable = true; }
     updateState({ eventsEditorCallback: callback });
@@ -1291,4 +1341,4 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
     eventsEditorDialog.addEventListener('transitionend', () => {
         renderEventConnectors();
     }, { once: true });
-}
+}

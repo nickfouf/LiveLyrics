@@ -124,7 +124,8 @@ class SocketDevice extends EventEmitter {
                 return;
             }
             this.queuedMessageIds.push(payload.messageId);
-            this.emit('message', payload.data, this);
+            // MODIFICATION: Pass the remote address of the socket with the event.
+            this.emit('message', payload.data, this, socket.remoteAddress);
         }
     }
 

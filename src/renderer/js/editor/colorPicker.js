@@ -1,5 +1,6 @@
 import { state, updateState } from './state.js';
 import { hsvToRgb, hexToRgb, rgbToHex, rgbToHsv, parseColorString, rgbaToHex } from '../renderer/utils.js';
+import { makeDraggable } from './draggable.js';
 
 let pickerState = { h: 0, s: 100, v: 100, a: 1 };
 
@@ -130,6 +131,8 @@ export function initColorPicker() {
         a: document.getElementById('cp-a-in'), // ADDED
         hex: document.getElementById('cp-hex-in')
     };
+
+    makeDraggable('color-picker-dialog');
 
     function handleDrag(element, onMove) {
         const onMouseMove = (e) => { e.preventDefault(); onMove(e); };
@@ -291,4 +294,5 @@ export function openColorPicker(initialColor, callback) {
 
     updateState({ colorPickerCallback: callback });
     dialog.classList.add('visible');
-}
+}
+

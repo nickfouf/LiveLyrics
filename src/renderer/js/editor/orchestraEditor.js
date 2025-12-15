@@ -1,18 +1,38 @@
 // src/renderer/js/editor/orchestraEditor.js
 
 import { state, updateState } from './state.js';
-import { showConfirmationDialog, measuresHaveEvents, pageHasMeasures } from './utils.js';
+import { showConfirmationDialog, measuresHaveEvents, pageHasMeasures, getSongMeasuresStructure, findMusicElementsRecursively } from './utils.js';
 import { generateUUID } from "../renderer/utils.js";
 import { jumpToPage } from './pageManager.js';
 import {updateTimelineAndEditorView, rebuildAllEventTimelines, reprogramAllPageTransitions, markAsDirty} from './events.js';
+import { makeDraggable } from './draggable.js';
 
 // --- Module State ---
 let orchestraState = {
     measures: [],
     globalMeasureOffset: 0,
+    elementPageIndex: -1,
+    elementId: null,
 };
 let orchestraEditorDialog, addMeasureDialog, measuresContainer;
 let draggedMeasureIndex = null;
+
+/**
+ * ADDED: Helper to find the page an element belongs to.
+ * @param {VirtualElement} element
+ * @returns {VirtualPage|null}
+ */
+function findElementPage(element) {
+    if (!element) return null;
+    let parent = element.parent;
+    while (parent) {
+        if (parent.type === 'page') {
+            return parent;
+        }
+        parent = parent.parent;
+    }
+    return null;
+}
 
 
 // --- Rendering Functions ---
@@ -23,17 +43,22 @@ function renderMeasures() {
         measuresContainer.removeChild(measuresContainer.firstElementChild);
     }
     const addButton = document.getElementById('oe-add-measure-btn');
-    let localMeasureCounter = 0;
+    let globalMeasureCounter = 0;
 
     orchestraState.measures.forEach((measure, index) => {
         const measureBox = document.createElement('div');
         measureBox.className = 'measure-box';
         measureBox.dataset.index = index;
 
+        const isForeign = measure.pageIndex !== orchestraState.elementPageIndex || measure.elementId !== orchestraState.elementId;
+        if (isForeign) {
+            measureBox.classList.add('foreign-measure');
+        }
+
         const count = measure.count || 1;
         const countDisplay = count > 1 ? `<span class="measure-count-display">×${count}</span>` : '';
 
-        const globalMeasureStartNumber = orchestraState.globalMeasureOffset + localMeasureCounter + 1;
+        const globalMeasureStartNumber = globalMeasureCounter + 1;
         const globalMeasureEndNumber = globalMeasureStartNumber + count - 1;
         const measureNumberDisplay = count > 1 ? `${globalMeasureStartNumber}-${globalMeasureEndNumber}` : globalMeasureStartNumber;
 
@@ -44,7 +69,7 @@ function renderMeasures() {
             <button class="delete-measure-btn" title="Delete Measure">
                 <img src="../../icons/delete.svg" alt="Delete">
             </button>
-            <div class="measure-header" draggable="true">
+            <div class="measure-header" draggable="${!isForeign}">
                 <span class="measure-global-number">${measureNumberDisplay}</span>
                 <span class="measure-time-signature">${measure.timeSignature.numerator}/${measure.timeSignature.denominator}</span>
             </div>
@@ -55,7 +80,7 @@ function renderMeasures() {
 
         measureBox.innerHTML = contentHTML;
         measuresContainer.insertBefore(measureBox, addButton);
-        localMeasureCounter += count;
+        globalMeasureCounter += count;
     });
 }
 
@@ -120,7 +145,41 @@ function handleConfirmAddMeasure() {
     const measureCountInput = document.getElementById('oe-measure-count');
     const count = parseInt(measureCountInput.value, 10) || 1;
 
-    // REVERTED: Create a single measure object with a count
+    let insertIndex = orchestraState.measures.length;
+
+    let lastOwnMeasureIndex = -1;
+    for (let i = orchestraState.measures.length - 1; i >= 0; i--) {
+        const measure = orchestraState.measures[i];
+        if (measure.elementId === orchestraState.elementId && measure.pageIndex === orchestraState.elementPageIndex) {
+            lastOwnMeasureIndex = i;
+            break;
+        }
+    }
+
+    if (lastOwnMeasureIndex !== -1) {
+        insertIndex = lastOwnMeasureIndex + 1;
+    } else {
+        let lastMeasureOfPageIndex = -1;
+        for (let i = orchestraState.measures.length - 1; i >= 0; i--) {
+            if (orchestraState.measures[i].pageIndex === orchestraState.elementPageIndex) {
+                lastMeasureOfPageIndex = i;
+                break;
+            }
+        }
+        if (lastMeasureOfPageIndex !== -1) {
+            insertIndex = lastMeasureOfPageIndex + 1;
+        } else {
+            let lastMeasureOfPreviousPageIndex = -1;
+            for (let i = orchestraState.measures.length - 1; i >= 0; i--) {
+                if (orchestraState.measures[i].pageIndex < orchestraState.elementPageIndex) {
+                    lastMeasureOfPreviousPageIndex = i;
+                    break;
+                }
+            }
+            insertIndex = lastMeasureOfPreviousPageIndex + 1;
+        }
+    }
+
     const newMeasure = {
         id: `measure-${generateUUID()}`,
         timeSignature: {
@@ -128,9 +187,11 @@ function handleConfirmAddMeasure() {
             denominator: parseInt(splits[1], 10)
         },
         count: count,
-        content: []
+        content: [],
+        pageIndex: orchestraState.elementPageIndex,
+        elementId: orchestraState.elementId,
     };
-    orchestraState.measures.push(newMeasure);
+    orchestraState.measures.splice(insertIndex, 0, newMeasure);
     renderMeasures();
     addMeasureDialog.classList.remove('visible');
     measureCountInput.value = '1';
@@ -194,12 +255,42 @@ export function initOrchestraEditor() {
     addMeasureDialog = document.getElementById('add-orchestra-measure-dialog');
     measuresContainer = document.getElementById('oe-measures-container');
 
+    makeDraggable('orchestra-editor-dialog');
+    makeDraggable('add-orchestra-measure-dialog');
+
     document.getElementById('oe-ok-btn').addEventListener('click', () => {
         if (state.orchestraEditorCallback) {
             const activePage = state.activePage;
             const hadMeasuresBefore = pageHasMeasures(activePage);
 
-            state.orchestraEditorCallback(orchestraState);
+            const measuresByElementId = new Map();
+
+            for (const measure of orchestraState.measures) {
+                if (!measuresByElementId.has(measure.elementId)) {
+                    measuresByElementId.set(measure.elementId, []);
+                }
+                measuresByElementId.get(measure.elementId).push({
+                    id: measure.id,
+                    timeSignature: measure.timeSignature,
+                    count: measure.count,
+                    content: measure.content,
+                });
+            }
+
+            const allMusicElements = [state.song.thumbnailPage, ...state.song.pages].flatMap(p => findMusicElementsRecursively(p));
+            
+            for (const [elementId, measures] of measuresByElementId.entries()) {
+                const element = allMusicElements.find(el => el.id === elementId);
+                if (element && element.hasProperty('orchestraContent')) {
+                    element.getProperty('orchestraContent').setMeasures(measures);
+                }
+            }
+            
+            // The callback itself is now just a signal to refresh.
+            // We pass the data for the original element for compatibility, though it's already set.
+            const originalElementMeasures = { measures: measuresByElementId.get(orchestraState.elementId) || [] };
+            state.orchestraEditorCallback(originalElementMeasures);
+
             markAsDirty();
 
             const hasMeasuresAfter = pageHasMeasures(activePage);
@@ -240,7 +331,10 @@ export function initOrchestraEditor() {
     measuresContainer.addEventListener('dragstart', (e) => {
         if (!e.target.classList.contains('measure-header')) return;
         const measureBox = e.target.closest('.measure-box');
-        if (!measureBox) return;
+        if (!measureBox || measureBox.classList.contains('foreign-measure')) {
+            e.preventDefault();
+            return;
+        }
 
         draggedMeasureIndex = parseInt(measureBox.dataset.index, 10);
         e.dataTransfer.effectAllowed = 'move';
@@ -275,7 +369,7 @@ export function initOrchestraEditor() {
 
         const targetMeasure = e.target.closest('.measure-box');
         clearDropIndicators();
-        if (!targetMeasure || parseInt(targetMeasure.dataset.index, 10) === draggedMeasureIndex) {
+        if (!targetMeasure || parseInt(targetMeasure.dataset.index, 10) === draggedMeasureIndex || targetMeasure.classList.contains('foreign-measure')) {
             return;
         }
         const rect = targetMeasure.getBoundingClientRect();
@@ -289,7 +383,7 @@ export function initOrchestraEditor() {
 
         const dropTarget = e.target.closest('.measure-box');
         clearDropIndicators();
-        if (!dropTarget || parseInt(dropTarget.dataset.index, 10) === draggedMeasureIndex) return;
+        if (!dropTarget || dropTarget.classList.contains('foreign-measure') || parseInt(dropTarget.dataset.index, 10) === draggedMeasureIndex) return;
 
         const dropIndex = parseInt(dropTarget.dataset.index, 10);
         const rect = dropTarget.getBoundingClientRect();
@@ -319,15 +413,46 @@ export function openOrchestraEditor(initialData, globalMeasureOffset, callback) 
         parsedData = {};
     }
 
+    const element = state.selectedElement;
+    const elementPage = findElementPage(element);
+    const elementPageIndex = state.song.pages.indexOf(elementPage);
+
+    const allMeasures = [];
+    state.song.pages.forEach((page, pageIndex) => {
+        const musicElements = findMusicElementsRecursively(page);
+        musicElements.forEach(el => {
+            if (el.type === 'orchestra' || el.type === 'audio') {
+                const content = el.getProperty('orchestraContent').getMeasures();
+                content.forEach(measure => {
+                    allMeasures.push({
+                        ...measure,
+                        pageIndex: pageIndex,
+                        elementId: el.id
+                    });
+                });
+            } else if (el.type === 'lyrics') {
+                const content = el.getProperty('lyricsContent').getLyricsValue().getLyricsObject().measures;
+                content.forEach(measure => {
+                    allMeasures.push({
+                        ...measure,
+                        count: 1, // Lyrics measures always have a count of 1
+                        pageIndex: pageIndex,
+                        elementId: el.id
+                    });
+                });
+            }
+        });
+    });
+
     orchestraState = {
-        measures: (parsedData.measures || []).map(m => ({
-            ...m,
-            id: m.id || `measure-${generateUUID()}`,
-        })),
-        globalMeasureOffset: globalMeasureOffset || 0,
+        measures: allMeasures,
+        globalMeasureOffset: 0,
+        elementPageIndex: elementPageIndex,
+        elementId: element.id,
     };
 
     updateState({ orchestraEditorCallback: callback });
     renderMeasures();
     orchestraEditorDialog.classList.add('visible');
-}
+}
+
