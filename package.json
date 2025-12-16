@@ -1,6 +1,6 @@
 {
   "name": "livelyrics",
-  "version": "1.s.5",
+  "version": "1.0.5",
   "description": "A modern and responsive app for editing and displaying lyrics.",
   "main": "src/main/main.js",
   "repository": {
