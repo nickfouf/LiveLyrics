@@ -133,7 +133,12 @@ function renderLoop() {
 function renderFrameAtTime(timeInMs) {
     if (!state.song || !state.song.thumbnailPage) return;
     const beatDurationMs = getQuarterNoteDurationMs();
-    const currentBeats = beatDurationMs > 0 ? timeInMs / beatDurationMs : 0;
+    const rawBeats = beatDurationMs > 0 ? timeInMs / beatDurationMs : 0;
+    
+    // --- FIX: Added EPSILON to correct floating point drift ---
+    const EPSILON = 0.0001;
+    const currentBeats = rawBeats + EPSILON;
+
     const measureMap = state.timelineManager.getMeasureMap();
 
     if (measureMap.length === 0) {
@@ -154,6 +159,7 @@ function renderFrameAtTime(timeInMs) {
     const currentMeasure = measureMap[measureIndex];
     const timeIntoMeasureBeats = currentBeats - (currentMeasure?.startTime || 0);
     const measureProgress = currentMeasure?.duration > 0 ? timeIntoMeasureBeats / currentMeasure.duration : 0;
+    
     updateVisiblePagesForTime(currentBeats);
     state.timelineManager.renderAt(measureIndex, measureProgress);
     updateTimelineUI({ measureIndex, totalDurationBeats, currentBeats });
@@ -398,7 +404,12 @@ function jumpMeasure(direction) {
     if (measureMap.length === 0) return;
     const beatDurationMs = getQuarterNoteDurationMs();
     const currentTime = getAuthoritativeTime(); // Use authoritative time for jumps
-    const currentBeats = beatDurationMs > 0 ? currentTime / beatDurationMs : 0;
+    const rawBeats = beatDurationMs > 0 ? currentTime / beatDurationMs : 0;
+    
+    // --- FIX: Added EPSILON to correct floating point drift ---
+    const EPSILON = 0.0001;
+    const currentBeats = rawBeats + EPSILON;
+
     const totalDurationBeats = measureMap.at(-1).startTime + measureMap.at(-1).duration;
     let currentMeasureIndex = measureMap.findIndex(m => currentBeats >= m.startTime && currentBeats < m.startTime + m.duration);
 

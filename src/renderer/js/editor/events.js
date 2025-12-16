@@ -578,7 +578,7 @@ function stop() {
  * Enables or disables the main playback controls based on whether the song has any measures.
  */
 function updatePlaybackControlsState() {
-    console.log("Updating playback controls state...", DOM.playPauseBtn, DOM.backwardBtn, DOM.forwardBtn);
+    // console.log("Updating playback controls state...", DOM.playPauseBtn, DOM.backwardBtn, DOM.forwardBtn);
     if (!DOM.playPauseBtn || !DOM.backwardBtn || !DOM.forwardBtn) return;
 
     // Disable controls if the entire song has no measures.
@@ -605,7 +605,12 @@ export function updateTimelineAndEditorView() {
     const currentMusicalTimeInBeats = beatDurationMs > 0 ? state.playback.timeAtPause / beatDurationMs : 0;
     const totalDuration = measureMap.length > 0 ? measureMap.at(-1).startTime + measureMap.at(-1).duration : 0;
 
-    let currentMeasureIndex = measureMap.findIndex(m => currentMusicalTimeInBeats >= m.startTime && currentMusicalTimeInBeats < m.startTime + m.duration);
+    // FIX: Add tolerance for floating point precision issues when finding the measure index.
+    // This prevents the UI from incorrectly snapping to the previous measure when calculating
+    // the exact start time of a page/measure (e.g. 77.99999... instead of 78.0).
+    const EPSILON = 0.0001;
+    let currentMeasureIndex = measureMap.findIndex(m => (currentMusicalTimeInBeats + EPSILON) >= m.startTime && (currentMusicalTimeInBeats + EPSILON) < m.startTime + m.duration);
+
     if (currentMeasureIndex === -1) {
         currentMeasureIndex = totalDuration > 0 && currentMusicalTimeInBeats >= totalDuration ? measureMap.length - 1 : 0;
     }
@@ -733,10 +738,14 @@ function jumpToMeasure(direction) {
     const totalDurationInBeats = measureMap.at(-1).startTime + measureMap.at(-1).duration;
     const currentMusicalTime = beatDurationMs > 0 ? state.playback.timeAtPause / beatDurationMs : 0;
 
-    let currentMeasureIndex = measureMap.findIndex(m => currentMusicalTime >= m.startTime && currentMusicalTime < m.startTime + m.duration);
+    const EPSILON = 0.0001; // Defined here
+
+    let currentMeasureIndex = measureMap.findIndex(m => (currentMusicalTime + EPSILON) >= m.startTime && (currentMusicalTime + EPSILON) < m.startTime + m.duration);
+
     if (currentMeasureIndex === -1) {
         // If not in any measure, determine if we are at the end or beginning.
-        currentMeasureIndex = (currentMusicalTime >= totalDurationInBeats) ? measureMap.length - 1 : 0;
+        // Use epsilon here as well for consistency
+        currentMeasureIndex = ((currentMusicalTime + EPSILON) >= totalDurationInBeats) ? measureMap.length - 1 : 0;
     }
 
     let newTimeInBeats;
@@ -752,11 +761,12 @@ function jumpToMeasure(direction) {
         }
     } else { // Backward (direction === -1)
         // If we are at or before the start of the very first measure, just clamp to the beginning.
-        if (currentMeasureIndex === 0 && (currentMusicalTime - measureMap[0].startTime) < 0.01) {
+        // Use epsilon-adjusted time for the start check
+        if (currentMeasureIndex === 0 && ((currentMusicalTime + EPSILON) - measureMap[0].startTime) < 0.01) {
             newTimeInBeats = 0;
         } else {
             // Otherwise, determine if we should jump to the start of the current measure or the previous one.
-            const isAtStartOfMeasure = (currentMusicalTime - measureMap[currentMeasureIndex].startTime) < 0.01;
+            const isAtStartOfMeasure = ((currentMusicalTime + EPSILON) - measureMap[currentMeasureIndex].startTime) < 0.01;
             const targetMeasureIndex = isAtStartOfMeasure ? currentMeasureIndex - 1 : currentMeasureIndex;
             newTimeInBeats = measureMap[targetMeasureIndex].startTime;
         }
@@ -1167,6 +1177,7 @@ async function saveAs() {
         updateState({ song: { ...state.song, currentFilePath: newPath, isDirty: false } });
         updateWindowTitle();
     } catch (error) {
+        hideLoadingDialog(); // --- FIX: Hide dialog BEFORE showing the alert
         console.error('Save As failed:', error);
         await showAlertDialog('Save Failed', `Could not save the project. Reason: ${error.message}`);
     } finally {
@@ -1187,6 +1198,7 @@ async function save() {
         updateState({ song: { ...state.song, isDirty: false } });
         updateWindowTitle();
     } catch (error) {
+        hideLoadingDialog(); // --- FIX: Hide dialog BEFORE showing the alert
         console.error('Save failed:', error);
         await showAlertDialog('Save Failed', `Could not save the project. Reason: ${error.message}`);
     } finally {
@@ -1470,4 +1482,4 @@ export function setupEventListeners() {
         }
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
-}
+}

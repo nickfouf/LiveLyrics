@@ -213,6 +213,7 @@ export async function handleSongActivated(songMetadata, songData) {
         syncPlaylistWithMain(); // Sync with main process after activation
 
     } catch (error) {
+        hideLoadingDialog(); // --- FIX: Hide dialog BEFORE showing the alert
         console.error('Failed to activate song in renderer:', error);
         await showAlertDialog('Failed to Load Song', error.message);
     } finally {
@@ -282,8 +283,8 @@ async function handleAddSong() {
         songPlaylist.push(newSong);
         await loadSong(songId);
     } catch (error) {
-        console.error('Failed to open project:', error);
         hideLoadingDialog();
+        console.error('Failed to open project:', error);
         await showAlertDialog('Failed to Open Project', error.message);
     }
 }
@@ -316,6 +317,7 @@ export async function addSongFromPath(filePath) {
         songPlaylist.push(newSong);
         await loadSong(songId);
     } catch (error) {
+        hideLoadingDialog(); // --- FIX: Hide dialog BEFORE showing the alert
         console.error('Failed to open project from path:', error);
         await showAlertDialog('Failed to Open Project', error.message);
     } finally {
@@ -411,4 +413,4 @@ export function initSongsManager() {
         renderPlaylist();
         syncPlaylistWithMain(); // Sync after reordering
     });
-}
+}

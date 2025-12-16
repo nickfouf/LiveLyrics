@@ -12,6 +12,210 @@ import { VirtualText } from '../renderer/elements/text.js';
 import { VirtualSmartEffect } from '../renderer/elements/smartEffect.js';
 import { VirtualVideo } from '../renderer/elements/video.js';
 
+export function generateUUID() {
+    if(window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+    } else {
+        return Date.now().toString() + `-${Math.random().toString(36).substr(2, 9)}`;
+    }
+}
+
+/**
+ * Performs a deep copy of a serialized element (or page) tree, remapping all
+ * Element IDs, Measure IDs, and Note IDs to ensure the copy is unique
+ * but maintains internal consistency (e.g. Lyrics pointing to the copied Orchestra).
+ * @param {object} serializedData The serialized virtual element tree.
+ * @returns {object} The deep-copied and remapped data.
+ */
+export function duplicateAndRemap(serializedData) {
+    const clone = structuredClone(serializedData);
+
+    const idMap = new Map(); // OldElementID -> NewElementID
+    const measureMap = new Map(); // OldMeasureID -> NewMeasureID
+    const noteMap = new Map(); // OldNoteID -> NewNoteID
+
+    // --- Pass 1: Generate Mappings ---
+    function generateMappingsRecursive(item) {
+        // 1. Map Element ID
+        const newElId = `ve-${generateUUID()}`;
+        idMap.set(item.id, newElId);
+
+        // 2. Map Measure/Note IDs in Properties
+        if (item.properties) {
+            // Lyrics Content
+            if (item.properties.lyricsContent) {
+                // Determine if we are dealing with the raw object or the wrapped value
+                const lyricsData = item.properties.lyricsContent.measures ? item.properties.lyricsContent : (item.properties.lyricsContent.lyricsObject || {});
+                
+                if (lyricsData.measures) {
+                    lyricsData.measures.forEach(m => {
+                        const newMid = `measure-${generateUUID()}`;
+                        measureMap.set(m.id, newMid);
+                        if (m.content) {
+                            m.content.forEach(n => {
+                                noteMap.set(n.id, `note-${generateUUID()}`);
+                            });
+                        }
+                    });
+                }
+            }
+            // Orchestra Content
+            if (item.properties.orchestraContent) {
+                // Handle raw object or wrapped
+                const orchData = item.properties.orchestraContent.measures ? item.properties.orchestraContent : (item.properties.orchestraContent || {});
+                
+                if (orchData.measures) {
+                    orchData.measures.forEach(m => {
+                        const newMid = `measure-${generateUUID()}`;
+                        measureMap.set(m.id, newMid);
+                        // Handle batched/repeated measures (e.g., id "xyz", count 4 -> "xyz-0", "xyz-1"...)
+                        // Orchestra measures in the timeline ALWAYS use suffixes.
+                        const count = m.count || 1;
+                        for (let i = 0; i < count; i++) {
+                            measureMap.set(`${m.id}-${i}`, `${newMid}-${i}`);
+                        }
+                    });
+                }
+            }
+        }
+
+        // 3. Map IDs in Events Data (if they exist as explicit keys)
+        if (item.eventsData && item.eventsData.content) {
+            const content = item.eventsData.content;
+            
+            // Handle Object format (Map: MeasureID -> Notes)
+            if (!Array.isArray(content)) {
+                Object.values(content).forEach(notes => {
+                    notes.forEach(note => {
+                        if (note.id) noteMap.set(note.id, `evt-${generateUUID()}`);
+                    });
+                });
+            } 
+            // Handle Array format (Legacy: List of Notes)
+            else {
+                content.forEach(notes => {
+                    notes.forEach(note => {
+                        if (note.id) noteMap.set(note.id, `evt-${generateUUID()}`);
+                    });
+                });
+            }
+        }
+
+        if (item.children) {
+            item.children.forEach(generateMappingsRecursive);
+        }
+    }
+
+    generateMappingsRecursive(clone);
+
+    // --- Pass 2: Apply Mappings ---
+    function applyMappingsRecursive(item) {
+        // 1. Apply Element ID
+        if (idMap.has(item.id)) {
+            item.id = idMap.get(item.id);
+        }
+
+        // 2. Update Page-level references
+        if (item.musicElementsOrder) {
+            item.musicElementsOrder = item.musicElementsOrder
+                .map(oldId => idMap.get(oldId)) // If it was part of this duplication, update it
+                .filter(id => id); // Remove if undefined (shouldn't happen in valid tree)
+        }
+
+        // 3. Update Properties
+        if (item.properties) {
+            // Lyrics: Update Owned Measures
+            if (item.properties.lyricsContent) {
+                const lc = item.properties.lyricsContent; // Working on the clone directly
+                
+                // Handle structure variation (sometimes directly on prop, sometimes in sub-object)
+                const targetObj = lc.lyricsObject || lc; 
+
+                if (targetObj.measures) {
+                    targetObj.measures.forEach(m => {
+                        if (measureMap.has(m.id)) m.id = measureMap.get(m.id);
+                        if (m.content) {
+                            m.content.forEach(n => {
+                                if (noteMap.has(n.id)) n.id = noteMap.get(n.id);
+                            });
+                        }
+                    });
+                }
+                // Lyrics: Update References (Foreign Content)
+                if (targetObj.foreignContent) {
+                    const newForeign = {};
+                    Object.keys(targetObj.foreignContent).forEach(oldKey => {
+                        // If the foreign measure was ALSO duplicated (part of this page/tree), use new ID.
+                        // If not (e.g. duplicating a layer but referencing a measure outside that layer), keep old ID.
+                        const newKey = measureMap.get(oldKey) || oldKey;
+                        
+                        // Deep copy notes to avoid reference issues
+                        const notes = targetObj.foreignContent[oldKey].map(n => ({...n}));
+                        // Remap note IDs if they were mapped (rare for foreign, but safer)
+                        notes.forEach(n => { if (noteMap.has(n.id)) n.id = noteMap.get(n.id); });
+                        
+                        newForeign[newKey] = notes;
+                    });
+                    targetObj.foreignContent = newForeign;
+                }
+                // Lyrics: Update Measure Order
+                if (targetObj.measureIdOrder) {
+                    targetObj.measureIdOrder = targetObj.measureIdOrder.map(oldId => measureMap.get(oldId) || oldId);
+                }
+            }
+
+            // Orchestra: Update Owned Measures
+            if (item.properties.orchestraContent) {
+                const oc = item.properties.orchestraContent;
+                const targetObj = oc.measures ? oc : (oc || {});
+                
+                if (targetObj.measures) {
+                    targetObj.measures.forEach(m => {
+                        if (measureMap.has(m.id)) m.id = measureMap.get(m.id);
+                    });
+                }
+            }
+        }
+
+        // 4. Update Events Data
+        if (item.eventsData && item.eventsData.content) {
+            const content = item.eventsData.content;
+
+            // Handle Object format (Map: MeasureID -> Notes)
+            if (!Array.isArray(content)) {
+                const newContent = {};
+                Object.keys(content).forEach(oldMeasureId => {
+                    const newMeasureId = measureMap.get(oldMeasureId) || oldMeasureId;
+                    const notes = content[oldMeasureId].map(n => ({...n}));
+                    
+                    notes.forEach(n => {
+                        if (noteMap.has(n.id)) n.id = noteMap.get(n.id);
+                    });
+                    
+                    newContent[newMeasureId] = notes;
+                });
+                item.eventsData.content = newContent;
+            } 
+            // Handle Array format (Legacy)
+            else {
+                // Iterate the array and remap IDs in place (content is already a deep clone from structuredClone)
+                content.forEach(notes => {
+                    notes.forEach(n => {
+                        if (noteMap.has(n.id)) n.id = noteMap.get(n.id);
+                    });
+                });
+            }
+        }
+
+        if (item.children) {
+            item.children.forEach(applyMappingsRecursive);
+        }
+    }
+
+    applyMappingsRecursive(clone);
+    return clone;
+}
+
 export function findDeepestAtPoint(root, x, y, conditionFn = () => true) {
     let deepest = null;
     let maxDepth = -1;
@@ -106,15 +310,8 @@ export function getNameForElementType(type) {
     return names[type] || 'Element';
 }
 
-/**
- * Determines the underlying data type of a property based on its key.
- * This is crucial for creating the correct type of Event object for animations.
- * @param {string} propKey - The property key (e.g., 'opacity', 'width').
- * @returns {string} The property type (e.g., 'number', 'size', 'color/gradient').
- */
 export function getPropertyType(propKey) {
     switch (propKey) {
-        // Number (a single numeric value)
         case 'opacity':
         case 'videoSpeed':
         case 'audioVolume':
@@ -134,7 +331,6 @@ export function getPropertyType(propKey) {
         case 'parent-rotateZ':
             return 'number';
 
-        // Size (a value and a unit)
         case 'width':
         case 'height':
         case 'top':
@@ -158,7 +354,7 @@ export function getPropertyType(propKey) {
         case 'translateX':
         case 'translateY':
         case 'translateZ':
-            case 'gap':
+        case 'gap':
         case 'transform-origin-x':
         case 'transform-origin-y':
         case 'transform-origin-z':
@@ -167,7 +363,6 @@ export function getPropertyType(propKey) {
         case 'childrenPerspective':
             return 'size';
 
-        // Color/Gradient (a complex color or gradient object)
         case 'bgColor':
         case 'borderColor':
         case 'shadowColor':
@@ -177,7 +372,6 @@ export function getPropertyType(propKey) {
         case 'progressFillColor':
             return 'color/gradient';
 
-        // Boolean (true/false)
         case 'bgEnabled':
         case 'borderEnabled':
         case 'shadowEnabled':
@@ -187,7 +381,6 @@ export function getPropertyType(propKey) {
         case 'visible':
             return 'boolean';
 
-        // String (text content)
         case 'content':
         case 'objectFit':
         case 'videoSrc':
@@ -197,12 +390,11 @@ export function getPropertyType(propKey) {
         case 'parent-transform-style':
             return 'string';
 
-        // Dynamic String
         case 'videoState':
         case 'audioState':
             return 'dynamic-string';
 
-        case 'alignment': // For containers
+        case 'alignment': 
             return 'alignment';
         case 'fontFamily':
             return 'fontFamily';
@@ -236,7 +428,6 @@ export function getAvailablePropertiesForElement(element) {
 
     let props = {};
 
-    // Define common property groups to avoid repetition
     const commonEffects = { "Effects": { "opacity": "Opacity" } };
     const commonDimensions = { "Dimensions": { "width": "Width", "height": "Height" } };
     const commonMargin = { "Margin": { "top": "Top", "left": "Left", "bottom": "Bottom", "right": "Right" } };
@@ -441,13 +632,6 @@ export function getAvailablePropertiesForElement(element) {
     return props;
 }
 
-
-/**
- * Shows a confirmation dialog.
- * @param {string} message The message to display in the dialog.
- * @param {string} [title='Confirmation'] The title for the dialog header.
- * @returns {Promise<boolean>} A promise that resolves to true if 'Yes' is clicked, false otherwise.
- */
 export function showConfirmationDialog(message, title = 'Confirmation') {
     const dialog = document.getElementById('confirmation-dialog');
     const headerEl = document.getElementById('confirmation-dialog-header');
@@ -482,11 +666,6 @@ export function showConfirmationDialog(message, title = 'Confirmation') {
     });
 }
 
-/**
- * Checks if any of the given measure IDs have associated events on the current page.
- * @param {string[]} measureIds An array of measure IDs to check.
- * @returns {boolean} True if any measure has events, false otherwise.
- */
 export function measuresHaveEvents(measureIds) {
     const elementsWithEvents = document.querySelectorAll('[data-events-content]');
     for (const element of elementsWithEvents) {
@@ -533,7 +712,6 @@ export function getMeasuresFromElement(element) {
             const orchestraContent = element.dataset.orchestraContent || element.getAttribute('data-orchestra-content');
             if (orchestraContent) {
                 const data = JSON.parse(orchestraContent);
-                // REVERTED: Calculate total from batched counts
                 measureCount = (data.measures || []).reduce((total, measure) => total + (measure.count || 1), 0);
             }
         } catch (e) {
@@ -543,12 +721,6 @@ export function getMeasuresFromElement(element) {
     return measureCount;
 }
 
-/**
- * Calculates the starting global measure index for a given element.
- * @param {string} elementId The ID of the element.
- * @param {Array} measureMap The global measure map for the song.
- * @returns {number} The global measure index where this element's musical content begins.
- */
 export function calculateGlobalMeasureOffsetForElement(elementId, measureMap) {
     let element = null;
     let pageOfElement = null;
@@ -574,20 +746,16 @@ export function calculateGlobalMeasureOffsetForElement(elementId, measureMap) {
 
     let offset = 0;
 
-    // Add measures from all previous pages
     for (let i = 0; i < pageIndex; i++) {
         offset += measureMap.filter(m => m.pageIndex === i).length;
     }
 
-    // If the element is a musical element, add the offset from preceding musical elements on the same page.
-    // If it's not a musical element, its timeline starts at the beginning of the page's timeline, so we do nothing more.
     if (element instanceof VirtualLyrics || element instanceof VirtualOrchestra) {
         const orderedMusicElements = pageOfElement.getMusicElementsOrder();
         for (const musicEl of orderedMusicElements) {
             if (musicEl.id === element.id) {
-                break; // We've reached our target element
+                break;
             }
-            // This element comes before our target, so add its measures to the offset
             offset += measureMap.filter(m => m.elementId === musicEl.id && m.pageIndex === pageIndex).length;
         }
     }
@@ -595,47 +763,10 @@ export function calculateGlobalMeasureOffsetForElement(elementId, measureMap) {
     return offset;
 }
 
-
-/**
- * Scans all elements with event data on the current page and updates the global state.
- */
-export function recalculateEventControlledProperties() {
-    state.eventControlledProperties.clear();
-    const elementsWithEvents = document.querySelectorAll('[data-events-content]');
-
-    for (const element of elementsWithEvents) {
-        try {
-            const eventsData = JSON.parse(element.dataset.eventsContent || '{}');
-            for (const measure of Object.values(eventsData)) {
-                if (measure.content) {
-                    for (const note of measure.content) {
-                        if (note.events?.enabled && note.events.values) {
-                            for (const propKey of Object.keys(note.events.values)) {
-                                if (!propKey.endsWith('_easing')) {
-                                    state.eventControlledProperties.add(propKey);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.error("Error recalculating event controlled properties for element:", element.id, e);
-        }
-    }
-}
-
-/**
- * Finds a virtual element recursively by its ID within a given container.
- * @param {VirtualContainer} container - The container element to start the search from.
- * @param {string} elementId - The ID to search for.
- * @returns {VirtualElement|null} The found element or null.
- */
 export function findVirtualElementById(container, elementId) {
     if (!container) return null;
     if (container.id === elementId) return container;
 
-    // Check if the container has a getChildren method
     if (typeof container.getChildren !== 'function') {
         return null;
     }
@@ -643,7 +774,6 @@ export function findVirtualElementById(container, elementId) {
     function search(searchContainer) {
         for (const child of searchContainer.getChildren()) {
             if (child.id === elementId) return child;
-            // Recurse only if the child is a container itself
             if (child instanceof VirtualContainer) {
                 const found = search(child);
                 if (found) return found;
@@ -655,11 +785,6 @@ export function findVirtualElementById(container, elementId) {
     return search(container);
 }
 
-/**
- * Recursively finds all music elements (Lyrics and Orchestra) within a container.
- * @param {VirtualContainer} container The container to search within.
- * @returns {Array<VirtualLyrics|VirtualOrchestra>} An array of the found music elements.
- */
 export function findMusicElementsRecursively(container) {
     const musicElements = [];
     if (!container || typeof container.getChildren !== 'function') {
@@ -677,16 +802,11 @@ export function findMusicElementsRecursively(container) {
     return musicElements;
 }
 
-/**
- * Creates a time-ordered map of all measures across all pages for playback timing.
- * This is the bridge between the application's virtual element structure and the TimelineManager.
- * @returns {Array} An array of measure timing information.
- */
 export function buildMeasureMap() {
     const measureMap = [];
     if (!state.song || !state.song.pages) return [];
 
-    const bpmValue = 4; // The BPM is based on a quarter note
+    const bpmValue = 4;
 
     state.song.pages.forEach((page, pageIndex) => {
         const orderedMusicElements = page.getMusicElementsOrder();
@@ -726,7 +846,6 @@ export function buildMeasureMap() {
         });
     });
 
-    // Add start times and global index to the map
     let cumulativeTime = 0;
     return measureMap.map((measure, index) => {
         const measureWithStart = {
@@ -739,58 +858,6 @@ export function buildMeasureMap() {
     });
 }
 
-
-/**
- * Creates a time-ordered map of all event keyframes across all pages.
- * @param {Array} measureMap - The pre-built measure map to use as a time source.
- * @returns {Array} The flat note map for interpolation.
- */
-export function buildFlatNoteMap(measureMap) {
-    const flatNoteMap = [];
-    if (!state.song || !state.song.pages || !measureMap) return [];
-
-    const NOTE_DURATIONS_IN_BEATS = {
-        w_note: 4.0, h_note: 2.0, q_note: 1.0, e_note: 0.5, s_note: 0.25,
-        w_note_dotted: 6.0, h_note_dotted: 3.0, q_note_dotted: 1.5, e_note_dotted: 0.75,
-    };
-
-    const allElementsOnAllPages = state.song.pages.flatMap(page => findAllElementsRecursive(page));
-
-    for (const element of allElementsOnAllPages) {
-        const eventsData = element.getEventsData(); // { content: [ [notes...], [notes...], ... ] }
-        if (!eventsData || !eventsData.content) continue;
-
-        const globalMeasureOffset = calculateGlobalMeasureOffsetForElement(element.id, measureMap);
-
-        eventsData.content.forEach((measureNotes, localMeasureIndex) => {
-            if (!measureNotes || measureNotes.length === 0) return;
-
-            const actualMeasureIndex = localMeasureIndex + globalMeasureOffset;
-            const measureInfo = measureMap[actualMeasureIndex];
-            if (!measureInfo) return;
-
-            let noteTimeOffsetInBeats = 0;
-            measureNotes.forEach(note => {
-                flatNoteMap.push({
-                    elementId: element.id,
-                    musicalTime: measureInfo.startTime + noteTimeOffsetInBeats,
-                    noteData: note,
-                });
-                noteTimeOffsetInBeats += NOTE_DURATIONS_IN_BEATS[note.type] || 0;
-            });
-        });
-    }
-
-
-    flatNoteMap.sort((a, b) => a.musicalTime - b.musicalTime);
-    return flatNoteMap;
-}
-
-/**
- * Creates a time-ordered map of all lyric syllables across all pages.
- * @param {Array} measureMap - The pre-built measure map to use as a time source.
- * @returns {Array} The flat lyrics map for animation.
- */
 export function buildLyricsTimingMap(measureMap) {
     const lyricsMap = [];
     if (!state.song || !state.song.pages || !measureMap) return [];
@@ -866,49 +933,30 @@ export function buildLyricsTimingMap(measureMap) {
     return lyricsMap;
 }
 
-/**
- * Finds the last page index that has musical content before a given target page index.
- * @param {number} targetPageIndex The index of the page we are transitioning to.
- * @param {Array} measureMap The pre-built map of all measures.
- * @returns {number} The index of the last page with music, or -1 if none.
- */
 export function findLastPageWithMusic(targetPageIndex, measureMap) {
-    // Iterate backwards for efficiency
     for (let i = measureMap.length - 1; i >= 0; i--) {
         const measure = measureMap[i];
         if (measure.pageIndex < targetPageIndex) {
-            // The first one we find will be the highest index before the target.
             return measure.pageIndex;
         }
     }
-    return -1; // No preceding page has music (e.g., for page 0)
+    return -1;
 }
 
-/**
- * Finds if a transition should be active at a specific musical time.
- * @param {number} musicalTime The current time in beats.
- * @param {Array} measureMap The pre-built map of all measures.
- * @param {Array} pages The array of all pages in the song.
- * @returns {object|null} An object with transition details or null if no transition is active.
- */
 export function findActiveTransition(musicalTime, measureMap, pages) {
     if (!measureMap || measureMap.length === 0 || !pages) return null;
 
-    // Iterate through each page to check if the musicalTime falls into its transition period
     for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
         const transition = page.transition || { type: 'instant', duration: 0, offsetBeats: 0 };
 
-        // We only care about transitions that have a duration
         if (transition.type === 'instant' || !transition.duration || transition.duration <= 0) {
             continue;
         }
 
-        // Find the start time of the first measure on this page
         const firstMeasureOfPage = measureMap.find(m => m.pageIndex === i);
-        if (!firstMeasureOfPage) continue; // Skip pages with no measures
+        if (!firstMeasureOfPage) continue;
 
-        // MODIFIED: Incorporate offsetBeats into the calculation
         const transitionStartTime = firstMeasureOfPage.startTime + (transition.offsetBeats || 0);
 
         let durationInBeats;
@@ -919,13 +967,11 @@ export function findActiveTransition(musicalTime, measureMap, pages) {
             durationInBeats = 0;
             const firstMeasureGlobalIndex = measureMap.indexOf(firstMeasureOfPage);
 
-            // Sum the duration of the measures covered by the transition
             for (let j = 0; j < (transition.duration || 1); j++) {
                 const currentMeasureIndex = firstMeasureGlobalIndex + j;
                 if (measureMap[currentMeasureIndex]) {
                     durationInBeats += measureMap[currentMeasureIndex].duration;
                 } else {
-                    // If we run out of measures in the song, the transition is cut short.
                     break;
                 }
             }
@@ -945,14 +991,9 @@ export function findActiveTransition(musicalTime, measureMap, pages) {
         }
     }
 
-    return null; // No active transition found
+    return null;
 }
 
-/**
- * Checks if a VirtualPage contains any measures from its child elements.
- * @param {VirtualPage} page The page to check.
- * @returns {boolean} True if the page has one or more measures.
- */
 export function pageHasMeasures(page) {
     if (!page) return false;
     const musicElements = findMusicElementsRecursively(page);
@@ -962,10 +1003,9 @@ export function pageHasMeasures(page) {
             if (element.getProperty('lyricsContent')?.getLyricsValue().getLyricsObject().measures.length > 0) {
                 return true;
             }
-        } else if (element instanceof VirtualOrchestra || element instanceof VirtualAudio) { // Explicitly include VirtualAudio
+        } else if (element instanceof VirtualOrchestra || element instanceof VirtualAudio) {
             const measures = element.getProperty('orchestraContent')?.getMeasures();
             if (measures && measures.length > 0) {
-                // An orchestra/audio element only contributes to the timeline if it has measures with a count > 0
                 if (measures.some(m => (m.count === undefined ? 1 : m.count) > 0)) {
                     return true;
                 }
@@ -975,12 +1015,6 @@ export function pageHasMeasures(page) {
     return false;
 }
 
-/**
- * Gets the measure structure (ID and time signature) for a given musical element.
- * This handles lyrics and orchestra elements, including repeated measures.
- * @param {VirtualElement} element The virtual element to inspect.
- * @returns {Array<{id: string, timeSignature: object}>} An array of measure objects.
- */
 export function getElementMeasuresStructure(element) {
     if (!element) return [];
     const measures = [];
@@ -997,7 +1031,6 @@ export function getElementMeasuresStructure(element) {
         const orchestraMeasures = orchestraContent?.getMeasures();
         if ( orchestraMeasures) {
             orchestraMeasures.forEach(measure => {
-                // Handle repeated measures correctly
                 for (let i = 0; i < (measure.count || 1); i++) {
                     measures.push({ id: `${measure.id}-${i}`, timeSignature: measure.timeSignature });
                 }
@@ -1007,11 +1040,6 @@ export function getElementMeasuresStructure(element) {
     return measures;
 }
 
-/**
- * Gets the measure structure for an entire page by combining measures from all its music elements in order.
- * @param {VirtualPage} page The page to inspect.
- * @returns {Array<{id: string, timeSignature: object}>} An array of measure objects.
- */
 export function getPageMeasuresStructure(page) {
     if (!page) return [];
 
@@ -1029,10 +1057,6 @@ export function getPageMeasuresStructure(page) {
     return measures;
 }
 
-/**
- * ADDED: Gets the measure structure for an entire song.
- * @returns {Array<{id: string, timeSignature: object, pageIndex: number, elementId: string}>} An array of measure objects with page and element context.
- */
 export function getSongMeasuresStructure() {
     if (!state.song || !state.song.pages) return [];
 
@@ -1059,11 +1083,6 @@ export function getSongMeasuresStructure() {
     return measures;
 }
 
-/**
- * Recursively finds all virtual elements within a given container.
- * @param {VirtualContainer} container The container to search within.
- * @returns {VirtualElement[]} An array of all descendant elements.
- */
 export function findAllElementsRecursive(container) {
     const elements = [];
     if (!container || typeof container.getChildren !== 'function') {
@@ -1079,17 +1098,13 @@ export function findAllElementsRecursive(container) {
     return elements;
 }
 
-/**
- * Scans the entire song structure and collects all unique asset source URLs.
- * @returns {string[]} An array of unique asset URLs currently in use.
- */
 export function getAllUsedAssets() {
     const usedAssets = new Set();
     const allPages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
 
     for (const page of allPages) {
         const allElementsOnPage = findAllElementsRecursive(page);
-        allElementsOnPage.push(page); // Also check the page itself
+        allElementsOnPage.push(page);
 
         for (const element of allElementsOnPage) {
             if (element.hasProperty('src')) {
@@ -1097,7 +1112,6 @@ export function getAllUsedAssets() {
                 if (srcProp.getSrc && typeof srcProp.getSrc === 'function') {
                     const srcValue = srcProp.getSrc().getValue();
                     if (srcValue) {
-                        // Handle smart effects where src is an object { filePath, content }
                         if (typeof srcValue === 'object' && srcValue.filePath) {
                             usedAssets.add(srcValue.filePath);
                         } else if (typeof srcValue === 'string') {
@@ -1123,15 +1137,13 @@ export function serializeElement(element) {
     for (const key in properties) {
         if (typeof properties[key].toJSON === 'function') {
             const jsonValue = properties[key].toJSON();
-            if (jsonValue !== undefined) { // Check for undefined
+            if (jsonValue !== undefined) {
                 serialized.properties[key] = jsonValue;
             }
         }
     }
 
     const eventsData = element.getEventsData();
-    // --- FIX START ---
-    // Check if content exists
     if (eventsData && eventsData.content) {
         let hasContent = false;
         if (Array.isArray(eventsData.content)) {
@@ -1144,7 +1156,6 @@ export function serializeElement(element) {
             serialized.eventsData = eventsData;
         }
     }
-    // --- FIX END ---
 
     if (element instanceof VirtualContainer) {
         serialized.children = element.getChildren().map(child => serializeElement(child));
@@ -1162,7 +1173,6 @@ export function deserializeElement(data) {
     let element;
     const options = data.properties || {};
 
-    // Create the correct element type
     switch (data.type) {
         case 'page': element = new VirtualPage(options); break;
         case 'container': element = new VirtualContainer(options); break;
@@ -1177,19 +1187,13 @@ export function deserializeElement(data) {
         default: throw new Error(`Unknown element type during deserialization: ${data.type}`);
     }
 
-    // --- START: MODIFICATION ---
-    // Overwrite the auto-generated ID with the one from the saved data to preserve references.
     element.id = data.id;
-    // FIX: Also update the actual DOM element's ID to match. This is the crucial fix.
     element.domElement.id = data.id;
-    // --- END: MODIFICATION ---
 
-    // Temporarily store event data; it will be processed after the full structure is built.
     if (data.eventsData) {
         element.tempEventsData = data.eventsData;
     }
 
-    // Re-apply children recursively
     if (data.children && element instanceof VirtualContainer) {
         data.children.forEach(childData => {
             const childElement = deserializeElement(childData);
@@ -1197,42 +1201,28 @@ export function deserializeElement(data) {
         });
     }
 
-    // Re-apply page-specific properties
     if (data.type === 'page') {
         element.transition = data.transition || element.transition;
-        // Music order will be set after all elements are created
     }
 
-    // --- FIX START: Manually restore playback state after construction ---
     if (data.type === 'video' || data.type === 'audio') {
         const savedPlaybackProp = data.properties?.playback;
-        // Check if a default value for the state was saved in the project file
         if (savedPlaybackProp?.state?.value) {
             const playbackProp = element.getProperty('playback');
             if (playbackProp) {
-                // Manually set the default value on the newly created property object
-                // The saved object is { value, id }, which is what setDefaultValue expects.
                 playbackProp.getState().setDefaultValue(savedPlaybackProp.state);
             }
         }
     }
-    // --- FIX END ---
 
     return element;
 }
 
-/**
- * Compares two note objects for equality.
- * @param {object} noteA - The first note object.
- * @param {object} noteB - The second note object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareNoteObjects(noteA, noteB) {
     if (!noteA || !noteB) {
         return noteA === noteB;
     }
 
-    // Ensure lineBreakAfter is treated as a boolean for comparison
     const lineBreakA = noteA.lineBreakAfter === true;
     const lineBreakB = noteB.lineBreakAfter === true;
 
@@ -1243,12 +1233,6 @@ export function compareNoteObjects(noteA, noteB) {
         lineBreakA === lineBreakB;
 }
 
-/**
- * Compares two time signature objects for equality.
- * @param {object} tsA - The first time signature object.
- * @param {object} tsB - The second time signature object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareTimeSignatureObjects(tsA, tsB) {
     if (!tsA || !tsB) {
         return tsA === tsB;
@@ -1258,12 +1242,6 @@ export function compareTimeSignatureObjects(tsA, tsB) {
         tsA.denominator === tsB.denominator;
 }
 
-/**
- * Compares two measure objects for equality.
- * @param {object} measureA - The first measure object.
- * @param {object} measureB - The second measure object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareMeasureObjects(measureA, measureB) {
     if (!measureA || !measureB) {
         return measureA === measureB;
@@ -1284,12 +1262,6 @@ export function compareMeasureObjects(measureA, measureB) {
     return true;
 }
 
-/**
- * Compares two lyrics objects for equality.
- * @param {object} lyricsA - The first lyrics object.
- * @param {object} lyricsB - The second lyrics object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareLyricsObjects(lyricsA, lyricsB) {
     if (lyricsA === lyricsB) {
         return true;
@@ -1312,7 +1284,6 @@ export function compareLyricsObjects(lyricsA, lyricsB) {
         }
     }
 
-    // Also compare foreignContent
     if (!deepEqual(lyricsA.foreignContent || {}, lyricsB.foreignContent || {})) {
         return false;
     }
@@ -1321,7 +1292,6 @@ export function compareLyricsObjects(lyricsA, lyricsB) {
 }
 
 export function compareLyricsLayouts(layoutA, layoutB) {
-    // Handle strict equality and cases where one or both are null/undefined.
     if (layoutA === layoutB) {
         return true;
     }
@@ -1329,7 +1299,6 @@ export function compareLyricsLayouts(layoutA, layoutB) {
         return false;
     }
 
-    // Compare top-level style and dimension properties.
     if (
         layoutA.fontFamily !== layoutB.fontFamily ||
         layoutA.fontWeight !== layoutB.fontWeight ||
@@ -1347,12 +1316,10 @@ export function compareLyricsLayouts(layoutA, layoutB) {
         return false;
     }
 
-    // Compare the lines array.
     if (layoutA.lines.length !== layoutB.lines.length) {
         return false;
     }
 
-    // Deep compare each line and its tspans.
     for (let i = 0; i < layoutA.lines.length; i++) {
         const lineA = layoutA.lines[i];
         const lineB = layoutB.lines[i];
@@ -1369,7 +1336,6 @@ export function compareLyricsLayouts(layoutA, layoutB) {
             const tspanA = lineA.tspans[j];
             const tspanB = lineA.tspans[j];
 
-            // Compare individual tspan properties.
             if (
                 tspanA.text !== tspanB.text ||
                 tspanA.type !== tspanB.type ||
@@ -1383,7 +1349,6 @@ export function compareLyricsLayouts(layoutA, layoutB) {
         }
     }
 
-    // If all checks have passed, the layouts are considered equal.
     return true;
 }
 

@@ -2,7 +2,7 @@
 
 import { state, updateState } from './state.js';
 import { DOM } from './dom.js';
-import { getNameForElementType, getIconForElementType, showConfirmationDialog, findVirtualElementById, getAllUsedAssets, serializeElement, deserializeElement } from './utils.js';
+import { getNameForElementType, getIconForElementType, findVirtualElementById, getAllUsedAssets, serializeElement, deserializeElement, duplicateAndRemap } from './utils.js';
 import { renderPropertiesPanel } from './propertiesPanel.js';
 import { renderEventsPanel } from './eventsPanel.js';
 import { updateTimelineAndEditorView, setPropertyAsDefaultValue, markAsDirty, rebuildAllEventTimelines, reprogramAllPageTransitions } from './events.js';
@@ -27,49 +27,11 @@ function duplicateLayer(elementToDuplicate) {
     // 1. Serialize the element and its children
     const serializedElement = serializeElement(elementToDuplicate);
 
-    // 2. Remap all IDs in the serialized tree
-    const idMap = new Map();
-    function remapIds(data) {
-        const oldId = data.id;
-        const newId = `ve-${generateUUID()}`;
-        idMap.set(oldId, newId);
-        data.id = newId;
-
-        // Remap children IDs
-        if (data.children) {
-            data.children.forEach(remapIds);
-        }
-
-        // Remap music elements order if it's a container that has this property
-        if (data.musicElementsOrder) {
-            data.musicElementsOrder = data.musicElementsOrder.map(oldElId => idMap.get(oldElId)).filter(Boolean);
-        }
-
-        // Remap content inside properties to ensure musical elements get new measure/note IDs
-        if (data.properties) {
-            // For Lyrics
-            if (data.properties.lyricsContent && data.properties.lyricsContent.measures) {
-                data.properties.lyricsContent.measures.forEach(measure => {
-                    measure.id = `measure-${generateUUID()}`;
-                    if (measure.content) {
-                        measure.content.forEach(note => {
-                            note.id = `note-${generateUUID()}`;
-                        });
-                    }
-                });
-            }
-            // For Orchestra
-            if (data.properties.orchestraContent && data.properties.orchestraContent.measures) {
-                data.properties.orchestraContent.measures.forEach(measure => {
-                    measure.id = `measure-${generateUUID()}`;
-                });
-            }
-        }
-    }
-    remapIds(serializedElement);
+    // 2. Use the robust remapping utility
+    const remappedElementData = duplicateAndRemap(serializedElement);
 
     // 3. Deserialize back into a new VirtualElement tree
-    const newElement = deserializeElement(serializedElement);
+    const newElement = deserializeElement(remappedElementData);
 
     // 4. Add the new element to the parent
     parent.addElementAt(newElement, originalIndex + 1);
@@ -297,4 +259,3 @@ export function initLayersPanelInteractions() {
         selectLayer(targetElement);
     });
 }
-

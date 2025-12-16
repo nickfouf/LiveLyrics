@@ -14,6 +14,7 @@ import { generateCSSGradient } from "../renderer/utils.js";
 import { markAsDirty } from './events.js';
 import { makeDraggable } from './draggable.js';
 
+// ... (Existing Cache and Helpers remain unchanged) ...
 // --- START: NEW CACHE AND STATE MANAGEMENT ---
 /**
  * A cache to store the detailed state of the events editor for each element.
@@ -53,6 +54,7 @@ const NOTE_DURATIONS = {
     w_note: 1.0, h_note: 0.5, q_note: 0.25, e_note: 0.125, s_note: 0.0625,
     w_note_dotted: 1.5, h_note_dotted: 0.75, q_note_dotted: 0.375, e_note_dotted: 0.1875,
 };
+// ... (PROP_KEY_TO_DATASET_MAP and Helper Functions remain unchanged) ...
 const PROP_KEY_TO_DATASET_MAP = {
     opacity: 'opacity', width: 'width', height: 'height', top: 'top', left: 'left', right: 'right', bottom: 'bottom',
     bgEnabled: 'bgEnabled',
@@ -522,7 +524,9 @@ const EASING_FUNCTIONS = {
     instant: t => (t < 1 ? 0 : 1),
 };
 
-// --- Inheritance and Value Calculation ---
+// ... (Rest of logic: getEffectivePropertyValue, getFormattedValuePreview, renderNoteEvents, renderMeasureContent) ...
+// ... (Truncated for brevity, logic remains identical until initEventsEditor/openEventsEditor) ...
+
 function getEffectivePropertyValue(noteId, propKey) {
     const propType = getPropertyType(propKey, eventsState.virtualElement);
 
@@ -620,9 +624,6 @@ function getEffectivePropertyValue(noteId, propKey) {
             return startKeyframe.value;
     }
 }
-
-
-// --- Rendering ---
 
 
 function getFormattedValuePreview(propKey, value, isOverridden) {
@@ -916,6 +917,7 @@ function renderMeasures() {
     });
 }
 
+// ... (Rest of UI handlers: updateDeleteButtonState, deselectNote, selectNote, deleteSelectedNote, clearDropIndicators, drag&drop, initEventsEditor) ...
 function updateDeleteButtonState() {
     if (deleteNoteBtn) deleteNoteBtn.disabled = eventsState.selectedNoteId === null;
 }
@@ -1277,30 +1279,31 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
         eventDataContent = initialData?.content || {};
     }
 
+    // 2. Get the structure of all measures in the song
+    const allSongMeasures = getSongMeasuresStructure();
+    const elementPage = findElementPage(element);
+    const elementPageIndex = state.song.pages.indexOf(elementPage);
+
     // --- FIX START ---
     // Handle legacy array format from loaded files
+    // This is critical: Legacy array format was indexed relative to globalMeasureOffset.
+    // If we have an array, we must convert it to a Map using ID lookup from allSongMeasures.
     if (Array.isArray(eventDataContent)) {
         const legacyArray = eventDataContent;
         eventDataContent = {}; // Convert to map
         
-        // Get the element's own measure structure to map array indices to IDs
-        const elementMeasures = getElementMeasuresStructure(element);
-        
-        // Map array content to measure IDs
-        elementMeasures.forEach((measureInfo, index) => {
-            if (legacyArray[index]) {
-                eventDataContent[measureInfo.id] = legacyArray[index];
+        legacyArray.forEach((content, index) => {
+            const targetMeasureIndex = globalMeasureOffset + index;
+            // Ensure we are within bounds of the current song structure
+            if (allSongMeasures[targetMeasureIndex]) {
+                const measureId = allSongMeasures[targetMeasureIndex].id;
+                eventDataContent[measureId] = content;
             }
         });
     }
     // --- FIX END ---
 
     const eventDataLookup = new Map(Object.entries(eventDataContent));
-
-    // 2. Get the structure of all measures in the song
-    const allSongMeasures = getSongMeasuresStructure();
-    const elementPage = findElementPage(element);
-    const elementPageIndex = state.song.pages.indexOf(elementPage);
 
     // 3. Construct the combined measure list for the editor
     const editorMeasures = allSongMeasures.map(measureStructure => {
@@ -1341,4 +1344,4 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
     eventsEditorDialog.addEventListener('transitionend', () => {
         renderEventConnectors();
     }, { once: true });
-}
+}

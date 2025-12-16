@@ -31,14 +31,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // Fetch system fonts and update state
-    try {
-        const fonts = await window.editorAPI.getSystemFonts();
-        updateState({ systemFonts: fonts });
-    } catch (error) {
-        console.error("Failed to load system fonts:", error);
-        updateState({ systemFonts: [] }); // Ensure it's an array on failure
-    }
+    // --- FIX: Fetch system fonts in background to prevent UI freeze on startup ---
+    // We removed 'await' here. The UI will load immediately, and fonts will
+    // be populated in the state whenever the Main process finishes scanning them.
+    window.editorAPI.getSystemFonts()
+        .then(fonts => {
+            updateState({ systemFonts: fonts });
+        })
+        .catch(error => {
+            console.error("Failed to load system fonts:", error);
+            updateState({ systemFonts: [] });
+        });
 
     // Initialize all UI modules and dialogs
     const highlightManager = new HighlightManager();
@@ -98,4 +101,4 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
     if (DOM.slideViewportWrapper) slideObserver.observe(DOM.slideViewportWrapper);
-});
+});

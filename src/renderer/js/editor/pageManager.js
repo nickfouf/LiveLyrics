@@ -7,7 +7,7 @@ import { updateTimelineAndEditorView, rebuildAllEventTimelines, reprogramAllPage
 import { renderLayersPanel } from "./layersPanel.js";
 import { renderPropertiesPanel } from "./propertiesPanel.js";
 import { renderEventsPanel } from "./eventsPanel.js";
-import { buildMeasureMap, pageHasMeasures, findVirtualElementById, serializeElement, deserializeElement, buildLyricsTimingMap } from './utils.js';
+import { buildMeasureMap, pageHasMeasures, findVirtualElementById, serializeElement, deserializeElement, buildLyricsTimingMap, duplicateAndRemap } from './utils.js';
 import { updateEmptyPageHintVisibility } from './rendering.js';
 import { generateUUID } from '../renderer/utils.js';
 
@@ -310,40 +310,25 @@ function deletePage(pageToDelete) {
  * @param {VirtualPage} pageToDuplicate The page to copy.
  */
 function duplicatePage(pageToDuplicate) {
+    // 1. Serialize
     const serializedPage = serializeElement(pageToDuplicate);
 
-    const idMap = new Map();
+    // 2. Deep Remap
+    // This ensures that if the page contains both an Orchestra and Lyrics element that references it,
+    // the new Lyrics element will reference the *new* Orchestra element, maintaining the link within the new page.
+    const remappedPageData = duplicateAndRemap(serializedPage);
 
-    // Recursively create new IDs for the duplicated element and all its children.
-    function remapIds(data) {
-        const oldId = data.id;
-        const newId = `ve-${generateUUID()}`;
-        idMap.set(oldId, newId);
-        data.id = newId;
+    // 3. Deserialize
+    const newPage = deserializeElement(remappedPageData);
 
-        // Remap children IDs
-        if (data.children) {
-            data.children.forEach(remapIds);
-        }
-
-        // Remap music elements order if it's a page
-        if (data.type === 'page' && data.musicElementsOrder) {
-            data.musicElementsOrder = data.musicElementsOrder.map(oldElId => idMap.get(oldElId)).filter(Boolean);
-        }
-    }
-
-    remapIds(serializedPage);
-
-    const newPage = deserializeElement(serializedPage);
-
-    // Insert the new page into the song's page array
+    // 4. Insert the new page into the song's page array
     const indexToInsert = state.song.pages.indexOf(pageToDuplicate) + 1;
     state.song.pages.splice(indexToInsert, 0, newPage);
 
     updateState({ song: { ...state.song } });
     markAsDirty();
 
-    // Rebuild timelines and jump to the new page
+    // 5. Rebuild timelines and jump to the new page
     rebuildAllEventTimelines();
     reprogramAllPageTransitions();
     jumpToPage(newPage);
@@ -516,4 +501,4 @@ function handlePageDrop(e) {
     updateTimelineAndEditorView();
 }
 
-export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };
+export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };

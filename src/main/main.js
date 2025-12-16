@@ -49,6 +49,33 @@ let displayLatencies = new Map();
 let playbackManager;
 let connectionManager = null;
 
+// --- ADDED: Robust File Deletion Helper ---
+/**
+ * Attempts to remove a directory or file. If EBUSY/EPERM/EACCES/ENOTEMPTY errors occur,
+ * it retries a few times with a delay before giving up.
+ */
+async function safeRm(targetPath, retries = 5, delay = 200) {
+    if (!fs.existsSync(targetPath)) return;
+
+    for (let i = 0; i < retries; i++) {
+        try {
+            await fs.promises.rm(targetPath, { recursive: true, force: true });
+            return; // Success
+        } catch (err) {
+            // Check for common locking error codes
+            const isLocked = err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'ENOTEMPTY' || err.code === 'EACCES';
+            
+            if (isLocked && i < retries - 1) {
+                console.warn(`[Main] safeRm: File busy/locked at ${targetPath} (${err.code}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error(`[Main] safeRm failed to delete ${targetPath} after ${i + 1} attempts. Last error:`, err);
+                throw err; // Propagate error if retries exhausted or unknown error
+            }
+        }
+    }
+}
+
 /**
  * Compares two semantic version strings.
  * @param {string} v1 - The first version string (e.g., "1.2.0").
@@ -288,7 +315,7 @@ function createAudienceWindow(display) {
             // If a song is loaded/playing/paused, send the state to the new window.
             if (syncState.status !== 'unloaded') {
                 console.log(`[Main] Syncing new audience window on display ${display.id}.`);
-                // Send the state on the SAME unified channel all windows use.
+                // Send the state on the SAME unified unified channel all windows use.
                 // MODIFIED: The broadcast function now handles adding latency, so we call it directly.
                 const latency = displayLatencies.get(display.id) || 0;
                 const stateForWindow = { ...syncState, latency };
@@ -832,7 +859,7 @@ function generateFileChecksum(filePath) {
 
 ipcMain.handle('project:init-temp-folder', async () => {
     try {
-        await fs.promises.rm(projectTempPath, { recursive: true, force: true });
+        await safeRm(projectTempPath); // Use safeRm
         await fs.promises.mkdir(assetsTempPath, { recursive: true });
         return true;
     } catch (error) {
@@ -1005,6 +1032,14 @@ async function saveProject(filePath, { songData, usedAssets }) {
 
     return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(filePath);
+        
+        // --- FIX: Add error listener for the write stream ---
+        // This catches 'EBUSY' and 'EPERM' if the file is locked, preventing the app from crashing.
+        output.on('error', (err) => {
+            console.error(`[Main] Write stream error for ${filePath}:`, err);
+            reject(err);
+        });
+
         const archive = archiver('zip', { zlib: { level: 9 } });
 
         output.on('close', () => {
@@ -1053,7 +1088,7 @@ ipcMain.handle('dialog:showSaveAsDialog', async (event, options) => {
 
 ipcMain.handle('project:open', async (event, filePath) => {
     try {
-        await fs.promises.rm(projectTempPath, { recursive: true, force: true });
+        await safeRm(projectTempPath); // Use safeRm
         await fs.promises.mkdir(projectTempPath, { recursive: true });
 
         await extract(filePath, { dir: projectTempPath });
@@ -1310,4 +1345,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

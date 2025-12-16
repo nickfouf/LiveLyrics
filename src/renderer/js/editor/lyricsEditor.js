@@ -10,7 +10,6 @@ import { jumpToPage } from "./pageManager.js";
 import {updateTimelineAndEditorView, rebuildAllEventTimelines, reprogramAllPageTransitions, markAsDirty} from './events.js';
 import { makeDraggable } from './draggable.js';
 
-// --- Constants and Helpers ---
 const NOTE_DURATIONS = {
     w_note: 1.0,
     h_note: 0.5,
@@ -83,7 +82,6 @@ function findNoteById(noteId) {
 
 
 // --- Rendering and State Update Functions ---
-
 function updateDeleteButtonState() {
     if (deleteNoteBtn) {
         deleteNoteBtn.disabled = lyricsState.selectedNoteId === null;
@@ -160,9 +158,6 @@ function renderMeasures() {
         globalMeasureCounter++;
     });
 }
-
-
-// --- Note Selection and Deletion ---
 
 function deselectNote() {
     if (lyricsState.selectedNoteId) {
@@ -260,9 +255,6 @@ function duplicateMeasure(index) {
     lyricsState.measures.splice(index + 1, 0, newMeasure);
     renderMeasures();
 }
-
-
-// --- Text Editing Logic ---
 
 function stopEditingNoteText(saveChanges = true) {
     if (!currentlyEditingInput || !document.body.contains(currentlyEditingInput)) {
@@ -458,9 +450,6 @@ function startEditingNoteText(textElement) {
     });
 }
 
-
-// --- Drag and Drop Event Handlers ---
-
 function handleNoteDragStart(e) {
     const toolBtn = e.target.closest('.tool-btn');
     if (!toolBtn || toolBtn.disabled) {
@@ -528,9 +517,6 @@ function clearDropIndicators() {
     document.querySelectorAll('.note-element.drop-indicator-before, .note-element.drop-indicator-after').forEach(el => el.classList.remove('drop-indicator-before', 'drop-indicator-after'));
     document.querySelectorAll('.measure-box.drag-over-left, .measure-box.drag-over-right').forEach(el => el.classList.remove('drag-over-left', 'drag-over-right'));
 }
-
-
-// --- Dialog Management ---
 
 function handleAddMeasure() {
     addMeasureDialog.classList.add('visible');
@@ -759,6 +745,7 @@ export function initLyricsEditor() {
         }
         lyricsEditorDialog.classList.remove('visible');
     });
+    
     document.getElementById('le-cancel-btn').addEventListener('click', () => {
         lyricsEditorDialog.classList.remove('visible');
     });
@@ -952,6 +939,35 @@ export function initLyricsEditor() {
     });
 }
 
+function buildEditorMeasure(measureStructure, ownMeasuresContent, foreignContent) {
+    let content = [];
+    
+    // 1. Check if this is one of our own measures
+    if (ownMeasuresContent.has(measureStructure.id)) {
+        content = ownMeasuresContent.get(measureStructure.id);
+    } 
+    // 2. Check if we have foreign content mapped to this measure ID (Suffixed ID)
+    else if (foreignContent[measureStructure.id]) {
+        content = foreignContent[measureStructure.id];
+    }
+    // 3. Fallback: Check if foreign content is mapped using the Base ID (Legacy data support)
+    else {
+        // Remove suffix like -0, -1
+        const baseId = measureStructure.id.replace(/-\d+$/, '');
+        if (foreignContent[baseId]) {
+            content = foreignContent[baseId];
+        }
+    }
+
+    return {
+        ...measureStructure,
+        content: content.map(note => ({
+            ...note,
+            id: note.id || `note-${generateUUID()}`
+        }))
+    };
+}
+
 export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     let parsedData = {};
     try {
@@ -965,32 +981,22 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     const ownMeasuresContent = new Map((parsedData.measures || []).map(m => [m.id, m.content]));
     // Map of foreign measures: MeasureID -> Content
     const foreignContent = parsedData.foreignContent || {};
+    
+    // NOTE: We no longer prioritize savedOrder for list construction.
+    // The editor list order will now strictly follow the song's structural order.
 
     const element = state.selectedElement;
     const elementPage = findElementPage(element);
     const elementPageIndex = state.song.pages.indexOf(elementPage);
 
     const allSongMeasures = getSongMeasuresStructure();
+    
+    const editorMeasures = [];
 
-    const editorMeasures = allSongMeasures.map(measureStructure => {
-        let content = [];
-        
-        // 1. Check if this is one of our own measures
-        if (ownMeasuresContent.has(measureStructure.id)) {
-            content = ownMeasuresContent.get(measureStructure.id);
-        } 
-        // 2. Check if we have foreign content mapped to this measure ID
-        else if (foreignContent[measureStructure.id]) {
-            content = foreignContent[measureStructure.id];
-        }
-
-        return {
-            ...measureStructure,
-            content: content.map(note => ({
-                ...note,
-                id: note.id || `note-${generateUUID()}`
-            }))
-        };
+    // Construct the editor list directly from the song structure to ensure
+    // measures appear in their correct, chronological positions (including gaps).
+    allSongMeasures.forEach(measureStructure => {
+        editorMeasures.push(buildEditorMeasure(measureStructure, ownMeasuresContent, foreignContent));
     });
 
     lyricsState = {
@@ -1012,4 +1018,3 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     updateDeleteButtonState();
     lyricsEditorDialog.classList.add('visible');
 }
-
