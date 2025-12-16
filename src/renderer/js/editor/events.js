@@ -1151,6 +1151,7 @@ function serializeSong() {
         title: state.song.title,
         bpm: state.song.bpm,
         bpmUnit: state.song.bpmUnit,
+        fonts: state.song.fonts || {},
         thumbnailPage: serializeElement(state.song.thumbnailPage),
         pages: state.song.pages.map(page => serializeElement(page))
     };
@@ -1482,4 +1483,4 @@ export function setupEventListeners() {
         }
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
-}
+}

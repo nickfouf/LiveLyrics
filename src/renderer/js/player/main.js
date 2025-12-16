@@ -9,15 +9,16 @@ import { initConfirmationDialog, showConfirmationDialog } from './confirmationDi
 import { initLoadingDialog } from '../editor/loadingDialog.js';
 import { applyViewportScaling } from '../editor/rendering.js';
 import { makeDraggable } from '../editor/draggable.js';
+import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
 
 // --- REWRITTEN: Device Controller Logic ---
 
 // State
 let discoverableDevices = new Map();
-let connectingDeviceId = null; // MODIFIED: Tracks the device ID currently being paired.
+let connectingDeviceId = null; 
 let pendingPairingDeviceId = null;
 let connectedDevice = null;
-let isManualDisconnect = false; // ADDED: Flag to track user-initiated disconnects
+let isManualDisconnect = false; 
 
 function sendMessageToMain(type, payload) {
     switch(type) {
@@ -80,11 +81,8 @@ function renderDeviceList() {
     });
 }
 
-// NEW: Function to render the RTT list.
 function renderRttList(stats = []) {
     if (!DOM.deviceRttList) return;
-
-    // Sort by IP address for a consistent order
     stats.sort((a, b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
 
     if (stats.length === 0) {
@@ -92,7 +90,7 @@ function renderRttList(stats = []) {
         return;
     }
 
-    DOM.deviceRttList.innerHTML = ''; // Clear previous entries
+    DOM.deviceRttList.innerHTML = ''; 
     stats.forEach(stat => {
         const statElement = document.createElement('div');
         const avgText = stat.avg > 0 ? `${stat.avg.toFixed(1)}ms` : '---';
@@ -141,31 +139,26 @@ function updateDeviceStatusUI(status, device = null) {
         DOM.deviceNameValue.textContent = 'Not Connected';
         DOM.disconnectDeviceBtn.classList.add('noneDisplay');
         DOM.openDeviceListBtn.textContent = 'Open Device List';
-        renderRttList([]); // Clear RTT on disconnect
+        renderRttList([]); 
     }
 }
 
-// ADDED: Centralized function to handle the UI and state transition to disconnected.
 function handleDisconnectionUI() {
     connectingDeviceId = null;
-    isManualDisconnect = false; // Reset the flag here, as this is the final state.
+    isManualDisconnect = false; 
     updateDeviceStatusUI('offline');
     if (DOM.deviceListDialog.classList.contains('visible')) {
         renderDeviceList();
     }
-    // ADDED: Also hide the pairing dialog if it was open.
     if (DOM.pairingDialog.classList.contains('visible')) {
         hidePairingDialog();
     }
 }
 
 function initDeviceController() {
-    // Initial state
     updateDeviceStatusUI('searching');
-    
     makeDraggable('device-list-dialog');
 
-    // Listeners for UI actions
     DOM.openDeviceListBtn.addEventListener('click', showDeviceListDialog);
     DOM.disconnectDeviceBtn.addEventListener('click', async () => {
         if (!connectedDevice) return;
@@ -174,7 +167,7 @@ function initDeviceController() {
             'Confirm Disconnect'
         );
         if (confirmed) {
-            isManualDisconnect = true; // MODIFIED: Set flag before sending command
+            isManualDisconnect = true; 
             sendMessageToMain('disconnectDevice');
         }
     });
@@ -183,7 +176,6 @@ function initDeviceController() {
         if (e.target === DOM.deviceListDialog) hideDeviceListDialog();
     });
 
-    // Event delegation for pair/unpair buttons
     DOM.deviceList.addEventListener('click', async (e) => {
         const actionButton = e.target.closest('.pair-btn');
         const deviceItem = e.target.closest('.device-list-item');
@@ -193,9 +185,9 @@ function initDeviceController() {
         const action = actionButton.dataset.action;
 
         if (action === 'pair') {
-            if (connectingDeviceId) return; // Prevent multiple pairing attempts at once
+            if (connectingDeviceId) return; 
             connectingDeviceId = deviceId;
-            renderDeviceList(); // Re-render to show the "Cancel" button
+            renderDeviceList(); 
             sendMessageToMain('initiatePairing', { deviceId });
         } else if (action === 'unpair') {
             const confirmed = await showConfirmationDialog(
@@ -203,16 +195,14 @@ function initDeviceController() {
                 'Confirm Disconnect'
             );
             if (confirmed) {
-                isManualDisconnect = true; // MODIFIED: Set flag before sending command
+                isManualDisconnect = true; 
                 sendMessageToMain('disconnectDevice');
             }
         } else if (action === 'cancel') {
             sendMessageToMain('cancelPairing', { deviceId });
-            // The onDisconnect event triggered by the cancellation will handle resetting the UI.
         }
     });
 
-    // Pairing dialog buttons
     DOM.acceptPairBtn.addEventListener('click', () => {
         if (pendingPairingDeviceId) {
             sendMessageToMain('respondToPairingRequest', { deviceId: pendingPairingDeviceId, accepted: true });
@@ -226,7 +216,6 @@ function initDeviceController() {
         }
     });
 
-    // Listeners for events from Main process
     window.playerAPI.onDeviceUpdate((devices) => {
         discoverableDevices.clear();
         devices.forEach(d => discoverableDevices.set(d.deviceId, d));
@@ -242,7 +231,6 @@ function initDeviceController() {
         }
     });
 
-    // NEW: Listen for RTT updates from the main process.
     window.playerAPI.onRttUpdate((stats) => {
         renderRttList(stats);
     });
@@ -253,20 +241,19 @@ function initDeviceController() {
 
     window.playerAPI.onConnectionSuccess((device) => {
         connectingDeviceId = null;
-        isManualDisconnect = false; // MODIFIED: Reset flag on successful connection
+        isManualDisconnect = false; 
         hideDeviceListDialog();
         updateDeviceStatusUI('connected', device);
     });
 
     window.playerAPI.onDisconnect((payload) => {
-        connectingDeviceId = null; // Always reset on disconnect
-        // MODIFIED: Check the flag to prevent showing a dialog on manual disconnect.
+        connectingDeviceId = null; 
         if (isManualDisconnect) {
             handleDisconnectionUI();
             return;
         }
 
-        handleDisconnectionUI(); // Still update the UI to offline
+        handleDisconnectionUI(); 
         if (payload) {
             if (payload.reason === 'remote') {
                 showAlertDialog('Device Disconnected', 'The other device has disconnected.');
@@ -276,10 +263,7 @@ function initDeviceController() {
         }
     });
 
-    // REVISED: This is the critical fix. The UI will no longer assume every
-    // error means a disconnection.
     window.playerAPI.onError((message) => {
-        // Errors related to the pairing process are fatal and should reset the UI.
         const isPairingError = message && (
             message.toLowerCase().includes('pairing') ||
             message.toLowerCase().includes('rejected') ||
@@ -288,30 +272,18 @@ function initDeviceController() {
 
         if (isPairingError) {
             console.warn(`[Device Controller] Pairing process failed or was canceled: ${message}`);
-            // Reset the pairing attempt state and UI to disconnected.
             connectingDeviceId = null;
             handleDisconnectionUI();
-            // Show a user-friendly message for these specific failures.
             showAlertDialog('Pairing Failed', message);
             return;
         }
-
-        // For all other errors (like a temporary keep-alive timeout on one of multiple
-        // network paths), we should NOT change the UI state to disconnected. The main
-        // process is the source of truth for the connection status and will send a
-        // dedicated 'onDisconnect' event if the device is truly lost. We just log
-        // these non-fatal errors for debugging.
         console.error(`[Device Controller] Received a non-fatal error from the main process: ${message}`);
     });
 
-    // Tell main process we are ready
     window.playerAPI.readyForDevices();
 }
-// --- End Device Controller Logic ---
 
-// --- NEW Panel Collapse/Expand Logic ---
 function setupPanels() {
-    // Left Panel: Songs Manager
     DOM.songsManagerPanelHeader.addEventListener('click', () => {
         DOM.songsManagerPanel.classList.toggle('collapsed');
         DOM.songsManagerPanelHandle.classList.toggle('visible');
@@ -321,7 +293,6 @@ function setupPanels() {
         DOM.songsManagerPanelHandle.classList.remove('visible');
     });
 
-    // Right Panel: Configuration
     DOM.configurationPanelHeader.addEventListener('click', () => {
         DOM.configurationPanel.classList.toggle('collapsed');
         DOM.configurationPanelHandle.classList.toggle('visible');
@@ -334,22 +305,15 @@ function setupPanels() {
 
 // --- REVISED: Display Settings Logic ---
 
-let lastDisplayInfo = null; // Cache for UI updates
-let viewedDisplayId = null; // Which monitor's details are being viewed.
-let monitorLatencies = new Map(); // Store latency per display ID
+let lastDisplayInfo = null; 
+let viewedDisplayId = null; 
+let monitorLatencies = new Map(); 
 
-/**
- * REVISED: Renders monitor tabs and their corresponding option panels.
- * @param {object} displayInfo - The display info object from the main process.
- * @param {Electron.Display[]} displayInfo.allDisplays - An array of all display objects.
- * @param {Electron.Display} displayInfo.presenterDisplay - The display the player window is currently on.
- */
 function renderDisplayTabs({ allDisplays, presenterDisplay }) {
     const tabsContainer = DOM.presenterMonitorTabs;
     const optionsContainer = document.getElementById('monitor-options-container');
     if (!tabsContainer || !optionsContainer) return;
 
-    // If no display is being viewed, or the viewed one was removed, default to the presenter display.
     if (viewedDisplayId === null || !allDisplays.some(d => d.id === viewedDisplayId)) {
         viewedDisplayId = presenterDisplay.id;
     }
@@ -361,30 +325,26 @@ function renderDisplayTabs({ allDisplays, presenterDisplay }) {
         const isPresenter = display.id === presenterDisplay.id;
         const isBeingViewed = display.id === viewedDisplayId;
 
-        // 1. Create the tab button
         const displayBtn = document.createElement('button');
         displayBtn.className = 'tab-btn';
         displayBtn.textContent = display.label || `Display ${display.id}`;
         displayBtn.title = `${display.size.width}x${display.size.height}`;
         displayBtn.dataset.displayId = display.id;
 
-        // Apply class for presenter (underline)
         if (isPresenter) {
             displayBtn.classList.add('presenter');
         }
 
-        // Apply class for the currently selected/viewed tab (blue background)
         if (isBeingViewed) {
             displayBtn.classList.add('active');
         }
         tabsContainer.appendChild(displayBtn);
 
-        // 2. Create the options panel for this monitor
         const optionsPanel = document.createElement('div');
         optionsPanel.className = 'monitor-options';
         optionsPanel.dataset.displayId = display.id;
         if (isBeingViewed) {
-            optionsPanel.classList.add('active'); // This class makes it visible (display: flex)
+            optionsPanel.classList.add('active'); 
         }
 
         const role = isPresenter ? 'Presenter' : 'Audience';
@@ -414,38 +374,30 @@ function renderDisplayTabs({ allDisplays, presenterDisplay }) {
     });
 }
 
-
-/**
- * REVISED: Sets up event listeners for the new display settings UI.
- */
 function initDisplaySettings() {
     const tabsContainer = DOM.presenterMonitorTabs;
     const optionsContainer = document.getElementById('monitor-options-container');
     if (!tabsContainer || !optionsContainer) return;
 
-    // Listen for display changes from the main process.
     window.playerAPI.onDisplaysChanged((displayInfo) => {
         console.log('Displays changed, updating UI.', displayInfo);
-        lastDisplayInfo = displayInfo; // Cache the latest info
+        lastDisplayInfo = displayInfo; 
         renderDisplayTabs(displayInfo);
     });
 
-    // Event listener for clicking on tabs
     tabsContainer.addEventListener('click', (e) => {
         const tabTarget = e.target.closest('.tab-btn');
         if (tabTarget) {
             const displayId = Number(tabTarget.dataset.displayId);
-            if (displayId === viewedDisplayId) return; // Already viewing this one.
+            if (displayId === viewedDisplayId) return; 
 
             viewedDisplayId = displayId;
-            // Re-render with the cached data to update which options panel is visible.
             if (lastDisplayInfo) {
                 renderDisplayTabs(lastDisplayInfo);
             }
         }
     });
 
-    // Event listener for actions inside the options panels
     optionsContainer.addEventListener('click', (e) => {
         const buttonTarget = e.target.closest('.make-presenter-btn');
         if (buttonTarget) {
@@ -466,23 +418,16 @@ function initDisplaySettings() {
     });
 }
 
-
-// --- NEW Configuration Panel Logic ---
 function initConfigurationPanel() {
-    // 1. Display Settings
     initDisplaySettings();
 
-    // 2. Audio Settings: Output Device
     DOM.audioOutputDeviceSelect.addEventListener('change', (e) => {
-        // TODO: Add logic to change audio output device
         console.log(`Audio output device changed to: ${e.target.value}`);
     });
 
-    // 3. Audio Settings: Volume Slider
     DOM.audioVolumeSlider.addEventListener('input', (e) => {
         const volume = e.target.value;
         DOM.volumeLevelDisplay.textContent = `${volume}%`;
-        // TODO: Add logic to change system volume
     });
 }
 
@@ -510,16 +455,12 @@ function setupPlayerBPMControls() {
 
         if (isNaN(newBpm) || newBpm <= 0 || !state.song) return;
 
-        // Send a single command to the main process. The main process will handle
-        // creating the timestamped event and broadcasting it to all windows.
         const timestamp = performance.timeOrigin + performance.now();
         window.playerAPI.updateBpm(newBpm, newBpmUnit, timestamp);
     };
 
-    // --- BPM Input Listener ---
     bpmValueInput.addEventListener('change', handleBPMChange);
 
-    // --- Custom Select Logic ---
     document.addEventListener('click', (e) => {
         if (!customSelect.contains(e.target)) {
             items.classList.add('select-hide');
@@ -527,7 +468,7 @@ function setupPlayerBPMControls() {
     });
 
     selected.addEventListener('click', (e) => {
-        if (selected.getAttribute('tabindex') === '-1') return; // Disabled
+        if (selected.getAttribute('tabindex') === '-1') return; 
         e.stopPropagation();
         items.classList.toggle('select-hide');
     });
@@ -545,57 +486,55 @@ function setupPlayerBPMControls() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Initialize DOM references and Title Bar controls
     initDOM();
     setupTitleBar();
 
-    // 2. Initialize UI Modules (Dialogs)
     initAlertDialog();
     initConfirmationDialog();
     initLoadingDialog();
     setupPanels();
 
-    // ADDED: Back to main menu button
     const backToMainMenuBtn = document.getElementById('player-back-to-main-menu-btn');
     if (backToMainMenuBtn) {
         backToMainMenuBtn.addEventListener('click', async () => {
-            // Check if there are songs in the playlist
             if (songPlaylist.length > 0) {
                 const confirmed = await showConfirmationDialog(
                     'Are you sure you want to return to the main menu? The current playlist will be cleared.',
                     'Return to Menu'
                 );
                 if (!confirmed) {
-                    return; // User clicked "No", so do nothing.
+                    return; 
                 }
             }
-            // When going back from player, we should tell the main process to pause playback
-            // so audience windows don't keep playing.
             const timestamp = performance.timeOrigin + performance.now();
             window.playerAPI.pause({ timestamp });
             window.playerAPI.goToMainMenu();
         });
     }
 
-    // --- UNIFIED IPC Listener ---
-    // All playback logic is now handled by this single function.
     window.playerAPI.onPlaybackUpdate((newState) => {
         console.log('Player received playback update:', newState);
+        // ADDED: Load fonts if song changes or initial load
+        if (newState.song && newState.song.fonts) {
+             // Only load if different from current to avoid unnecessary re-renders?
+             // FontLoader handles duplicates gracefully, so we can just call it.
+             fontLoader.loadFonts(newState.song.fonts);
+        } else if (newState.status === 'unloaded') {
+             fontLoader.clear();
+        }
+        
         handlePlaybackUpdate(newState);
     });
 
-    // --- ADDED: Listen for file open requests from the main process ---
     window.playerAPI.onFileOpen(async (filePath) => {
         console.log(`Player received file to open via IPC: ${filePath}`);
         await addSongFromPath(filePath);
     });
 
-    // 3. Initialize Core Rendering Managers
     const domManager = new DomManager(DOM.pageContainer);
     const timelineManager = new TimelineManager();
     timelineManager.setDomManager(domManager);
 
-    // 4. Update the global state with these managers
     updateState({
         domManager,
         timelineManager,
@@ -603,17 +542,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         presenter: { isOpen: false },
     });
 
-    // 5. Initialize Player-Specific UI Modules
     initSongsManager();
     initPlayerPlayback();
     setupPlayerBPMControls();
     initDeviceController();
     initConfigurationPanel();
 
-    // 6. Show the default view initially
     handlePlaybackUpdate({ status: 'unloaded' });
 
-    // 7. Setup Resize Observer for the player viewport
     const slideObserver = new ResizeObserver((entries) => {
         if (!entries || !entries.length) return;
         applyViewportScaling(entries[0].target);
@@ -640,4 +576,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log("Player UI Initialized");
 });
-

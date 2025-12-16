@@ -77,6 +77,120 @@ async function safeRm(targetPath, retries = 5, delay = 200) {
 }
 
 /**
+ * Safely and recursively find a font file by family name
+ * - Prevents symlink loops
+ * - Avoids revisiting directories
+ * - Handles deep / large trees
+ */
+async function findFontFile(fontFamily) {
+    const fontDirs = [];
+
+    if (process.platform === 'win32') {
+        if (process.env.WINDIR) {
+            fontDirs.push(path.join(process.env.WINDIR, 'Fonts'));
+        }
+        if (process.env.LOCALAPPDATA) {
+            fontDirs.push(path.join(
+                process.env.LOCALAPPDATA,
+                'Microsoft',
+                'Windows',
+                'Fonts'
+            ));
+        }
+    } else if (process.platform === 'darwin') {
+        fontDirs.push(
+            path.join(os.homedir(), 'Library/Fonts'),
+            '/Library/Fonts',
+            '/System/Library/Fonts',
+            '/System/Library/Fonts/Supplemental'
+        );
+    } else { // Linux / Unix
+        fontDirs.push(
+            path.join(os.homedir(), '.local/share/fonts'),
+            path.join(os.homedir(), '.fonts'),
+            '/usr/share/fonts',
+            '/usr/local/share/fonts'
+        );
+    }
+
+    const extensions = new Set(['.ttf', '.otf', '.ttc', '.woff', '.woff2']);
+    const target = normalize(fontFamily);
+
+    const matches = [];
+    const visited = new Set();
+
+    for (const dir of fontDirs) {
+        if (!dir || !fs.existsSync(dir)) continue;
+        await walk(dir);
+    }
+
+    if (matches.length === 0) return null;
+
+    matches.sort((a, b) => rank(a, target) - rank(b, target));
+    return matches[0];
+
+    /* ------------ helpers ------------ */
+
+    async function walk(dir) {
+        let realPath;
+        try {
+            realPath = await fs.promises.realpath(dir);
+        } catch {
+            return;
+        }
+
+        if (visited.has(realPath)) return;
+        visited.add(realPath);
+
+        let entries;
+        try {
+            entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                if (!entry.isSymbolicLink()) {
+                    await walk(fullPath);
+                }
+            } else {
+                const ext = path.extname(entry.name).toLowerCase();
+                if (!extensions.has(ext)) continue;
+
+                const name = normalize(entry.name);
+                if (name.includes(target)) {
+                    matches.push(fullPath);
+                }
+            }
+        }
+    }
+}
+
+/* ------------ utility functions ------------ */
+
+function normalize(str) {
+    return str.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function rank(filePath, target) {
+    const name = normalize(path.basename(filePath));
+
+    let score = 0;
+
+    if (name.startsWith(target)) score -= 20;
+    if (name.includes('regular')) score -= 10;
+
+    if (name.includes('bold')) score += 5;
+    if (name.includes('italic') || name.includes('oblique')) score += 5;
+    if (name.includes('condensed')) score += 2;
+
+    return score;
+}
+
+/**
  * Compares two semantic version strings.
  * @param {string} v1 - The first version string (e.g., "1.2.0").
  * @param {string} v2 - The second version string (e.g., "1.10.0").
@@ -890,78 +1004,111 @@ ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
     return null;
 });
 
-ipcMain.handle('project:addAsset', async (event, originalPath) => {
+/**
+ * Shared logic to process and copy an asset to the project temp folder.
+ * @param {string} originalPath The absolute path to the asset.
+ * @returns {Promise<{filePath: string, alias: string, content?: string}>}
+ */
+async function processAssetAddition(originalPath) {
     if (!originalPath || !fs.existsSync(originalPath)) {
         throw new Error('File does not exist at the provided path.');
     }
 
-    try {
-        // Ensure the target directory exists before proceeding.
-        await fs.promises.mkdir(assetsTempPath, { recursive: true });
+    // Ensure the target directory exists before proceeding.
+    await fs.promises.mkdir(assetsTempPath, { recursive: true });
 
-        const checksum = await generateFileChecksum(originalPath);
-        const extension = path.extname(originalPath);
-        const newFileName = `${checksum}${extension}`;
-        const destPath = path.join(assetsTempPath, newFileName);
+    const checksum = await generateFileChecksum(originalPath);
+    const extension = path.extname(originalPath);
+    const newFileName = `${checksum}${extension}`;
+    const destPath = path.join(assetsTempPath, newFileName);
 
-        if (fs.existsSync(destPath)) {
-            console.log(`[Main] Asset already exists, skipping copy: ${newFileName}`);
+    if (fs.existsSync(destPath)) {
+        console.log(`[Main] Asset already exists, skipping copy: ${newFileName}`);
+        const finalUrl = url.format({ pathname: destPath, protocol: 'file:', slashes: true });
+        const alias = path.basename(originalPath);
+
+        if (extension.toLowerCase() === '.json') {
+            const content = await fs.promises.readFile(originalPath, 'utf-8');
+            return { filePath: finalUrl, content, alias };
+        }
+        return { filePath: finalUrl, alias };
+    }
+
+    console.log(`[Main] Copying new asset: ${originalPath} -> ${newFileName}`);
+    return new Promise((resolve, reject) => {
+        const readStream = fs.createReadStream(originalPath);
+        const writeStream = fs.createWriteStream(destPath);
+
+        const cleanup = () => {
+            currentCopyOperation.cancel = () => {};
+            readStream.destroy();
+            writeStream.destroy();
+        };
+
+        const cancel = () => {
+            cleanup();
+            fs.unlink(destPath, (err) => {
+                if (err && err.code !== 'ENOENT') console.warn(`Could not clean up partially copied file: ${destPath}`);
+                reject(new Error('Copy operation was canceled.'));
+            });
+        };
+
+        currentCopyOperation.cancel = cancel;
+
+        readStream.on('error', (err) => { cleanup(); reject(err); });
+        writeStream.on('error', (err) => { cleanup(); reject(err); });
+
+        writeStream.on('finish', async () => {
+            cleanup();
             const finalUrl = url.format({ pathname: destPath, protocol: 'file:', slashes: true });
             const alias = path.basename(originalPath);
 
             if (extension.toLowerCase() === '.json') {
-                const content = await fs.promises.readFile(originalPath, 'utf-8');
-                return { filePath: finalUrl, content, alias };
-            }
-            return { filePath: finalUrl, alias };
-        }
-
-        console.log(`[Main] Copying new asset: ${originalPath} -> ${newFileName}`);
-        return new Promise((resolve, reject) => {
-            const readStream = fs.createReadStream(originalPath);
-            const writeStream = fs.createWriteStream(destPath);
-
-            const cleanup = () => {
-                currentCopyOperation.cancel = () => {};
-                readStream.destroy();
-                writeStream.destroy();
-            };
-
-            const cancel = () => {
-                cleanup();
-                fs.unlink(destPath, (err) => {
-                    if (err && err.code !== 'ENOENT') console.warn(`Could not clean up partially copied file: ${destPath}`);
-                    reject(new Error('Copy operation was canceled.'));
-                });
-            };
-
-            currentCopyOperation.cancel = cancel;
-
-            readStream.on('error', (err) => { cleanup(); reject(err); });
-            writeStream.on('error', (err) => { cleanup(); reject(err); });
-
-            writeStream.on('finish', async () => {
-                cleanup();
-                const finalUrl = url.format({ pathname: destPath, protocol: 'file:', slashes: true });
-                const alias = path.basename(originalPath);
-
-                if (extension.toLowerCase() === '.json') {
-                    try {
-                        const content = await fs.promises.readFile(originalPath, 'utf-8');
-                        resolve({ filePath: finalUrl, content, alias });
-                    } catch (readErr) {
-                        reject(readErr);
-                    }
-                } else {
-                    resolve({ filePath: finalUrl, alias });
+                try {
+                    const content = await fs.promises.readFile(originalPath, 'utf-8');
+                    resolve({ filePath: finalUrl, content, alias });
+                } catch (readErr) {
+                    reject(readErr);
                 }
-            });
-
-            readStream.pipe(writeStream);
+            } else {
+                resolve({ filePath: finalUrl, alias });
+            }
         });
 
+        readStream.pipe(writeStream);
+    });
+}
+
+ipcMain.handle('project:addAsset', async (event, originalPath) => {
+    try {
+        return await processAssetAddition(originalPath);
     } catch (error) {
         console.error(`[Main] Failed to add asset: ${error}`);
+        throw error;
+    }
+});
+
+// --- ADDED: Font Import IPC Handler ---
+ipcMain.handle('project:importSystemFont', async (event, fontFamily) => {
+    try {
+        console.log(`[Main] Attempting to import font: ${fontFamily}`);
+        const sourcePath = await findFontFile(fontFamily);
+        
+        if (!sourcePath) {
+            throw new Error(`Could not locate font file for "${fontFamily}"`);
+        }
+
+        // Reuse the asset processing logic to hash/copy the font file
+        const assetData = await processAssetAddition(sourcePath);
+        
+        // Return data specifically formatted for the font loader
+        return {
+            family: fontFamily,
+            src: assetData.filePath,
+            alias: assetData.alias
+        };
+    } catch (error) {
+        console.error(`[Main] Font import failed:`, error);
         throw error;
     }
 });

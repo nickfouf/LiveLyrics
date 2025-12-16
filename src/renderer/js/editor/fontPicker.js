@@ -1,5 +1,8 @@
-import { state } from './state.js';
+import { state, updateState } from './state.js';
 import { makeDraggable } from './draggable.js';
+import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
+import { showLoadingDialog, hideLoadingDialog } from './loadingDialog.js'; // ADDED
+import { markAsDirty } from './events.js'; // ADDED: To ensure saving after import
 
 let dialog, searchInput, previewTextInput, list, cancelBtn;
 let localState = {
@@ -61,12 +64,48 @@ export function initFontPicker() {
     previewTextInput.addEventListener('input', updatePreviewText);
 
     // Event listener for clicking on a font in the list
-    list.addEventListener('click', (e) => {
+    list.addEventListener('click', async (e) => {
         const item = e.target.closest('.font-list-item');
         if (item && localState.callback) {
             const fontName = item.dataset.fontName;
-            localState.callback(fontName);
-            dialog.classList.remove('visible');
+            
+            // --- ADDED: Auto-import logic ---
+            // Check if we already have this font asset in our project
+            if (state.song.fonts && state.song.fonts[fontName]) {
+                localState.callback(fontName);
+                dialog.classList.remove('visible');
+                return;
+            }
+
+            // If not, try to import it from the system
+            const hideLoading = showLoadingDialog(`Importing font "${fontName}"...`);
+            try {
+                const result = await window.editorAPI.importSystemFont(fontName);
+                
+                if (result && result.src) {
+                    // Update State with the new font mapping
+                    const newFonts = { ...state.song.fonts, [fontName]: result.src };
+                    updateState({ song: { ...state.song, fonts: newFonts } });
+                    
+                    // Load into DOM immediately via FontLoader
+                    fontLoader.loadFonts(newFonts);
+                    
+                    // Mark project as dirty so the new asset reference is saved
+                    markAsDirty();
+                }
+                
+                localState.callback(fontName);
+                dialog.classList.remove('visible');
+            } catch (error) {
+                console.error("Font import failed:", error);
+                alert(`Could not automatically import font file for "${fontName}".\nThe song will use the system font, but it may not display correctly on other computers.`);
+                
+                // Fallback: Select it anyway, relying on system font
+                localState.callback(fontName); 
+                dialog.classList.remove('visible');
+            } finally {
+                hideLoading();
+            }
         }
     });
 
@@ -133,4 +172,3 @@ export function openFontPicker(currentFont, callback, initialPreviewText = '') {
 
     dialog.classList.add('visible');
 }
-

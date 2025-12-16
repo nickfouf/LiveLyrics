@@ -12,7 +12,7 @@ import { initPropertiesDialog } from './propertiesDialog.js';
 import { initPropertyValueEditor } from './propertyValueEditor.js';
 import { initEasingEditor } from './easingEditor.js';
 import { initLoadingDialog } from './loadingDialog.js';
-import { initAlertDialog } from './alertDialog.js'; // ADDED
+import { initAlertDialog } from './alertDialog.js';
 import { initFontPicker } from './fontPicker.js'; // ADDED
 import { setupEventListeners, initSlideInteractivity, handleExternalFileOpen } from './events.js';
 import { showPage, applyViewportScaling } from './rendering.js';
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initPropertyValueEditor();
     initEasingEditor();
     initLoadingDialog();
-    initAlertDialog(); // ADDED
+    initAlertDialog(); 
     initFontPicker(); // ADDED
     initDragDrop();
     initLayersPanelInteractions();

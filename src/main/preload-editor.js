@@ -18,10 +18,13 @@ contextBridge.exposeInMainWorld('editorAPI', {
     showOpenDialog: (options) => ipcRenderer.invoke('dialog:showOpenDialog', options),
     showSaveAsDialog: (options) => ipcRenderer.invoke('dialog:showSaveAsDialog', options),
     addAsset: (filePath) => ipcRenderer.invoke('project:addAsset', filePath),
+    // ADDED: Font Import
+    importSystemFont: (fontFamily) => ipcRenderer.invoke('project:importSystemFont', fontFamily),
+    
     getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
     cleanUnusedAssets: (usedAssets) => ipcRenderer.invoke('project:cleanUnusedAssets'),
     saveProject: (filePath, data) => ipcRenderer.invoke('project:save', filePath, data),
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
     onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
     notifyReady: () => ipcRenderer.send('editor:ready'),
-});
+});

@@ -4,6 +4,7 @@ import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { deserializeElement, buildMeasureMap, buildLyricsTimingMap, findActiveTransition, findVirtualElementById } from '../editor/utils.js';
 import { getQuarterNoteDurationMs, rebuildAllEventTimelines, reprogramAllPageTransitions } from '../player/events.js';
+import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
 
 // --- State-based Synchronization ---
 let animationFrameId = null;
@@ -30,10 +31,6 @@ function getAuthoritativeTime() {
     if (!state.song || localPlaybackState.status !== 'playing') {
         return localPlaybackState.timeAtReference;
     }
-    // CORRECTED LOGIC:
-    // 1. Get the renderer's current time: performance.now()
-    // 2. Sync it with the main process's clock: (performance.now() - localPlaybackState.referenceTimeOffset)
-    // 3. Add the latency to "look ahead" in time: (... + localPlaybackState.latency)
     const syncedNow = (performance.now() - localPlaybackState.referenceTimeOffset) + localPlaybackState.latency;
     const elapsed = syncedNow - localPlaybackState.referenceTime;
     return localPlaybackState.timeAtReference + elapsed;
@@ -227,9 +224,16 @@ async function handleSongLoad(songMetadata, songData) {
             pages: pages,
             bpm: songMetadata.bpm || 120,
             bpmUnit: songMetadata.bpmUnit || 'q_note',
+            fonts: songData.fonts || {} // ADDED
         },
         activePage: thumbnailPage,
     });
+
+    // --- ADDED: Load Project Fonts ---
+    if (songData.fonts) {
+        fontLoader.loadFonts(songData.fonts);
+    }
+
     rebuildAllEventTimelines();
     reprogramAllPageTransitions();
     const measureMap = buildMeasureMap();
@@ -243,6 +247,7 @@ function handleSongUnload() {
     stopRenderLoop();
     activeInterpolation = null; // Clear any running interpolation
     if(state.domManager) state.domManager.clear();
+    fontLoader.clear(); // ADDED: Clear fonts on unload
     updateState({ song: null, activePage: null });
 }
 
@@ -349,4 +354,3 @@ document.addEventListener('DOMContentLoaded', () => {
         await handlePlaybackUpdate(newState);
     });
 });
-

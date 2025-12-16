@@ -10,12 +10,13 @@ export const state = {
     // --- Song Data Structure (Virtual DOM) ---
     song: {
         title: "Untitled Song",
-        thumbnailPage: null, // ADDED
+        thumbnailPage: null,
         pages: [], // This will hold VirtualPage objects
-        currentFilePath: null, // ADDED
+        currentFilePath: null,
         isDirty: false,
         bpm: 120,
         bpmUnit: 'q_note',
+        fonts: {}, // ADDED: Map of { "Font Family": "assets/filename.ttf" }
     },
 
     // --- UI State ---
@@ -62,4 +63,3 @@ export const state = {
 export function updateState(newPartialState) {
     Object.assign(state, newPartialState);
 }
-

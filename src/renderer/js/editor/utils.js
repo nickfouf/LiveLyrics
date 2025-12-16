@@ -1123,6 +1123,11 @@ export function getAllUsedAssets() {
         }
     }
 
+    if (state.song && state.song.fonts) {
+        Object.values(state.song.fonts).forEach(fontPath => {
+            if (fontPath) usedAssets.add(fontPath);
+        });
+    }
     return Array.from(usedAssets);
 }
 
