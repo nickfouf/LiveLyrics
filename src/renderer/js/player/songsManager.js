@@ -11,6 +11,7 @@ import { VirtualText } from '../renderer/elements/text.js';
 import { DOM } from './dom.js';
 import { applyViewportScaling } from '../editor/rendering.js';
 import { updatePlayerControlsUI } from './playback.js';
+import { fontLoader } from '../renderer/fontLoader.js'; // Ensure imported
 
 export let songPlaylist = []; // Array to hold { id, title, filePath, songData };
 let playlistElement;
@@ -151,6 +152,7 @@ async function loadSong(songId) {
         filePath: song.filePath,
         bpm: song.songData.bpm,
         bpmUnit: song.songData.bpmUnit,
+        fonts: song.songData.fonts || {}, // ADDED: Pass fonts to main process
     };
 
     // Send the command to the main process.
@@ -192,11 +194,17 @@ export async function handleSongActivated(songMetadata, songData) {
                 pages: pages,
                 bpm: songMetadata.bpm, // Use authoritative BPM from main process
                 bpmUnit: songMetadata.bpmUnit,
+                fonts: songData.fonts || {}, // ADDED: Ensure fonts are in local state
             },
             activePage: null,
             selectedElement: null,
             activeSongId: songMetadata.id,
         });
+
+        // ADDED: Load fonts immediately for the Player renderer
+        if (state.song.fonts) {
+            fontLoader.loadFonts(state.song.fonts);
+        }
 
         rebuildAllEventTimelines();
         reprogramAllPageTransitions();

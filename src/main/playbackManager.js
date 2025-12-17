@@ -4,7 +4,7 @@ class PlaybackManager {
     #state = {
         status: 'unloaded', // 'unloaded', 'playing', 'paused'
         type: 'normal',     // 'normal', 'synced'
-        song: null,         // Will now store { id, title, filePath, bpm, bpmUnit, originalBpm, originalBpmUnit }
+        song: null,         // Will now store { id, title, filePath, bpm, bpmUnit, originalBpm, originalBpmUnit, fonts }
         timeAtReference: 0,
         referenceTime: 0,
     };
@@ -87,6 +87,7 @@ class PlaybackManager {
             bpmUnit: songMetadata.bpmUnit || 'q_note',
             originalBpm: songMetadata.bpm || 120, // Store original
             originalBpmUnit: songMetadata.bpmUnit || 'q_note', // Store original
+            fonts: songMetadata.fonts || {}, // ADDED: Store font mapping to broadcast to renderers
         };
         this.#measureMap = measureMap; // Store the measure map
         this.#songData = songData; // Store the full song data
@@ -415,4 +416,4 @@ class PlaybackManager {
     }
 }
 
-module.exports = { PlaybackManager };
+module.exports = { PlaybackManager };

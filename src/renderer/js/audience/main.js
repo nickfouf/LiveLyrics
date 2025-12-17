@@ -230,6 +230,7 @@ async function handleSongLoad(songMetadata, songData) {
     });
 
     // --- ADDED: Load Project Fonts ---
+    // Use fontLoader to register the custom fonts provided in the song file
     if (songData.fonts) {
         fontLoader.loadFonts(songData.fonts);
     }

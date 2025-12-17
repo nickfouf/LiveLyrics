@@ -1386,6 +1386,11 @@ ipcMain.on('audience:update', (event, data) => {
 
 // MODIFIED: The 'playback:load-song' handler now accepts the songData.
 ipcMain.on('playback:load-song', (event, { songMetadata, measureMap, songData }) => {
+    // ADDED: Ensure font data is passed to the PlaybackManager
+    if (songData && songData.fonts && !songMetadata.fonts) {
+        songMetadata.fonts = songData.fonts;
+    }
+    
     playbackManager.loadSong(songMetadata, measureMap, songData);
     // ADDED: Send the new song data to the connected device.
     if (connectionManager) {
@@ -1501,4 +1506,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}
