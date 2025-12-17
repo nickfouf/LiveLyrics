@@ -152,7 +152,7 @@ function renderFrameAtTime(timeInMs) {
     const totalDurationBeats = measureMap.at(-1).startTime + measureMap.at(-1).duration;
     let measureIndex = measureMap.findIndex(m => currentBeats >= m.startTime && currentBeats < m.startTime + m.duration);
     if (measureIndex === -1) {
-        // If past the end, snap to the last measure. Otherwise (if before the start), snap to the first
+        // If past the end, snap to the last measure. Otherwise (if before the start), snap to the first.
         measureIndex = (currentBeats >= totalDurationBeats) ? measureMap.length - 1 : 0;
     }
 
