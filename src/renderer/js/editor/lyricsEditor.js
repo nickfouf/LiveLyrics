@@ -1017,4 +1017,59 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     renderMeasures();
     updateDeleteButtonState();
     lyricsEditorDialog.classList.add('visible');
-}
+
+    // --- ADDED: Precise Auto-scroll Logic ---
+    // Use requestAnimationFrame to ensure the layout has updated after classList.add('visible')
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            if (!measuresContainer) return;
+
+            const measures = lyricsState.measures;
+            let targetIndex = measures.findIndex(m => m.elementId === lyricsState.elementId);
+
+            // If the element has no measures yet, calculate the exact insertion point
+            // This logic mirrors handleConfirmAddMeasure to ensure we show the gap where the user would add measures.
+            if (targetIndex === -1) {
+                let lastMeasureOfPageIndex = -1;
+                // 1. Try to find the last measure belonging to the current page
+                for (let i = measures.length - 1; i >= 0; i--) {
+                    if (measures[i].pageIndex === lyricsState.elementPageIndex) {
+                        lastMeasureOfPageIndex = i;
+                        break;
+                    }
+                }
+
+                if (lastMeasureOfPageIndex !== -1) {
+                    // Scroll to the measure immediately following the last measure of this page
+                    targetIndex = lastMeasureOfPageIndex + 1;
+                } else {
+                    // 2. If current page is empty, find the last measure of any previous page
+                    let lastMeasureOfPreviousPageIndex = -1;
+                    for (let i = measures.length - 1; i >= 0; i--) {
+                        if (measures[i].pageIndex < lyricsState.elementPageIndex) {
+                            lastMeasureOfPreviousPageIndex = i;
+                            break;
+                        }
+                    }
+                    targetIndex = lastMeasureOfPreviousPageIndex + 1;
+                }
+            }
+
+            // --- CHANGED SCROLL LOGIC ---
+            // The scrollable area is the parent of the measures container.
+            const scrollContainer = measuresContainer.parentElement;
+            const GAP_OFFSET = 8; // 0.5rem
+
+            if (targetIndex >= measures.length) {
+                // Scroll to the very end
+                scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+            } else {
+                const el = measuresContainer.querySelector(`.measure-box[data-index="${targetIndex}"]`);
+                if (el) {
+                    // Precise scroll calculation with offset:
+                    scrollContainer.scrollLeft = el.offsetLeft - GAP_OFFSET;
+                }
+            }
+        }, 0);
+    });
+}

@@ -14,7 +14,6 @@ import { generateCSSGradient } from "../renderer/utils.js";
 import { markAsDirty } from './events.js';
 import { makeDraggable } from './draggable.js';
 
-// ... (Existing Cache and Helpers remain unchanged) ...
 // --- START: NEW CACHE AND STATE MANAGEMENT ---
 /**
  * A cache to store the detailed state of the events editor for each element.
@@ -54,14 +53,14 @@ const NOTE_DURATIONS = {
     w_note: 1.0, h_note: 0.5, q_note: 0.25, e_note: 0.125, s_note: 0.0625,
     w_note_dotted: 1.5, h_note_dotted: 0.75, q_note_dotted: 0.375, e_note_dotted: 0.1875,
 };
-// ... (PROP_KEY_TO_DATASET_MAP and Helper Functions remain unchanged) ...
+
 const PROP_KEY_TO_DATASET_MAP = {
     opacity: 'opacity', width: 'width', height: 'height', top: 'top', left: 'left', right: 'right', bottom: 'bottom',
     bgEnabled: 'bgEnabled',
     bgColor: 'bgColor',
     bgOpacity: 'bgOpacity',
     borderEnabled: 'borderEnabled',
-    borderSize: 'borderSize', borderRadius: 'borderRadius', borderColor: 'borderColor', // Corrected borderWidth to borderSize
+    borderSize: 'borderSize', borderRadius: 'borderRadius', borderColor: 'borderColor', 
     shadowEnabled: 'shadowEnabled',
     shadowInset: 'shadowInset',
     shadowOffsetX: 'shadowOffsetX', shadowOffsetY: 'shadowOffsetY', shadowBlur: 'shadowBlur', shadowSpread: 'shadowSpread', shadowColor: 'shadowColor',
@@ -79,10 +78,6 @@ const PROP_KEY_TO_DATASET_MAP = {
 
 /**
  * Checks if a transition between two property values is instant (non-interpolatable).
- * @param {*} startValue The starting value of the property.
- * @param {*} endValue The ending value of the property.
- * @param {string} propKey The key of the property being checked.
- * @returns {boolean} True if the transition is instant, false otherwise.
  */
 function isInstantTransition(startValue, endValue, propKey) {
     const propType = getPropertyType(propKey, eventsState.virtualElement);
@@ -117,9 +112,6 @@ function isInstantTransition(startValue, endValue, propKey) {
 
 /**
  * Gets the color of a gradient at a specific position, interpolating if necessary.
- * @param {object} gradient - The gradient object.
- * @param {number} position - The position (0-100) to find the color for.
- * @returns {string} The color string.
  */
 function getColorAtPosition(gradient, position) {
     const stops = gradient.colorStops.slice().sort((a, b) => a.position - b.position);
@@ -151,15 +143,12 @@ function getColorAtPosition(gradient, position) {
 /**
  * REVISED: Interpolates between two gradient objects, handling different data structures.
  */
-
 function lerpGradient(gradA, gradB, t) {
     const adapt = (grad) => {
-        // --- START: MODIFIED LOGIC ---
         // Handle solid color objects by adapting them into a two-stop gradient.
         if (typeof grad === 'object' && grad !== null && grad.hasOwnProperty('r') && !grad.hasOwnProperty('colorStops')) {
             return { type: 'linear', colorStops: [{ color: grad, position: 0 }, { color: grad, position: 100 }] };
         }
-        // --- END: MODIFIED LOGIC ---
 
         if (typeof grad === 'string') {
             return { type: 'linear', colorStops: [{ color: grad, position: 0 }, { color: grad, position: 100 }] };
@@ -204,7 +193,6 @@ function lerpGradient(gradA, gradB, t) {
                 color: getColorAtPosition(target, sourceStop.position),
                 position: sourceStop.position,
                 // Midpoints cannot be accurately generated in this case, so we omit them.
-                // The interpolation of the midpoint property below will handle the undefined case gracefully.
             };
         });
         target.colorStops = newTargetStops;
@@ -262,9 +250,6 @@ function lerpSize(sizeA, sizeB, t) {
 
 /**
  * Calculates the musical start time of a note within a flat array of notes.
- * @param {number} noteIndex - The index of the note in the array.
- * @param {Array} flatNotes - The array of all notes.
- * @returns {number} The cumulative duration of all notes before the target note.
  */
 function getNoteStartTime(noteIndex, flatNotes) {
     let time = 0;
@@ -286,9 +271,9 @@ function getRootPropertyValue(virtualElement, propKey) {
     }
 
     // Special handling for SmartEffect parameters
-    if (virtualElement.type === 'smartEffect') {
-        const dataProp = virtualElement.getProperty('smartEffectData');
-        return dataProp?.getValue(propKey) ?? null;
+    if (virtualElement.type === 'smart-effect') {
+        const dataProp = virtualElement.getProperty('src')?.getEffectData();
+        return dataProp?.effectData?.parameterValues?.[propKey] ?? null;
     }
 
     // Map propKey to the structured property system
@@ -296,6 +281,8 @@ function getRootPropertyValue(virtualElement, propKey) {
         // Effects
         case 'opacity':
             return virtualElement.getProperty('effects')?.getOpacity().getDefaultValue();
+        case 'mixBlendMode':
+            return virtualElement.getProperty('effects')?.getMixBlendMode().getDefaultValue();
 
         // Dimensions
         case 'width':
@@ -366,6 +353,12 @@ function getRootPropertyValue(virtualElement, propKey) {
             return virtualElement.getProperty('textStyle')?.getLetterSpacing().getDefaultValue();
         case 'wordSpacing':
             return virtualElement.getProperty('textStyle')?.getWordSpacing().getDefaultValue();
+        case 'karaokeColor':
+            const textStyleProp = virtualElement.getProperty('textStyle');
+            if (textStyleProp && typeof textStyleProp.getKaraokeColor === 'function') {
+                return textStyleProp.getKaraokeColor().getDefaultValue();
+            }
+            return null;
         case 'fontFamily':
             return virtualElement.getProperty('textStyle')?.getFontFamily().getDefaultValue();
         case 'fontWeight':
@@ -376,12 +369,6 @@ function getRootPropertyValue(virtualElement, propKey) {
             return virtualElement.getProperty('textStyle')?.getTextAlign().getDefaultValue();
         case 'justifyText':
             return virtualElement.getProperty('textStyle')?.getJustifyText().getDefaultValue();
-        case 'karaokeColor':
-            const textStyleProp = virtualElement.getProperty('textStyle');
-            if (textStyleProp && typeof textStyleProp.getKaraokeColor === 'function') {
-                return textStyleProp.getKaraokeColor().getDefaultValue();
-            }
-            return null;
 
         // Video & Audio Playback
         case 'videoState': {
@@ -453,10 +440,10 @@ function getRootPropertyValue(virtualElement, propKey) {
             return virtualElement.getProperty('transform')?.getTransformStyle().getDefaultValue();
         case 'perspective':
             return virtualElement.getProperty('transform')?.getPerspective().getDefaultValue();
-        case 'perspective-origin-x':
-            return virtualElement.getProperty('transform')?.getPerspectiveOriginX().getDefaultValue();
-        case 'perspective-origin-y':
-            return virtualElement.getProperty('transform')?.getPerspectiveOriginY().getDefaultValue();
+        case 'selfPerspective':
+            return virtualElement.getProperty('transform')?.getSelfPerspective().getDefaultValue();
+        case 'childrenPerspective':
+            return virtualElement.getProperty('transform')?.getChildrenPerspective().getDefaultValue();
         case 'backface-visibility':
             return virtualElement.getProperty('transform')?.getBackfaceVisibility().getDefaultValue();
 
@@ -468,11 +455,6 @@ function getRootPropertyValue(virtualElement, propKey) {
 
 /**
  * Gets the value of a property for a specific note for the purpose of editing.
- * This function does NOT interpolate. It finds the last explicitly set value
- * or falls back to the root default.
- * @param {string} noteId The ID of the note.
- * @param {string} propKey The property key.
- * @returns {*} The value to be used in an editor.
  */
 function getValueForEditing(noteId, propKey) {
     const flatNotes = eventsState.measures.flatMap(m => m.content || []);
@@ -510,7 +492,7 @@ let eventsState = {
     selectedNoteId: null,
     globalMeasureOffset: 0,
     selectedProperties: [],
-    elementPageIndex: -1, // ADDED
+    elementPageIndex: -1, 
 };
 let eventsEditorDialog, measuresContainer, toolPalette, deleteNoteBtn, dotBtn, sNoteBtn;
 let draggedNoteType = null;
@@ -519,13 +501,10 @@ let eventsMeasureClipboard = null;
 // --- Easing Functions ---
 const EASING_FUNCTIONS = {
     linear: t => t,
-    fast: t => t * t, // easeInQuad
-    slow: t => t * (2 - t), // easeOutQuad
+    fast: t => t * t, 
+    slow: t => t * (2 - t),
     instant: t => (t < 1 ? 0 : 1),
 };
-
-// ... (Rest of logic: getEffectivePropertyValue, getFormattedValuePreview, renderNoteEvents, renderMeasureContent) ...
-// ... (Truncated for brevity, logic remains identical until initEventsEditor/openEventsEditor) ...
 
 function getEffectivePropertyValue(noteId, propKey) {
     const propType = getPropertyType(propKey, eventsState.virtualElement);
@@ -917,7 +896,6 @@ function renderMeasures() {
     });
 }
 
-// ... (Rest of UI handlers: updateDeleteButtonState, deselectNote, selectNote, deleteSelectedNote, clearDropIndicators, drag&drop, initEventsEditor) ...
 function updateDeleteButtonState() {
     if (deleteNoteBtn) deleteNoteBtn.disabled = eventsState.selectedNoteId === null;
 }
@@ -1284,10 +1262,7 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
     const elementPage = findElementPage(element);
     const elementPageIndex = state.song.pages.indexOf(elementPage);
 
-    // --- FIX START ---
     // Handle legacy array format from loaded files
-    // This is critical: Legacy array format was indexed relative to globalMeasureOffset.
-    // If we have an array, we must convert it to a Map using ID lookup from allSongMeasures.
     if (Array.isArray(eventDataContent)) {
         const legacyArray = eventDataContent;
         eventDataContent = {}; // Convert to map
@@ -1301,7 +1276,6 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
             }
         });
     }
-    // --- FIX END ---
 
     const eventDataLookup = new Map(Object.entries(eventDataContent));
 
@@ -1340,6 +1314,34 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
     }
 
     eventsEditorDialog.classList.add('visible');
+
+    // --- ADDED: Precise Auto-scroll Logic ---
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            if (!measuresContainer) return;
+
+            const measures = eventsState.measures;
+            // Find the first measure belonging to the current page (or a later page if current has none)
+            let targetIndex = measures.findIndex(m => m.pageIndex >= eventsState.elementPageIndex);
+
+            // --- CHANGED SCROLL LOGIC ---
+            // The scrollable area is the parent of the measures container.
+            const scrollContainer = measuresContainer.parentElement;
+            const GAP_OFFSET = 8; // 0.5rem
+
+            // If not found, it means the page is at the end or after all existing measures
+            if (targetIndex === -1) {
+                 // Scroll to the end
+                 scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+            } else {
+                const el = measuresContainer.querySelector(`.measure-box[data-index="${targetIndex}"]`);
+                if (el) {
+                    // Precise scroll calculation:
+                    scrollContainer.scrollLeft = el.offsetLeft - GAP_OFFSET;
+                }
+            }
+        }, 0);
+    });
 
     eventsEditorDialog.addEventListener('transitionend', () => {
         renderEventConnectors();

@@ -160,6 +160,14 @@ function initDeviceController() {
     makeDraggable('device-list-dialog');
 
     DOM.openDeviceListBtn.addEventListener('click', showDeviceListDialog);
+    
+    // ADDED: Listener for Tempo Sync button
+    if (DOM.openTempoSyncBtn) {
+        DOM.openTempoSyncBtn.addEventListener('click', () => {
+            window.playerAPI.openTempoSync();
+        });
+    }
+
     DOM.disconnectDeviceBtn.addEventListener('click', async () => {
         if (!connectedDevice) return;
         const confirmed = await showConfirmationDialog(
@@ -514,10 +522,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.playerAPI.onPlaybackUpdate((newState) => {
         console.log('Player received playback update:', newState);
-        // ADDED: Load fonts if song changes or initial load
+        // ADDED: Load fonts via JS-only loader
         if (newState.song && newState.song.fonts) {
-             // Only load if different from current to avoid unnecessary re-renders?
-             // FontLoader handles duplicates gracefully, so we can just call it.
              fontLoader.loadFonts(newState.song.fonts);
         } else if (newState.status === 'unloaded') {
              fontLoader.clear();
@@ -540,6 +546,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         timelineManager,
         highlightManager: null,
         presenter: { isOpen: false },
+    });
+
+    // --- ADDED: Listen for font load completion to trigger re-render ---
+    fontLoader.onFontsLoaded(() => {
+        console.log('[Player] Fonts loaded. Triggering re-render to update metrics.');
+        // Force a resize on the timeline manager to recalculate layout
+        if (state.timelineManager) {
+            state.timelineManager.resize(true);
+        }
     });
 
     initSongsManager();
@@ -575,4 +590,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     console.log("Player UI Initialized");
-});
+});

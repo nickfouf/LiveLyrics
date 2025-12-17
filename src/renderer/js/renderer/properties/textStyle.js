@@ -4,6 +4,7 @@ import {FontSizeValue} from "../values/fontSize.js";
 import {NumberValue} from "../values/number.js";
 import {ColorOrGradientValue} from "../values/color.js";
 import {BooleanValue} from "../values/boolean.js";
+import {resolveFontFamily} from "../utils.js";
 
 export class TextStyleProperty extends VirtualProperty {
     #fontFamily = new StringValue('Arial');
@@ -185,7 +186,7 @@ export class TextStyleProperty extends VirtualProperty {
     applyChanges(element) {
         const domElement = element.textElement || element.domElement;
         if(this.#fontFamily.shouldRender) {
-            domElement.style.fontFamily = this.#fontFamily.getValue();
+            domElement.style.fontFamily = resolveFontFamily(this.#fontFamily.getValue());
             this.#fontFamily.markAsRendered();
         }
         if(this.#fontWeight.shouldRender) {
@@ -249,4 +250,4 @@ export class TextStyleProperty extends VirtualProperty {
         const parentFontSize = parent.getFontSize();
         return this.updateFontSize({rootFontSize, parentFontSize});
     }
-}
+}

@@ -1,10 +1,30 @@
 // src/renderer/js/renderer/utils.js
+import { fontLoader } from './fontLoader.js'; // Correct sibling import within renderer
+
 export function generateUUID() {
     if(window.crypto && window.crypto.randomUUID) {
         return window.crypto.randomUUID();
     } else {
         return Date.now().toString() + `-${Math.random().toString(36).substr(2, 9)}`;
     }
+}
+
+/**
+ * Resolves the font family name.
+ * If the font exists in the project assets (checked via FontLoader), it returns the namespaced version.
+ * Otherwise, it returns the standard name.
+ * @param {string} fontFamily - The original font family name.
+ * @returns {string} The resolved CSS font-family string.
+ */
+export function resolveFontFamily(fontFamily) {
+    if (!fontFamily) return 'inherit';
+
+    // Check if the font is loaded via the FontLoader singleton
+    if (fontLoader.isFontLoaded(fontFamily)) {
+        return `"lyx-${fontFamily}", "${fontFamily}", sans-serif`;
+    }
+    
+    return `"${fontFamily}", sans-serif`;
 }
 
 /**
@@ -94,13 +114,20 @@ export function getPropertyType(propKey) {
         case 'audioSrc':
         case 'transform-style':
         case 'backface-visibility':
-        case 'mixBlendMode': // ADDED
+        case 'mixBlendMode': 
             return 'string';
         
         // Dynamic String (value + id to trigger actions)
         case 'videoState':
         case 'audioState':
             return 'dynamic-string';
+
+        case 'alignment': 
+            return 'alignment';
+        case 'justifyContent':
+            return 'justifyContent';
+        case 'alignItems':
+            return 'alignItems';
 
         default:
             console.warn(`[getPropertyType] Unknown property key: ${propKey}`);
@@ -159,14 +186,6 @@ export function rgbToHex(r, g, b) {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
 }
 
-/**
- * Converts RGBA color values to a CSS hex string with alpha.
- * @param {number} r - Red value (0-255).
- * @param {number} g - Green value (0-255).
- * @param {number} b - Blue value (0-255).
- * @param {number} a - Alpha value (0-1).
- * @returns {string} The hex color string (e.g., #RRGGBBAA).
- */
 export function rgbaToHex(r, g, b, a) {
     const toHex = (c) => ('0' + Math.round(c).toString(16)).slice(-2);
     const alphaHex = toHex(a * 255);
@@ -268,22 +287,15 @@ export function generateCSSGradient(gradient) {
         const finalAlpha = c.a * globalOpacity;
         const colorString = `rgba(${c.r}, ${c.g}, ${c.b}, ${finalAlpha})`;
 
-        // Add the color stop string (e.g., "rgba(...) 50%")
         colorStopsStr += `${colorString} ${stop.position}%`;
 
-        // If this is not the last stop, check if the *next* stop has a midpoint
         if (i < sortedStops.length - 1) {
             const nextStop = sortedStops[i + 1];
-
-            // A midpoint of 50 is the default and doesn't need a hint in CSS
             if (nextStop.midpoint !== undefined && nextStop.midpoint !== 50) {
                 const startPos = stop.position;
                 const endPos = nextStop.position;
-
-                // Translate the relative midpoint (0-100) to an absolute CSS color hint
-                const relativeMidpoint = Math.max(0, Math.min(100, nextStop.midpoint)); // Clamp to 0-100
+                const relativeMidpoint = Math.max(0, Math.min(100, nextStop.midpoint));
                 const absoluteHint = startPos + (endPos - startPos) * (relativeMidpoint / 100);
-
                 colorStopsStr += `, ${absoluteHint.toFixed(2)}%`;
             }
             colorStopsStr += ', ';
@@ -302,21 +314,10 @@ export function generateCSSGradient(gradient) {
     return 'none';
 }
 
-/**
- * Compares two note objects for equality.
- * @param {object} noteA - The first note object.
- * @param {object} noteB - The second note object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareNoteObjects(noteA, noteB) {
-    if (!noteA || !noteB) {
-        return noteA === noteB;
-    }
-
-    // Ensure lineBreakAfter is treated as a boolean for comparison
+    if (!noteA || !noteB) return noteA === noteB;
     const lineBreakA = noteA.lineBreakAfter === true;
     const lineBreakB = noteB.lineBreakAfter === true;
-
     return noteA.id === noteB.id &&
         noteA.type === noteB.type &&
         noteA.text === noteB.text &&
@@ -324,96 +325,48 @@ export function compareNoteObjects(noteA, noteB) {
         lineBreakA === lineBreakB;
 }
 
-/**
- * Compares two time signature objects for equality.
- * @param {object} tsA - The first time signature object.
- * @param {object} tsB - The second time signature object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareTimeSignatureObjects(tsA, tsB) {
-    if (!tsA || !tsB) {
-        return tsA === tsB;
-    }
-
-    return tsA.numerator === tsB.numerator &&
-        tsA.denominator === tsB.denominator;
+    if (!tsA || !tsB) return tsA === tsB;
+    return tsA.numerator === tsB.numerator && tsA.denominator === tsB.denominator;
 }
 
-/**
- * Compares two measure objects for equality.
- * @param {object} measureA - The first measure object.
- * @param {object} measureB - The second measure object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareMeasureObjects(measureA, measureB) {
-    if (!measureA || !measureB) {
-        return measureA === measureB;
-    }
-
+    if (!measureA || !measureB) return measureA === measureB;
     if (measureA.id !== measureB.id ||
         measureA.content.length !== measureB.content.length ||
         !compareTimeSignatureObjects(measureA.timeSignature, measureB.timeSignature)) {
         return false;
     }
-
     for (let i = 0; i < measureA.content.length; i++) {
         if (!compareNoteObjects(measureA.content[i], measureB.content[i])) {
             return false;
         }
     }
-
     return true;
 }
 
-/**
- * Compares two lyrics objects for equality.
- * @param {object} lyricsA - The first lyrics object.
- * @param {object} lyricsB - The second lyrics object.
- * @returns {boolean} - True if the objects are equal, false otherwise.
- */
 export function compareLyricsObjects(lyricsA, lyricsB) {
-    if (lyricsA === lyricsB) {
-        return true;
-    }
-
-    if (!lyricsA || !lyricsB) {
-        return false;
-    }
-
+    if (lyricsA === lyricsB) return true;
+    if (!lyricsA || !lyricsB) return false;
     const measuresA = lyricsA.measures;
     const measuresB = lyricsB.measures;
-
-    if (measuresA.length !== measuresB.length) {
-        return false;
-    }
-
+    if (measuresA.length !== measuresB.length) return false;
     for (let i = 0; i < measuresA.length; i++) {
-        if (!compareMeasureObjects(measuresA[i], measuresB[i])) {
-            return false;
-        }
+        if (!compareMeasureObjects(measuresA[i], measuresB[i])) return false;
     }
-
-    // Check measureIdOrder
     const orderA = lyricsA.measureIdOrder || [];
     const orderB = lyricsB.measureIdOrder || [];
     if (orderA.length !== orderB.length) return false;
     for(let i=0; i<orderA.length; i++) {
         if(orderA[i] !== orderB[i]) return false;
     }
-
     return true;
 }
 
 export function compareLyricsLayouts(layoutA, layoutB) {
-    // Handle strict equality and cases where one or both are null/undefined.
-    if (layoutA === layoutB) {
-        return true;
-    }
-    if (!layoutA || !layoutB) {
-        return false;
-    }
+    if (layoutA === layoutB) return true;
+    if (!layoutA || !layoutB) return false;
 
-    // Compare top-level style and dimension properties.
     if (
         layoutA.fontFamily !== layoutB.fontFamily ||
         layoutA.fontWeight !== layoutB.fontWeight ||
@@ -431,29 +384,16 @@ export function compareLyricsLayouts(layoutA, layoutB) {
         return false;
     }
 
-    // Compare the lines array.
-    if (layoutA.lines.length !== layoutB.lines.length) {
-        return false;
-    }
+    if (layoutA.lines.length !== layoutB.lines.length) return false;
 
-    // Deep compare each line and its tspans.
     for (let i = 0; i < layoutA.lines.length; i++) {
         const lineA = layoutA.lines[i];
         const lineB = layoutB.lines[i];
-
-        if (lineA.width !== lineB.width || lineA.height !== lineB.height || lineA.x !== lineB.x) {
-            return false;
-        }
-
-        if (lineA.tspans.length !== lineB.tspans.length) {
-            return false;
-        }
-
+        if (lineA.width !== lineB.width || lineA.height !== lineB.height || lineA.x !== lineB.x) return false;
+        if (lineA.tspans.length !== lineB.tspans.length) return false;
         for (let j = 0; j < lineA.tspans.length; j++) {
             const tspanA = lineA.tspans[j];
             const tspanB = lineA.tspans[j];
-
-            // Compare individual tspan properties.
             if (
                 tspanA.text !== tspanB.text ||
                 tspanA.type !== tspanB.type ||
@@ -466,22 +406,17 @@ export function compareLyricsLayouts(layoutA, layoutB) {
             }
         }
     }
-
-    // If all checks have passed, the layouts are considered equal.
     return true;
 }
 
 export function deepEqual(a, b) {
     if (a === b) return true;
     if (Number.isNaN(a) && Number.isNaN(b)) return true;
-
     if (a && b && typeof a === 'object' && typeof b === 'object') {
         if (Array.isArray(a) !== Array.isArray(b)) return false;
-
         const keysA = Object.keys(a);
         const keysB = Object.keys(b);
         if (keysA.length !== keysB.length) return false;
-
         for (let key of keysA) {
             if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
             if (!deepEqual(a[key], b[key])) return false;
@@ -527,10 +462,9 @@ export function getAvailablePropertiesForElement(element) {
 
     let props = {};
 
-    // Define common property groups to avoid repetition
     const commonEffects = { "Effects": { 
         "opacity": "Opacity",
-        "mixBlendMode": "Blending Mode" // ADDED
+        "mixBlendMode": "Blending Mode"
     }};
     const commonDimensions = { "Dimensions": { "width": "Width", "height": "Height" } };
     const commonMargin = { "Margin": { "top": "Top", "left": "Left", "bottom": "Bottom", "right": "Right" } };
@@ -733,4 +667,4 @@ export function getAvailablePropertiesForElement(element) {
     }
 
     return props;
-}
+}

@@ -32,6 +32,7 @@ import {
     rebuildAllEventTimelines as sharedRebuildAllEventTimelines
 } from '../player/events.js';
 import { NumberEvent } from '../renderer/events/numberEvent.js';
+import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
 
 
 export function updateWindowTitle() {
@@ -1222,6 +1223,9 @@ async function loadSong(filePath) {
         if (DOM.pageContainer) DOM.pageContainer.innerHTML = '';
         if (DOM.stagingPageContainer) DOM.stagingPageContainer.innerHTML = '';
 
+        // ADDED: Clear previous project fonts to prevent leaks
+        fontLoader.clear();
+
         const resizeCallbacks = {
             onResizeStart: () => { /* ... */ },
             onResizeEnd: () => { /* ... */ }
@@ -1269,6 +1273,7 @@ async function loadSong(filePath) {
                 isDirty: false,
                 bpm: songData.bpm || 120,
                 bpmUnit: songData.bpmUnit || 'q_note',
+                fonts: songData.fonts || {} // ADDED
             },
             activePage: null,
             selectedElement: null,
@@ -1286,6 +1291,11 @@ async function loadSong(filePath) {
                 selectedDiv.dataset.value = state.song.bpmUnit;
                 selectedDiv.innerHTML = optionDiv.innerHTML;
             }
+        }
+
+        // ADDED: Load Project Fonts
+        if (songData.fonts) {
+            fontLoader.loadFonts(songData.fonts);
         }
 
         jumpToPage(thumbnailPage);

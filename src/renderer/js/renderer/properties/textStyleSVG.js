@@ -4,6 +4,7 @@ import { FontSizeValue } from "../values/fontSize.js";
 import { ColorOrGradientValue } from "../values/color.js";
 import { UnitValue } from "../values/unit.js";
 import { BooleanValue } from "../values/boolean.js";
+import {resolveFontFamily} from "../utils.js";
 
 export class TextStyleSVGProperty extends VirtualProperty {
     #fontFamily = new StringValue('Arial');
@@ -235,8 +236,11 @@ export class TextStyleSVGProperty extends VirtualProperty {
         const svg = domElement.shadowRoot.querySelector('svg');
 
         if(this.#fontFamily.shouldRender) {
-            domElement.style.fontFamily = this.#fontFamily.getValue();
-            layoutProperty.setFontFamily({element, fontFamily: this.#fontFamily.getValue()});
+            const rawFont = this.#fontFamily.getValue();
+            const resolvedFont = resolveFontFamily(rawFont);
+
+            domElement.style.fontFamily = resolvedFont;
+            layoutProperty.setFontFamily({element, fontFamily: resolvedFont});
             this.#fontFamily.markAsRendered();
         }
         if(this.#fontWeight.shouldRender) {
@@ -295,4 +299,4 @@ export class TextStyleSVGProperty extends VirtualProperty {
         const wordSpacingChanged = this.#wordSpacing.updatePixelValue({rootFontSize, parentFontSize});
         return fontSizeChanged || lineHeightChanged || letterSpacingChanged || wordSpacingChanged;
     }
-}
+}

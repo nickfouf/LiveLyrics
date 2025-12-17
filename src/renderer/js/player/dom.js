@@ -60,6 +60,7 @@ export function initDOM() {
 
     // --- MODIFIED: Device Controller Elements ---
     DOM.openDeviceListBtn = document.getElementById('open-device-list-btn');
+    DOM.openTempoSyncBtn = document.getElementById('open-tempo-sync-btn'); // ADDED
     DOM.disconnectDeviceBtn = document.getElementById('disconnect-device-btn');
     DOM.deviceListDialog = document.getElementById('device-list-dialog');
     DOM.closeDeviceListBtn = document.getElementById('close-device-list-btn');

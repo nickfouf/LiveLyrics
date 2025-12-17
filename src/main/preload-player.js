@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('playerAPI', {
     goToMainMenu: () => ipcRenderer.send('go-to-main-menu'),
     onWindowStateChange: (callback) => ipcRenderer.on('window-maximized-state', (_event, value) => callback(value)),
 
+    // --- NEW: Tempo Sync Control ---
+    openTempoSync: () => ipcRenderer.send('player:open-tempo-sync'),
+
     // --- File Operations ---
     openSong: () => ipcRenderer.invoke('dialog:openSong'),
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),

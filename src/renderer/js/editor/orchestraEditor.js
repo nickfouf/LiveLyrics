@@ -18,7 +18,7 @@ let orchestraEditorDialog, addMeasureDialog, measuresContainer;
 let draggedMeasureIndex = null;
 
 /**
- * ADDED: Helper to find the page an element belongs to.
+ * Helper to find the page an element belongs to.
  * @param {VirtualElement} element
  * @returns {VirtualPage|null}
  */
@@ -454,5 +454,52 @@ export function openOrchestraEditor(initialData, globalMeasureOffset, callback) 
     updateState({ orchestraEditorCallback: callback });
     renderMeasures();
     orchestraEditorDialog.classList.add('visible');
-}
-
+
+    // --- ADDED: Precise Auto-scroll Logic ---
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            if (!measuresContainer) return;
+
+            const measures = orchestraState.measures;
+            let targetIndex = measures.findIndex(m => m.elementId === orchestraState.elementId);
+
+            if (targetIndex === -1) {
+                let lastMeasureOfPageIndex = -1;
+                for (let i = measures.length - 1; i >= 0; i--) {
+                    if (measures[i].pageIndex === orchestraState.elementPageIndex) {
+                        lastMeasureOfPageIndex = i;
+                        break;
+                    }
+                }
+
+                if (lastMeasureOfPageIndex !== -1) {
+                    targetIndex = lastMeasureOfPageIndex + 1;
+                } else {
+                    let lastMeasureOfPreviousPageIndex = -1;
+                    for (let i = measures.length - 1; i >= 0; i--) {
+                        if (measures[i].pageIndex < orchestraState.elementPageIndex) {
+                            lastMeasureOfPreviousPageIndex = i;
+                            break;
+                        }
+                    }
+                    targetIndex = lastMeasureOfPreviousPageIndex + 1;
+                }
+            }
+
+            // --- CHANGED SCROLL LOGIC ---
+            // The scrollable area is the parent of the measures container.
+            const scrollContainer = measuresContainer.parentElement;
+            const GAP_OFFSET = 8; // 0.5rem
+
+            if (targetIndex >= measures.length) {
+                scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+            } else {
+                const el = measuresContainer.querySelector(`.measure-box[data-index="${targetIndex}"]`);
+                if (el) {
+                    // Use offsetLeft because measures are horizontal
+                    scrollContainer.scrollLeft = el.offsetLeft - GAP_OFFSET;
+                }
+            }
+        }, 0);
+    });
+}

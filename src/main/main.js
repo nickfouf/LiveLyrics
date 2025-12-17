@@ -362,8 +362,7 @@ function createPlayerWindow() {
 
     playerWindow.loadFile(htmlPath);
 
-    // ADDED: Create the tempo sync window alongside the player
-    createTempoSyncWindow();
+    // REMOVED: createTempoSyncWindow(); <-- No longer opening automatically
 
     if (connectionManager) {
         connectionManager.start();
@@ -740,6 +739,19 @@ app.whenReady().then(() => {
         }
     });
 
+    // --- ADDED: Handler for opening Tempo Sync Window ---
+    ipcMain.on('player:open-tempo-sync', () => {
+        if (tempoSyncWindow && !tempoSyncWindow.isDestroyed()) {
+            console.log('[Main] Tempo Sync window already open. Focusing.');
+            if (tempoSyncWindow.isMinimized()) tempoSyncWindow.restore();
+            tempoSyncWindow.show();
+            tempoSyncWindow.focus();
+        } else {
+            console.log('[Main] Creating new Tempo Sync window.');
+            createTempoSyncWindow();
+        }
+    });
+
     app.on('activate', () => {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
@@ -1022,11 +1034,13 @@ async function processAssetAddition(originalPath) {
     const newFileName = `${checksum}${extension}`;
     const destPath = path.join(assetsTempPath, newFileName);
 
+    // FIX: Use pathToFileURL to generate correct file:/// URLs (handles encoding and slashes)
+    const finalUrl = url.pathToFileURL(destPath).href;
+    const alias = path.basename(originalPath);
+
     if (fs.existsSync(destPath)) {
         console.log(`[Main] Asset already exists, skipping copy: ${newFileName}`);
-        const finalUrl = url.format({ pathname: destPath, protocol: 'file:', slashes: true });
-        const alias = path.basename(originalPath);
-
+        
         if (extension.toLowerCase() === '.json') {
             const content = await fs.promises.readFile(originalPath, 'utf-8');
             return { filePath: finalUrl, content, alias };
@@ -1060,9 +1074,7 @@ async function processAssetAddition(originalPath) {
 
         writeStream.on('finish', async () => {
             cleanup();
-            const finalUrl = url.format({ pathname: destPath, protocol: 'file:', slashes: true });
-            const alias = path.basename(originalPath);
-
+            
             if (extension.toLowerCase() === '.json') {
                 try {
                     const content = await fs.promises.readFile(originalPath, 'utf-8');
@@ -1306,11 +1318,8 @@ ipcMain.handle('project:open', async (event, filePath) => {
                 if (typeof obj[key] === 'string' && obj[key].startsWith('assets/')) {
                     const relativeAssetPath = obj[key];
                     const assetPath = path.join(projectTempPath, relativeAssetPath);
-                    obj[key] = url.format({
-                        pathname: assetPath,
-                        protocol: 'file:',
-                        slashes: true
-                    });
+                    // FIX: Use pathToFileURL to ensure absolute paths are correctly formatted as URLs
+                    obj[key] = url.pathToFileURL(assetPath).href;
                 } else if (typeof obj[key] === 'object' && obj[key] !== null) {
                     absolutizeAssetPaths(obj[key]);
                 }
@@ -1492,4 +1501,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

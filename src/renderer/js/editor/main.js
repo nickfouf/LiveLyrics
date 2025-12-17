@@ -13,13 +13,14 @@ import { initPropertyValueEditor } from './propertyValueEditor.js';
 import { initEasingEditor } from './easingEditor.js';
 import { initLoadingDialog } from './loadingDialog.js';
 import { initAlertDialog } from './alertDialog.js';
-import { initFontPicker } from './fontPicker.js'; // ADDED
+import { initFontPicker } from './fontPicker.js';
 import { setupEventListeners, initSlideInteractivity, handleExternalFileOpen } from './events.js';
 import { showPage, applyViewportScaling } from './rendering.js';
 import { initPropertiesPanelInteractions } from './propertiesPanel.js';
 import { HighlightManager } from './highlightManager.js';
 import { updateState, state } from './state.js';
 import { triggerActivePageRender } from './pageManager.js';
+import { fontLoader } from '../renderer/fontLoader.js'; // Ensure imported
 
 // --- Main Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -31,9 +32,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // --- FIX: Fetch system fonts in background to prevent UI freeze on startup ---
-    // We removed 'await' here. The UI will load immediately, and fonts will
-    // be populated in the state whenever the Main process finishes scanning them.
     window.editorAPI.getSystemFonts()
         .then(fonts => {
             updateState({ systemFonts: fonts });
@@ -56,17 +54,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     initEasingEditor();
     initLoadingDialog();
     initAlertDialog(); 
-    initFontPicker(); // ADDED
+    initFontPicker(); 
     initDragDrop();
     initLayersPanelInteractions();
     initEventsPanelInteractions();
     initPropertiesPanelInteractions();
     initSlideInteractivity();
 
-    // Set up all core UI event listeners (title bar, panels, timeline, menus etc.)
+    // --- ADDED: Listen for font load completion to trigger re-render ---
+    fontLoader.onFontsLoaded(() => {
+        console.log('[Editor] Fonts loaded. Triggering re-render to update metrics.');
+        // Force a resize calculation (true) to ensure text wrapping and lyrics metrics are recalculated
+        triggerActivePageRender(true); 
+    });
+
     setupEventListeners();
 
-    // --- ADDED: Listen for file open requests from the main process ---
     window.editorAPI.onFileOpen(async (filePath) => {
         console.log(`Editor received file to open via IPC: ${filePath}`);
         await handleExternalFileOpen(filePath);
@@ -74,25 +77,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updateState({ highlightManager });
 
-    // Show the initial page
     showPage('main-menu-page');
 
-    // ADDED: Notify the main process that the renderer is fully loaded and ready.
-    // This is crucial for handling file opens on app launch.
     window.editorAPI.notifyReady();
 
     const slideObserver = new ResizeObserver((entries) => {
         if (!entries || !entries.length) return;
         applyViewportScaling(entries[0].target);
 
-        // During playback, the animation loop handles rendering. In edit mode, we must
-        // call a function that correctly overrides transition properties before resizing.
         if (state.playback.isPlaying) {
-            // During playback, a simple resize is sufficient as the next animation frame will correct everything.
             state.timelineManager.resize(false);
         } else {
-            // In edit mode, triggerActivePageRender correctly applies events,
-            // overrides transitions, and then resizes/renders.
             triggerActivePageRender(true);
         }
 

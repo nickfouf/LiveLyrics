@@ -4,7 +4,7 @@ import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { deserializeElement, buildMeasureMap, buildLyricsTimingMap, findActiveTransition, findVirtualElementById } from '../editor/utils.js';
 import { getQuarterNoteDurationMs, rebuildAllEventTimelines, reprogramAllPageTransitions } from '../player/events.js';
-import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
+import { fontLoader } from '../renderer/fontLoader.js';
 
 // --- State-based Synchronization ---
 let animationFrameId = null;
@@ -224,7 +224,7 @@ async function handleSongLoad(songMetadata, songData) {
             pages: pages,
             bpm: songMetadata.bpm || 120,
             bpmUnit: songMetadata.bpmUnit || 'q_note',
-            fonts: songData.fonts || {} // ADDED
+            fonts: songData.fonts || {}
         },
         activePage: thumbnailPage,
     });
@@ -348,6 +348,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.timelineManager) state.timelineManager.resize(false);
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
+
+    // --- ADDED: Listen for font load completion ---
+    // This ensures that when fonts are ready (via fontLoader),
+    // we trigger a re-calculation of the layout metrics.
+    fontLoader.onFontsLoaded(() => {
+        console.log('[Audience] Fonts loaded. Triggering re-render.');
+        if (state.timelineManager) {
+            state.timelineManager.resize(true);
+        }
+    });
 
     // --- UNIFIED IPC Listeners ---
     window.audienceAPI.onPlaybackUpdate(async (newState) => {
