@@ -29,8 +29,5 @@
   "bugs": {
     "url": "https://github.com/nickfouf/conduit-js/issues"
   },
-  "homepage": "https://github.com/nickfouf/conduit-js#readme",
-  "dependencies": {
-    "@nickfouf/conduit-js": "^1.0.10"
-  }
+  "homepage": "https://github.com/nickfouf/conduit-js#readme"
 }
