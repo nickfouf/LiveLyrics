@@ -2,7 +2,7 @@
   "name": "livelyrics",
   "version": "1.0.8",
   "description": "A modern and responsive app for editing and displaying lyrics.",
-  "main": "src/main/man.js",
+  "main": "src/main/main.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/nickfouf/LiveLyrics.git"
