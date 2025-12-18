@@ -2,7 +2,7 @@ import { state, updateState } from '../editor/state.js';
 import { setActivePage_Player } from './pageManager.js';
 import { rebuildAllEventTimelines, reprogramAllPageTransitions } from './events.js';
 import { deserializeElement, findVirtualElementById, buildMeasureMap, buildLyricsTimingMap } from '../editor/utils.js';
-import { showAlertDialog } from '../editor/alertDialog.js';
+import { showAlertDialog, hideAlertDialog } from '../editor/alertDialog.js'; 
 import { showLoadingDialog, hideLoadingDialog } from '../editor/loadingDialog.js';
 import { VirtualPage } from '../renderer/elements/page.js';
 import { VirtualContainer } from '../renderer/elements/container.js';
@@ -11,14 +11,11 @@ import { VirtualText } from '../renderer/elements/text.js';
 import { DOM } from './dom.js';
 import { applyViewportScaling } from '../editor/rendering.js';
 import { updatePlayerControlsUI } from './playback.js';
-import { fontLoader } from '../renderer/fontLoader.js'; // Ensure imported
+import { fontLoader } from '../renderer/fontLoader.js';
 
-export let songPlaylist = []; // Array to hold { id, title, filePath, songData };
+export let songPlaylist = []; 
 let playlistElement;
 
-/**
- * Sends the current playlist state to the main process for synchronization.
- */
 function syncPlaylistWithMain() {
     if (window.playerAPI) {
         window.playerAPI.sendPlaylistUpdate({
@@ -28,6 +25,71 @@ function syncPlaylistWithMain() {
     }
 }
 
+// ... (Persistence logic functions: savePlaylistPaths, saveActiveSongPath, restorePlaylist remain unchanged) ...
+function savePlaylistPaths() {
+    try {
+        const paths = songPlaylist.map(s => s.filePath);
+        localStorage.setItem('saved-playlist-paths', JSON.stringify(paths));
+    } catch (e) {
+        console.error("Failed to save playlist paths:", e);
+    }
+}
+
+function saveActiveSongPath(filePath) {
+    try {
+        localStorage.setItem('saved-active-song-path', filePath || '');
+    } catch (e) {
+        console.error("Failed to save active song path:", e);
+    }
+}
+
+async function restorePlaylist() {
+    const savedActivePath = localStorage.getItem('saved-active-song-path');
+    const raw = localStorage.getItem('saved-playlist-paths');
+    if (!raw) return;
+
+    let paths = [];
+    try {
+        paths = JSON.parse(raw);
+    } catch (e) { return; }
+
+    if (!Array.isArray(paths) || paths.length === 0) return;
+
+    const hideLoading = showLoadingDialog("Restoring previous session...");
+    let changed = false;
+
+    for (const filePath of paths) {
+        try {
+            if (songPlaylist.some(s => s.filePath === filePath)) continue;
+            const result = await window.playerAPI.openProject(filePath);
+            if (result.success && result.data) {
+                if (songDataHasMeasures(result.data)) {
+                    const songId = `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                    const fileNameWithExt = filePath.split(/[\\/]/).pop();
+                    const title = fileNameWithExt.replace(/\.lyx$/, '');
+                    songPlaylist.push({ id: songId, title, filePath, songData: result.data });
+                    changed = true;
+                }
+            }
+        } catch (e) { console.warn(`[SongsManager] Error restoring ${filePath}:`, e); }
+    }
+
+    if (changed) {
+        renderPlaylist();
+        syncPlaylistWithMain();
+        savePlaylistPaths(); 
+    }
+
+    if (songPlaylist.length > 0) {
+        let songToLoad = null;
+        if (savedActivePath) songToLoad = songPlaylist.find(s => s.filePath === savedActivePath);
+        if (!songToLoad) songToLoad = songPlaylist[0];
+        if (songToLoad) await loadSong(songToLoad.id);
+    }
+    hideLoading();
+}
+
+// ... (Helper functions: pageDataHasMeasures, songDataHasMeasures, showDefaultPlayerView remain unchanged) ...
 function pageDataHasMeasures(pageData) {
     if (!pageData) return false;
     function findMusicElements(element) {
@@ -44,35 +106,25 @@ function pageDataHasMeasures(pageData) {
     }
     const musicElements = findMusicElements(pageData);
     for (const el of musicElements) {
-        if (el.type === 'lyrics' && el.properties?.lyricsContent?.measures?.length > 0) {
-            return true;
-        }
+        if (el.type === 'lyrics' && el.properties?.lyricsContent?.measures?.length > 0) return true;
         if ((el.type === 'orchestra' || el.type === 'audio') && el.properties?.orchestraContent?.measures?.length > 0) {
-            if (el.properties.orchestraContent.measures.some(m => (m.count || 0) > 0)) {
-                return true;
-            }
+            if (el.properties.orchestraContent.measures.some(m => (m.count || 0) > 0)) return true;
         }
     }
     return false;
 }
 
 function songDataHasMeasures(songData) {
-    if (!songData || !songData.pages || songData.pages.length === 0) {
-        return false;
-    }
+    if (!songData || !songData.pages || songData.pages.length === 0) return false;
     return songData.pages.some(page => pageDataHasMeasures(page));
 }
 
 function showDefaultPlayerView() {
     if (state.domManager) state.domManager.clear();
-
-    // Create the virtual elements for the default view
     const defaultPage = new VirtualPage({ name: 'Default' });
     const container = new VirtualContainer({ alignment: 'vertical' });
     const title = new VirtualTitle({ textContent: "No song loaded yet" });
     const text = new VirtualText({ textContent: "Use the songs manager panel and click at the add song button." });
-    
-    // Style the elements
     container.getProperty('gravity').setJustifyContent('center', true);
     container.getProperty('gravity').setAlignItems('center', true);
     container.getProperty('gap').setGap({ value: 20, unit: 'px' }, true);
@@ -81,60 +133,64 @@ function showDefaultPlayerView() {
     text.getProperty('textStyle').setFontSize({ value: 30, unit: 'px' }, true);
     text.getProperty('textStyle').setTextColor({ r: 200, g: 200, b: 200, a: 1, mode: 'color' }, true);
     text.getProperty('textStyle').setTextAlign('center', true);
-    
-    // Assemble the virtual elements
     container.addElement(title);
     container.addElement(text);
     defaultPage.addElement(container);
-
-    // Directly add the constructed page to the visible DOM.
     state.domManager.addToDom(defaultPage);
-    
-    // Update the global state to reflect that no song is loaded.
-    const unloadedState = {
-        status: 'unloaded',
-        type: 'normal',
-        song: null,
-    };
     updateState({
-        song: null,
-        activePage: defaultPage,
-        selectedElement: null,
+        song: null, activePage: defaultPage, selectedElement: null,
         playback: { ...state.playback, isPlaying: false, timeAtPause: 0, songHasEnded: false, }
     });
-
-    // Clear the page manager thumbnails and update the rest of the UI
-    if (DOM.pageThumbnailsContainer) {
-        DOM.pageThumbnailsContainer.innerHTML = '';
-    }
+    if (DOM.pageThumbnailsContainer) DOM.pageThumbnailsContainer.innerHTML = '';
     document.getElementById('window-title').innerText = "Player";
-    
-    // --- REVISED: Use the centralized UI update function ---
-    updatePlayerControlsUI(unloadedState);
-
-    // Manually trigger a viewport scale calculation AND render the initial state.
+    updatePlayerControlsUI({ status: 'unloaded', type: 'normal', song: null });
     setTimeout(() => {
-        if (DOM.slideViewportWrapper) {
-            applyViewportScaling(DOM.slideViewportWrapper);
-        }
-        if (state.timelineManager) {
-            state.timelineManager.resize(true);
-            state.timelineManager.renderAt(0, 0);
-        }
+        if (DOM.slideViewportWrapper) applyViewportScaling(DOM.slideViewportWrapper);
+        if (state.timelineManager) { state.timelineManager.resize(true); state.timelineManager.renderAt(0, 0); }
     }, 0);
 }
 
+// --- MODIFIED: Force re-extraction on song load ---
 async function loadSong(songId) {
+    // MODIFIED: Immediately hide any existing alert dialogs to allow new ones to show.
+    hideAlertDialog();
+
     const song = songPlaylist.find(s => s.id === songId);
     if (!song) {
         console.error(`Song with id ${songId} not found in playlist.`);
         return;
     }
 
-    // MODIFIED: This function now sends both metadata and the measure map to the main process.
-    // First, we need to temporarily load the song data into the state to build the map.
+    // NEW LOGIC: Always re-extract the project to the single temp folder.
+    if (song.filePath) {
+        // We use the existing loading dialog mechanism if available via ipcInvoke
+        const result = await window.playerAPI.openProject(song.filePath);
+
+        if (result.success) {
+            song.songData = result.data;
+        } else {
+            console.error(`Failed to re-extract song assets for ${song.title}: ${result.error}`);
+
+            const errorMsg = result.error || "Unknown file error";
+
+            // --- 1. Send error to Android device ---
+            if (window.playerAPI && window.playerAPI.sendSongLoadError) {
+                window.playerAPI.sendSongLoadError(`Asset Error: ${errorMsg}`);
+            }
+
+            // --- 2. Show detailed error in Electron Alert ---
+            await showAlertDialog(
+                'Asset Error',
+                `Could not load assets for "${song.title}". The file might be missing or corrupt.\n\nError Details:\n${errorMsg}`
+            );
+            return; // Stop execution so the app doesn't crash trying to load null data
+        }
+    }
+
+    // --- Standard Loading Logic ---
     const tempThumbnailPage = deserializeElement(song.songData.thumbnailPage);
     const tempPages = song.songData.pages.map(p => deserializeElement(p));
+
     updateState({
         song: {
             ...song.songData,
@@ -142,29 +198,28 @@ async function loadSong(songId) {
             pages: tempPages,
         }
     });
-    const measureMap = buildMeasureMap();
-    const songData = song.songData; // The full song data
 
-    // Now, create the lean metadata object for the main process.
+    const measureMap = buildMeasureMap();
+    const songData = song.songData;
+
     const songMetadata = {
         id: song.id,
         title: song.title,
         filePath: song.filePath,
         bpm: song.songData.bpm,
         bpmUnit: song.songData.bpmUnit,
-        fonts: song.songData.fonts || {}, // ADDED: Pass fonts to main process
+        fonts: song.songData.fonts || {},
     };
 
-    // Send the command to the main process.
     window.playerAPI.loadSong({ songMetadata, measureMap, songData });
+
+    saveActiveSongPath(song.filePath);
 }
 
-/**
- * Activates a song in the renderer using its metadata and content.
- * @param {object} songMetadata The authoritative metadata from the main process state.
- * @param {object} songData The full song content from the local cache.
- */
 export async function handleSongActivated(songMetadata, songData) {
+    // MODIFIED: Immediately hide any existing alert dialogs to ensure UI readiness.
+    hideAlertDialog();
+
     showLoadingDialog('Loading song...');
     try {
         if (DOM.pageManager) {
@@ -192,16 +247,15 @@ export async function handleSongActivated(songMetadata, songData) {
                 filePath: songMetadata.filePath,
                 thumbnailPage: thumbnailPage,
                 pages: pages,
-                bpm: songMetadata.bpm, // Use authoritative BPM from main process
+                bpm: songMetadata.bpm,
                 bpmUnit: songMetadata.bpmUnit,
-                fonts: songData.fonts || {}, // ADDED: Ensure fonts are in local state
+                fonts: songData.fonts || {},
             },
             activePage: null,
             selectedElement: null,
             activeSongId: songMetadata.id,
         });
 
-        // ADDED: Load fonts immediately for the Player renderer
         if (state.song.fonts) {
             fontLoader.loadFonts(state.song.fonts);
         }
@@ -218,22 +272,33 @@ export async function handleSongActivated(songMetadata, songData) {
 
         document.getElementById('window-title').innerText = `Player - ${songMetadata.title}`;
         renderPlaylist();
-        syncPlaylistWithMain(); // Sync with main process after activation
+        syncPlaylistWithMain();
 
     } catch (error) {
-        hideLoadingDialog(); // --- FIX: Hide dialog BEFORE showing the alert
+        hideLoadingDialog();
         console.error('Failed to activate song in renderer:', error);
-        await showAlertDialog('Failed to Load Song', error.message);
+
+        // --- NEW: Send error to Android device ---
+        if (window.playerAPI && window.playerAPI.sendSongLoadError) {
+            window.playerAPI.sendSongLoadError(error.message);
+        }
+
+        // --- MODIFIED: Show detailed error in Electron Alert ---
+        await showAlertDialog(
+            'Failed to Load Song', 
+            `An error occurred while loading "${songMetadata.title}".\n\nError Details:\n${error.message}`
+        );
     } finally {
         hideLoadingDialog();
     }
 }
 
+// ... (Rest of file: handleSongUnloaded, renderPlaylist, handleAddSong, addSongFromPath, initSongsManager remain unchanged) ...
 export function handleSongUnloaded() {
     updateState({ activeSongId: null });
     renderPlaylist();
     showDefaultPlayerView();
-    syncPlaylistWithMain(); // Sync with main process after unload
+    syncPlaylistWithMain();
 }
 
 function renderPlaylist() {
@@ -272,12 +337,11 @@ async function handleAddSong() {
         }
         return;
     }
+    hideAlertDialog();
     showLoadingDialog("Opening project...");
     try {
         const result = await window.playerAPI.openProject(filePath);
-        if (!result.success) {
-            throw new Error(result.error);
-        }
+        if (!result.success) throw new Error(result.error);
         const songData = result.data;
         if (!songDataHasMeasures(songData)) {
             await showAlertDialog('Loading song failed', 'The selected song project does not contain any measures and cannot be played.');
@@ -289,6 +353,7 @@ async function handleAddSong() {
         const title = fileNameWithExt.replace(/\.lyx$/, '');
         const newSong = { id: songId, title, filePath, songData };
         songPlaylist.push(newSong);
+        savePlaylistPaths();
         await loadSong(songId);
     } catch (error) {
         hideLoadingDialog();
@@ -299,6 +364,7 @@ async function handleAddSong() {
 
 export async function addSongFromPath(filePath) {
     if (!filePath) return;
+    hideAlertDialog();
     const existingSong = songPlaylist.find(song => song.filePath === filePath);
     if (existingSong) {
         const songItemElement = playlistElement.querySelector(`[data-song-id="${existingSong.id}"]`);
@@ -323,9 +389,10 @@ export async function addSongFromPath(filePath) {
         const title = filePath.split(/[\\/]/).pop().replace(/\.lyx$/, '');
         const newSong = { id: songId, title, filePath, songData };
         songPlaylist.push(newSong);
+        savePlaylistPaths();
         await loadSong(songId);
     } catch (error) {
-        hideLoadingDialog(); // --- FIX: Hide dialog BEFORE showing the alert
+        hideLoadingDialog();
         console.error('Failed to open project from path:', error);
         await showAlertDialog('Failed to Open Project', error.message);
     } finally {
@@ -337,19 +404,9 @@ export function initSongsManager() {
     playlistElement = document.getElementById('song-playlist');
     const addSongBtn = document.getElementById('add-song-btn');
     addSongBtn.addEventListener('click', handleAddSong);
-
-    // Listen for sync requests from the main process
-    window.playerAPI.onPlaylistRequestSync(() => {
-        console.log('[Player] Main process requested playlist sync.');
-        syncPlaylistWithMain();
-    });
-
-    // Listen for song selection requests from the main process (sent by Android)
-    window.playerAPI.onSongSelectRequest((songId) => {
-        console.log(`[Player] Received request to select song: ${songId}`);
-        loadSong(songId);
-    });
-
+    restorePlaylist();
+    window.playerAPI.onPlaylistRequestSync(() => syncPlaylistWithMain());
+    window.playerAPI.onSongSelectRequest((songId) => loadSong(songId));
     playlistElement.addEventListener('click', e => {
         const songItem = e.target.closest('.song-item');
         if (!songItem) return;
@@ -360,20 +417,16 @@ export function initSongsManager() {
                 const wasActive = state.activeSongId === songId;
                 songPlaylist.splice(index, 1);
                 renderPlaylist();
-                syncPlaylistWithMain(); // Sync after deletion
-                if (songPlaylist.length === 0) {
-                    window.playerAPI.unloadSong();
-                } else if (wasActive) {
-                    const newActiveIndex = Math.max(0, index - 1);
-                    loadSong(songPlaylist[newActiveIndex].id);
-                }
+                syncPlaylistWithMain();
+                savePlaylistPaths();
+                if (songPlaylist.length === 0) window.playerAPI.unloadSong();
+                else if (wasActive) loadSong(songPlaylist[Math.max(0, index - 1)].id);
             }
         } else {
-            if (songId !== state.activeSongId) {
-                loadSong(songId);
-            }
+            if (songId !== state.activeSongId) loadSong(songId);
         }
     });
+    // ... Drag and Drop setup omitted for brevity but is unchanged ...
     let draggedId = null;
     playlistElement.addEventListener('dragstart', e => {
         const item = e.target.closest('.song-item');
@@ -419,6 +472,7 @@ export function initSongsManager() {
         }
         songPlaylist.splice(targetIndex, 0, draggedSong);
         renderPlaylist();
-        syncPlaylistWithMain(); // Sync after reordering
+        syncPlaylistWithMain();
+        savePlaylistPaths();
     });
 }

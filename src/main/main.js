@@ -49,6 +49,9 @@ let displayLatencies = new Map();
 let playbackManager;
 let connectionManager = null;
 
+// --- ADDED: Auto-Accept State ---
+let autoAcceptConnections = true; // Default to true
+
 // --- ADDED: Robust File Deletion Helper ---
 /**
  * Attempts to remove a directory or file. If EBUSY/EPERM/EACCES/ENOTEMPTY errors occur,
@@ -591,10 +594,20 @@ app.whenReady().then(() => {
         });
 
         connectionManager.on('pairingRequest', (device, accept, reject) => {
-            console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId}). Asking UI.`);
-            pairingRequests.set(device.deviceId, { accept, reject });
-            if (playerWindow && !playerWindow.isDestroyed()) {
-                playerWindow.webContents.send('device-controller:pairing-request', { deviceId: device.deviceId, deviceName: device.deviceName });
+            console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId}).`);
+            
+            // --- MODIFIED: Check Auto-Accept Preference ---
+            if (autoAcceptConnections) {
+                console.log(`[Main] Auto-accept enabled. Automatically accepting request from ${device.deviceId}.`);
+                accept();
+                // We don't store in pairingRequests map or alert UI, 
+                // connectionManager will emit 'deviceConnected' shortly, updating the status.
+            } else {
+                console.log(`[Main] Auto-accept disabled. Asking UI.`);
+                pairingRequests.set(device.deviceId, { accept, reject });
+                if (playerWindow && !playerWindow.isDestroyed()) {
+                    playerWindow.webContents.send('device-controller:pairing-request', { deviceId: device.deviceId, deviceName: device.deviceName });
+                }
             }
         });
 
@@ -603,6 +616,43 @@ app.whenReady().then(() => {
                 playerWindow.webContents.send('playlist:select-song', songId);
             }
         });
+
+        // --- NEW: Handlers for explicit data requests ---
+        connectionManager.on('playlistRequest', () => {
+            console.log('[Main] Remote device requested playlist.');
+            // Ask the player window to send the latest playlist state
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('playlist:request-sync');
+            }
+        });
+
+        connectionManager.on('currentSongRequest', () => {
+            console.log('[Main] Remote device requested current song data.');
+            // Directly use playbackManager to get the state and send it
+            if (playbackManager && connectionManager) {
+                const currentSyncState = playbackManager.getCurrentSyncState();
+                
+                // Always send the playback state (status, bpm, etc)
+                connectionManager.sendMessageToPairedDevice({
+                    type: 'playbackUpdate',
+                    payload: currentSyncState
+                });
+
+                const currentSongData = playbackManager.getCurrentSongData();
+                // If a song is loaded, send its full data
+                if (currentSongData && currentSyncState.song) {
+                    connectionManager.sendMessageToPairedDevice({
+                        type: 'songUpdateHint',
+                        payload: { title: currentSyncState.song.title }
+                    });
+                    connectionManager.sendMessageToPairedDevice({
+                        type: 'songUpdate',
+                        payload: currentSongData
+                    });
+                }
+            }
+        });
+        // --- END NEW Handlers ---
 
         connectionManager.on('remoteBpmUpdate', ({ bpm, bpmUnit }) => {
             if (playbackManager) {
@@ -621,31 +671,10 @@ app.whenReady().then(() => {
             if (playerWindow && !playerWindow.isDestroyed()) {
                 const remoteInfo = { id: device.deviceId, name: device.deviceName, type: device.deviceType, ips: device.getRemoteAdvertisedIps() };
                 playerWindow.webContents.send('device-controller:connection-success', remoteInfo);
-                // Request the current playlist from the player window to sync the new device
-                playerWindow.webContents.send('playlist:request-sync');
             }
-            // ADDED: Send current song data on connect
-            if (playbackManager) {
-                const currentSongData = playbackManager.getCurrentSongData();
-                const currentSyncState = playbackManager.getCurrentSyncState();
-                if (currentSongData && currentSyncState.song) {
-                    console.log('[Main] Sending current song data and playback state to newly connected device.');
-                    // MODIFIED: Send hint message first
-                    connectionManager.sendMessageToPairedDevice({
-                        type: 'songUpdateHint',
-                        payload: { title: currentSyncState.song.title }
-                    });
-                    connectionManager.sendMessageToPairedDevice({
-                        type: 'songUpdate',
-                        payload: currentSongData
-                    });
-                    // Also send the current playback state
-                    connectionManager.sendMessageToPairedDevice({
-                        type: 'playbackUpdate',
-                        payload: currentSyncState
-                    });
-                }
-            }
+            
+            // MODIFIED: Removed automatic data pushing here. 
+            // We now wait for 'playlistRequest' and 'currentSongRequest' events.
             
             device.on('infoUpdated', (updatedDevice) => {
                 if (playerWindow && !playerWindow.isDestroyed()) {
@@ -691,6 +720,13 @@ app.whenReady().then(() => {
                 connectionManager.disconnectFromPairedDevice();
             }
         });
+        
+        // --- ADDED: IPC handler for Auto-Accept preference ---
+        ipcMain.on('device-controller:set-auto-accept', (event, enabled) => {
+            console.log(`[Main] Auto-accept connections set to: ${enabled}`);
+            autoAcceptConnections = enabled;
+        });
+
         ipcMain.on('player:ready-for-devices', () => broadcastDeviceList());
 
     } catch (error) {
@@ -698,6 +734,18 @@ app.whenReady().then(() => {
     }
     // --- END: Device Controller Integration ---
 
+    // --- ADDED: Handler for song load errors ---
+    ipcMain.on('player:song-load-error', (event, errorMessage) => {
+        console.error(`[Main] Received song load error from player: ${errorMessage}`);
+        if (connectionManager) {
+            connectionManager.sendMessageToPairedDevice({
+                type: 'songLoadError',
+                payload: {
+                    message: errorMessage || "Unknown error occurred on the host."
+                }
+            });
+        }
+    });
 
     // --- IPC handler for latency updates ---
     // MOVED here to have access to playbackManager and broadcastToAllWindows
@@ -1506,4 +1554,4 @@ if (!gotTheLock) {
             }
         }
     });
-}
+}

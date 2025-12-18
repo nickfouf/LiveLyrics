@@ -38,4 +38,9 @@ export function showAlertDialog(title = 'Alert', message = '') {
             resolve();
         }
     });
+}
+
+// --- ADDED: Helper to programmatically hide the dialog ---
+export function hideAlertDialog() {
+    handleOkClick();
 }

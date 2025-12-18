@@ -4,7 +4,7 @@ import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { initSongsManager, addSongFromPath, songPlaylist } from './songsManager.js';
 import { initPlayerPlayback, handlePlaybackUpdate, localPlaybackState } from './playback.js';
-import { initAlertDialog, showAlertDialog } from '../editor/alertDialog.js';
+import { initAlertDialog, showAlertDialog, hideAlertDialog } from '../editor/alertDialog.js';
 import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
 import { applyViewportScaling } from '../editor/rendering.js';
@@ -168,6 +168,27 @@ function initDeviceController() {
         });
     }
 
+    // --- ADDED: Auto-Accept Persistence Logic ---
+    if (DOM.autoAcceptToggle) {
+        // 1. Load preference from localStorage (default to 'true' if not set)
+        const savedAutoAccept = localStorage.getItem('autoAcceptConnections');
+        const shouldAutoAccept = savedAutoAccept === null ? true : (savedAutoAccept === 'true');
+
+        // 2. Set initial UI state
+        DOM.autoAcceptToggle.checked = shouldAutoAccept;
+
+        // 3. Sync initial state to Main process
+        window.playerAPI.setAutoAccept(shouldAutoAccept);
+
+        // 4. Handle user toggling
+        DOM.autoAcceptToggle.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            localStorage.setItem('autoAcceptConnections', isChecked);
+            window.playerAPI.setAutoAccept(isChecked);
+        });
+    }
+    // ---------------------------------------------
+
     DOM.disconnectDeviceBtn.addEventListener('click', async () => {
         if (!connectedDevice) return;
         const confirmed = await showConfirmationDialog(
@@ -251,6 +272,7 @@ function initDeviceController() {
         connectingDeviceId = null;
         isManualDisconnect = false; 
         hideDeviceListDialog();
+        hideAlertDialog(); // --- ADDED: Hide any pending alerts on success
         updateDeviceStatusUI('connected', device);
     });
 

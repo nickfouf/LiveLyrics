@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const net = require("./SmartSocket.js");
+const dgram = require('dgram'); // Added
 const os =require('os');
 const { Bonjour } = require('bonjour-service');
 const crypto = require('crypto');
@@ -7,6 +8,7 @@ const { SocketDevice } = require("./SocketDevice.js");
 const { performance } = require('perf_hooks');
 
 const PAIRING_REQUEST_TIMEOUT = 35000;
+const DISCOVERY_PORT = 54321; // Added: Fixed port for UDP discovery
 
 class RTTStats {
     static MAX_SAMPLES = 20;
@@ -30,21 +32,23 @@ class ConnectionManager extends EventEmitter {
     #publishedService = null;
     #lastPublishedIPs = [];
     #devices = new Map();
-    #networkMonitor; // For native network change detection
+    #networkMonitor; 
     #deviceId = 'unknown';
     #deviceName = 'Unknown Device';
     #clientType = 'unknown';
     #serviceVersion = 0;
     #connectionMaintainerInterval = null;
     #syncInterval = null;
-    #pairedDevice = null; // The single device we are paired with
+    #pairedDevice = null; 
     #rttStats = new Map();
-    #pendingUiPairingRequests = new Set(); // MODIFIED: Added to track pending requests
+    #pendingUiPairingRequests = new Set();
+    
+    // Added: Discovery socket reference
+    #discoverySocket = null;
 
     get deviceId() { return this.#deviceId; }
     get deviceName() { return this.#deviceName; }
 
-    // ADDED: Public getter for RTT stats.
     getRttStats() {
         return this.#rttStats;
     }
@@ -69,6 +73,10 @@ class ConnectionManager extends EventEmitter {
             return;
         }
         console.log('[ConnectionManager] Starting network services...');
+        
+        // Added: Start UDP discovery listener
+        this.#startDiscoverySocket();
+
         this.#bonjour = new Bonjour();
 
         this.#startServerAndPublish();
@@ -84,6 +92,16 @@ class ConnectionManager extends EventEmitter {
             return;
         }
         console.log('[ConnectionManager] Stopping network services...');
+
+        // Added: Close UDP discovery socket
+        if (this.#discoverySocket) {
+            try {
+                this.#discoverySocket.close();
+            } catch (e) {
+                console.error('[ConnectionManager] Error closing discovery socket:', e);
+            }
+            this.#discoverySocket = null;
+        }
 
         if (this.#connectionMaintainerInterval) {
             clearInterval(this.#connectionMaintainerInterval);
@@ -122,6 +140,98 @@ class ConnectionManager extends EventEmitter {
         this.#bonjour = null;
     }
 
+    // Added: Initialize and bind UDP discovery socket
+    #startDiscoverySocket() {
+        try {
+            this.#discoverySocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+            
+            this.#discoverySocket.on('error', (err) => {
+                console.error(`[DiscoverySocket] Server error:\n${err.stack}`);
+                try { this.#discoverySocket.close(); } catch(e) {}
+            });
+
+            this.#discoverySocket.on('message', (msg, rinfo) => {
+                this.#handleDiscoveryMessage(msg, rinfo);
+            });
+
+            this.#discoverySocket.bind(DISCOVERY_PORT, () => {
+                console.log(`[DiscoverySocket] Listening on 0.0.0.0:${DISCOVERY_PORT}`);
+            });
+        } catch (e) {
+            console.error('[DiscoverySocket] Failed to bind:', e);
+        }
+    }
+
+    // Added: Process incoming UDP identity packets
+    #handleDiscoveryMessage(msg, rinfo) {
+        try {
+            const data = JSON.parse(msg.toString());
+            
+            // Ignore own packets or invalid types
+            if (!data.deviceId || data.deviceId === this.#deviceId || data.type !== 'identity') return;
+            
+            // Ensure we only process compatible device types
+            if (!this.canPairWith(data.deviceType)) return;
+
+            // console.log(`[DiscoverySocket] Received identity from ${data.deviceName} (${rinfo.address})`);
+
+            this.emit('discoverableDeviceFound', {
+                deviceId: data.deviceId,
+                deviceType: data.deviceType,
+                deviceName: data.deviceName,
+            });
+
+            let device = this.#devices.get(data.deviceId);
+            if (!device) {
+                device = new SocketDevice(data.deviceId, data.deviceType, data.deviceName);
+                this.#devices.set(data.deviceId, device);
+            }
+            
+            // Construct address list, prioritizing the sender's IP
+            const addressesToTry = [rinfo.address];
+            if (data.addresses && Array.isArray(data.addresses)) {
+                data.addresses.forEach(ip => {
+                    if (ip !== rinfo.address) addressesToTry.push(ip);
+                });
+            }
+            
+            // Update device info similar to Bonjour resolution
+            device.updateRemoteInfo(
+                addressesToTry, 
+                parseInt(data.tcpPort, 10), 
+                parseInt(data.version, 10), 
+                data.deviceName
+            );
+
+            // If we are currently paired with this device, trigger maintenance to use new IPs if needed
+            if (this.#pairedDevice && this.#pairedDevice.deviceId === data.deviceId) {
+                this.#triggerConnectionMaintenance();
+            }
+
+        } catch (e) {
+            console.warn('[DiscoverySocket] Failed to parse message:', e);
+        }
+    }
+
+    // Added: Send UDP identity packet to a target IP
+    #sendIdentitySignal(targetIp) {
+        if (!this.#discoverySocket || !this.#server || !this.#server.address()) return;
+        
+        const payload = JSON.stringify({
+            type: 'identity',
+            deviceId: this.#deviceId,
+            deviceName: this.#deviceName,
+            deviceType: this.#clientType,
+            tcpPort: this.#server.address().port,
+            version: this.#serviceVersion,
+            addresses: this.#lastPublishedIPs
+        });
+
+        this.#discoverySocket.send(payload, DISCOVERY_PORT, targetIp, (err) => {
+            if (err) console.warn(`[DiscoverySocket] Failed to send identity to ${targetIp}`, err);
+        });
+    }
+
     #createConnection(address, port) {
         return net.createConnection({
             deviceId: this.deviceId,
@@ -147,6 +257,11 @@ class ConnectionManager extends EventEmitter {
 
         const addressesToTry = (txt.addresses || '').split(',').filter(Boolean);
         if (addressesToTry.length === 0) return;
+
+        // Added: REACTIVE Signal - Send UDP identity signal to discovered IPs
+        addressesToTry.forEach(ip => {
+            this.#sendIdentitySignal(ip);
+        });
 
         const { deviceId: remoteId, deviceType, deviceName } = txt;
         let device = this.#devices.get(remoteId);
@@ -179,7 +294,6 @@ class ConnectionManager extends EventEmitter {
         this.#server.listen(0, '0.0.0.0', () => {
             console.log(`Server listening on port ${this.#server.address().port}`);
             
-            // Fallback polling for network changes, as native addon is not included
             setInterval(() => this.#handleNetworkChange(), 5000);
             this.#handleNetworkChange(); // Initial publication
 
@@ -207,22 +321,19 @@ class ConnectionManager extends EventEmitter {
                     reject();
                 }
             } else {
-                // MODIFIED: Start of the fix
                 if (this.#pendingUiPairingRequests.has(remoteId)) {
                     console.log(`[ConnectionManager] Ignoring duplicate pairing UI request for ${remoteId}`);
-                    return; // Ignore the duplicate request, preventing a second timeout.
+                    return;
                 }
-                // MODIFIED: End of the fix
 
                 console.log("Forwarding pairing request to application.");
-                this.#pendingUiPairingRequests.add(remoteId); // MODIFIED: Track this request
+                this.#pendingUiPairingRequests.add(remoteId);
 
                 let potentialDevice = this.#devices.get(remoteId);
                 if (!potentialDevice) {
                     potentialDevice = new SocketDevice(remoteId, deviceType, deviceName);
                     this.#devices.set(remoteId, potentialDevice);
                 } else {
-                    // Update name in case it changed
                     potentialDevice.updateRemoteInfo([], -1, -1, deviceName);
                 }
 
@@ -231,7 +342,7 @@ class ConnectionManager extends EventEmitter {
                     if (!decided) {
                         decided = true;
                         console.log("Pairing request timed out. Rejecting.");
-                        this.#pendingUiPairingRequests.delete(remoteId); // MODIFIED: Clean up tracker
+                        this.#pendingUiPairingRequests.delete(remoteId);
                         reject();
                     }
                 }, PAIRING_REQUEST_TIMEOUT);
@@ -240,7 +351,7 @@ class ConnectionManager extends EventEmitter {
                     if (!decided) {
                         decided = true;
                         clearTimeout(timeoutHandle);
-                        this.#pendingUiPairingRequests.delete(remoteId); // MODIFIED: Clean up tracker
+                        this.#pendingUiPairingRequests.delete(remoteId);
                         console.log(`Application ACCEPTED pairing with ${remoteId}`);
                         if (this.#pairedDevice) this.#pairedDevice.destroyAllSockets();
                         this.#pairedDevice = potentialDevice;
@@ -254,7 +365,7 @@ class ConnectionManager extends EventEmitter {
                     if (!decided) {
                         decided = true;
                         clearTimeout(timeoutHandle);
-                        this.#pendingUiPairingRequests.delete(remoteId); // MODIFIED: Clean up tracker
+                        this.#pendingUiPairingRequests.delete(remoteId);
                         console.log(`Application REJECTED pairing with ${remoteId}`);
                         reject();
                     }
@@ -266,7 +377,6 @@ class ConnectionManager extends EventEmitter {
     }
 
     #attachDeviceListeners(device) {
-        // FIX: Before attaching new listeners, remove all old ones.
         device.removeAllListeners();
 
         device.on('error', (dev, error) => this.emit('error', dev));
@@ -314,7 +424,6 @@ class ConnectionManager extends EventEmitter {
             }
         });
 
-        // MODIFICATION: The listener now accepts `remoteIp`.
         device.on('message', (message, dev, remoteIp) => {
             if (!message || !message.type) return;
             const playbackCommands = ['play', 'play-synced', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start', 'jump'];
@@ -329,8 +438,13 @@ class ConnectionManager extends EventEmitter {
                 if (bpm !== undefined && bpmUnit) {
                     this.emit('remoteBpmUpdate', { bpm, bpmUnit });
                 }
+            } else if (message.type === 'requestPlaylist') {
+                console.log('[ConnectionManager] Playlist requested by remote device.');
+                this.emit('playlistRequest');
+            } else if (message.type === 'requestCurrentSong') {
+                console.log('[ConnectionManager] Current song data requested by remote device.');
+                this.emit('currentSongRequest');
             } else if (playbackCommands.includes(message.type)) {
-                // MODIFICATION: Pass the `remoteIp` with the command event.
                 this.emit('remoteCommand', message, remoteIp);
             }
         });
@@ -341,10 +455,6 @@ class ConnectionManager extends EventEmitter {
 
             switch (payload.type) {
                 case 'clock_sync_pong_android': {
-                    // ======================= THE FIX IS HERE =======================
-                    // The `remoteIp` is the true source of the UDP packet (the Android interface).
-                    // The `payload.sourceIp` is what Android *thought* our IP was.
-                    // We MUST trust `remoteIp` as the key for our RTT stats.
                     const rttKey = remoteIp; 
                     
                     const t4 = performance.now();
@@ -379,10 +489,8 @@ class ConnectionManager extends EventEmitter {
         });
     }
 
-    // Helper method to get the player window reference from main.js
     getPlayerWindow() {
         const allWindows = require('electron').BrowserWindow.getAllWindows();
-        // This is a simple way; a more robust solution might involve window IDs or titles
         return allWindows.find(win => win.getTitle().includes('Player'));
     }
 
@@ -440,6 +548,13 @@ class ConnectionManager extends EventEmitter {
             port: serverPort,
             txt: txtData
         });
+
+        // Added: PROACTIVE Signal - Broadcast identity to all known devices because our info changed
+        console.log('[DiscoverySocket] Broadcasting new identity to known devices...');
+        for (const device of this.#devices.values()) {
+            const remoteIps = device.getRemoteAdvertisedIps();
+            remoteIps.forEach(ip => this.#sendIdentitySignal(ip));
+        }
     }
 
     #maintainConnections() {
@@ -455,9 +570,6 @@ class ConnectionManager extends EventEmitter {
                 this.#pairedDevice.addOutgoingSocket(newSocket);
             }
         }
-
-        // REMOVED: The faulty pruning logic has been removed from this function.
-        // RTT stats will now only be cleared upon a full device disconnection.
     }
 
     #triggerConnectionMaintenance() {
@@ -509,16 +621,12 @@ class ConnectionManager extends EventEmitter {
             const deviceToCancel = this.#pairedDevice;
             this.#pairedDevice = null;
     
-            // Politely tell the other device we are cancelling before destroying sockets.
             deviceToCancel.sendPairingRejection('Pairing canceled by user.');
     
-            // Give the message a moment to send before tearing everything down.
             setTimeout(() => {
                 deviceToCancel.destroyAllSockets('local');
             }, 100);
     
-            // Manually emit a pairingFailed event to ensure the UI updates,
-            // because destroyAllSockets might not emit if the connection wasn't fully established.
             this.emit('pairingFailed', { deviceId: deviceId, reason: 'Pairing canceled by user.' });
     
             return true;
@@ -570,4 +678,4 @@ function getAllRoutableIPv4Addresses() {
     return addresses;
 }
 
-module.exports = { ConnectionManager };
+module.exports = { ConnectionManager };

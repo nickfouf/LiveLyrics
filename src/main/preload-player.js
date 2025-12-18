@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('playerAPI', {
     sendPlaylistUpdate: (data) => ipcRenderer.send('playlist:updated', data),
     onPlaylistRequestSync: (callback) => ipcRenderer.on('playlist:request-sync', (_event) => callback()),
     onSongSelectRequest: (callback) => ipcRenderer.on('playlist:select-song', (_event, songId) => callback(songId)),
+    // ADDED: Error Reporting to Remote
+    sendSongLoadError: (errorMessage) => ipcRenderer.send('player:song-load-error', errorMessage),
 
     // --- ADDED: Device Controller API ---
     onDeviceUpdate: (callback) => ipcRenderer.on('device-controller:device-list-update', (_event, devices) => callback(devices)),
@@ -56,6 +58,10 @@ contextBridge.exposeInMainWorld('playerAPI', {
     onError: (callback) => ipcRenderer.on('device-controller:error', (_event, message) => callback(message)),
     // NEW: Listener for RTT updates.
     onRttUpdate: (callback) => ipcRenderer.on('device-controller:rtt-update', (_event, stats) => callback(stats)),
+    
+    // ADDED: Send auto-accept preference
+    setAutoAccept: (enabled) => ipcRenderer.send('device-controller:set-auto-accept', enabled),
+
     initiatePairing: (deviceId) => ipcRenderer.send('device-controller:initiate-pairing', deviceId),
     cancelPairing: (deviceId) => ipcRenderer.send('device-controller:cancel-pairing', deviceId),
     respondToPairing: (deviceId, accepted) => ipcRenderer.send('device-controller:respond-to-pairing', { deviceId, accepted }),

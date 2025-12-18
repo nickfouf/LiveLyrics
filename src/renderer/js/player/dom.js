@@ -65,6 +65,9 @@ export function initDOM() {
     DOM.deviceListDialog = document.getElementById('device-list-dialog');
     DOM.closeDeviceListBtn = document.getElementById('close-device-list-btn');
     DOM.deviceList = document.getElementById('device-list');
+    
+    // ADDED: Auto-Accept Toggle
+    DOM.autoAcceptToggle = document.getElementById('auto-accept-connections');
 
     // Pairing Dialog
     DOM.pairingDialog = document.getElementById('pairing-dialog');
