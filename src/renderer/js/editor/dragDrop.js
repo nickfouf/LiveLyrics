@@ -184,7 +184,6 @@ function applyHighlighting(action) {
 
 function executeDrop() {
     if (!currentDropAction || !currentDropAction.isValid) {
-        // Only show the hint if the action was not an "ignored" one.
         if (currentDropAction && !currentDropAction.isIgnored) {
             showHint("Invalid drop location.");
         }
@@ -202,21 +201,30 @@ function executeDrop() {
         oldParent = elementToDrop?.parent;
     }
 
-    if (!elementToDrop || !parentElement) return; // Add guard for parentElement
+    if (!elementToDrop || !parentElement) return;
+
     if (oldParent) {
         oldParent.removeElement(elementToDrop);
     }
 
-    let index = parentElement.getChildren().length;
-    if (mode === 'before') {
-        index = parentElement.getChildren().indexOf(targetElement);
-    } else if (mode === 'after') {
-        index = parentElement.getChildren().indexOf(targetElement) + 1;
+    // --- UPDATED INDEX CALCULATION FOR REVERSED LIST ---
+    let index;
+    if (mode === 'inside') {
+        // Drop on a folder: Put it at the very front (highest index)
+        index = parentElement.getChildren().length;
+    } else {
+        const targetIndex = parentElement.getChildren().indexOf(targetElement);
+        if (mode === 'before') {
+            // UI "Above" target = In front of target = higher index
+            index = targetIndex + 1;
+        } else { // mode === 'after'
+            // UI "Below" target = Behind target = same index (target shifts up/forward)
+            index = targetIndex;
+        }
     }
 
     parentElement.addElementAt(elementToDrop, index);
 
-    // If a new music element was created, add it to the page's music order.
     if (state.currentDragOperation.type === 'create' && (elementToDrop instanceof VirtualLyrics || elementToDrop instanceof VirtualOrchestra || elementToDrop instanceof VirtualAudio)) {
         if (state.activePage) {
             state.activePage.addMusicElementToOrder(elementToDrop);
@@ -399,4 +407,4 @@ export function initDragDrop() {
     };
     DOM.mainEditorArea.addEventListener('dragleave', (e) => handleDragLeave(e, DOM.mainEditorArea));
     DOM.layerTree.addEventListener('dragleave', (e) => handleDragLeave(e, DOM.layerTree));
-}
+}

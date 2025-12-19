@@ -991,51 +991,53 @@ body.is-dragging .slide-wrapper [data-element-type]:not([data-element-type$="con
     color: #aaa;
 }
 
+/* 1. Constrain the input-with-button container */
 .input-with-button {
     display: flex;
-    align-items: center;
+    flex-direction: column; /* Stack vertically */
+    align-items: stretch;    /* Fill width */
     gap: 0.5rem;
+    width: 100%;             /* Occupy full parent width */
+    max-width: 100%;         /* Strictly forbid expanding parent */
+    min-width: 0;            /* The "Magic Fix": allows flex items to shrink below content size */
+    box-sizing: border-box;
 }
 
-.input-with-button .readonly-input,
-.input-with-button .font-picker-button {
-    color: #ccc; /* Lighter text for readability */
+/* 2. Fix the filename span */
+.input-with-button .readonly-input {
+    color: #ccc;
     border: 1px solid #555;
     background-color: #333;
-    padding: 6px 8px;
+    padding: 6px 12px;
     font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: default; /* Show a normal cursor, not a text input cursor */
-    flex-grow: 1;
-    border-radius: 4px;
-    height: 38.5px; /* Match form-input height */
+
+    /* Text Truncation Logic */
+    white-space: nowrap;     /* Keep on one line */
+    overflow: hidden;        /* Hide the overflow */
+    text-overflow: ellipsis; /* Add "..." */
+
+    display: block;          /* Block ensures it respects width: 100% */
+    width: 100%;
+    max-width: 100%;
+    height: 38.5px;
     box-sizing: border-box;
-    display: flex;
-    align-items: center;
+    line-height: 24px;       /* Center text vertically */
+    cursor: default;
+    border-radius: 4px;
 }
 
-.input-with-button .font-picker-button {
-    justify-content: space-between;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.input-with-button .font-picker-button:hover {
-    border-color: #777;
-    background-color: #4a4a4a;
-}
-
-.input-with-button .font-picker-button img {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-}
-
-
+/* 3. Ensure the Choose button also stays in bounds */
 .input-with-button button {
-    margin-top: 10px;
+    width: 100%;
+    margin-top: 0 !important; /* Remove the old margin hack */
+    box-sizing: border-box;
+}
+
+/* 4. Global Fix for the Properties Panel groups */
+/* This ensures the entire form group doesn't expand because of its children */
+.prop-group-body .form-group {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .spacing-grid, .padding-grid, .gravity-grid {
@@ -3051,4 +3053,4 @@ body.is-playing .slide-wrapper {
 .delete-measure-btn {
     right: -8px;
     background-color: #cc3333;
-}
+}

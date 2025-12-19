@@ -11,6 +11,7 @@ import { triggerActivePageRender } from './pageManager.js';
 import { updateEmptyPageHintVisibility } from './rendering.js';
 import { generateUUID } from '../renderer/utils.js';
 
+
 /**
  * Duplicates a virtual element and its entire subtree, reassigning all necessary IDs.
  * @param {VirtualElement} elementToDuplicate The element to copy.
@@ -47,13 +48,12 @@ function duplicateLayer(elementToDuplicate) {
 
 /**
  * Recursively builds the layer tree UI from the virtual element hierarchy.
- * @param {VirtualElement} element The virtual element to build a tree item for.
- * @param {HTMLUListElement} parentListElement The <ul> element to append the new item to.
+ * Order is REVERSED so that front-most elements appear at the top of the list.
  */
 function buildLayerTree(element, parentListElement) {
     const li = document.createElement('li');
     li.className = 'layer-item';
-    li.dataset.targetId = element.id; // Use a unique ID from the virtual element
+    li.dataset.targetId = element.id;
     li.setAttribute('draggable', 'true');
 
     const isContainer = element instanceof VirtualContainer;
@@ -88,7 +88,51 @@ function buildLayerTree(element, parentListElement) {
         const childrenUl = document.createElement('ul');
         childrenUl.className = 'layer-children';
         li.appendChild(childrenUl);
-        children.forEach(child => buildLayerTree(child, childrenUl));
+
+        // --- REVERSED ITERATION ---
+        // Higher index in array = visually "front" = top of list
+        [...children].reverse().forEach(child => buildLayerTree(child, childrenUl));
+    }
+}
+
+/**
+ * Renders the entire layers panel.
+ */
+export function renderLayersPanel() {
+    DOM.layerTree.innerHTML = '';
+    const activePage = state.activePage;
+    if (!activePage) return;
+
+    const rootLi = document.createElement('li');
+    rootLi.className = 'layer-item has-children';
+    rootLi.dataset.targetId = activePage.id;
+
+    const pageName = activePage.getProperty('name').name;
+    rootLi.innerHTML = `
+    <div class="layer-content">
+        <button class="layer-toggle-btn"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M7,10L12,15L17,10H7Z" /></svg></button>
+        <div class="layer-info">
+            <span class="layer-type-icon"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 16L6 10L7.41 8.58L12 13.17L16.59 8.58L18 10M12 20.5L3 11.5L12 2.5L21 11.5L12 20.5Z"/></svg></span>
+            <span class="layer-name">${pageName}</span>
+        </div>
+    </div>`;
+
+    const childrenContainer = document.createElement('ul');
+    childrenContainer.className = 'layer-children';
+    rootLi.appendChild(childrenContainer);
+
+    // --- REVERSED ITERATION ---
+    [...activePage.getChildren()].reverse().forEach(element => buildLayerTree(element, childrenContainer));
+
+    DOM.layerTree.appendChild(rootLi);
+
+    if (state.selectedElement) {
+        const selectedItem = DOM.layerTree.querySelector(`.layer-item[data-target-id="${state.selectedElement.id}"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('selected');
+        }
+    } else {
+        selectLayer(activePage);
     }
 }
 
@@ -122,48 +166,6 @@ export function selectLayer(elementToSelect) {
     // Update other panels
     renderPropertiesPanel();
     renderEventsPanel();
-}
-
-/**
- * Renders the entire layers panel based on the current active page's virtual DOM.
- */
-export function renderLayersPanel() {
-    DOM.layerTree.innerHTML = '';
-    const activePage = state.activePage;
-    if (!activePage) return;
-
-    // Create the root 'Page' item
-    const rootLi = document.createElement('li');
-    rootLi.className = 'layer-item has-children';
-    rootLi.dataset.targetId = activePage.id;
-    
-    const pageName = activePage.getProperty('name').name;
-    rootLi.innerHTML = `
-    <div class="layer-content">
-        <button class="layer-toggle-btn"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M7,10L12,15L17,10H7Z" /></svg></button>
-        <div class="layer-info">
-            <span class="layer-type-icon"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 16L6 10L7.41 8.58L12 13.17L16.59 8.58L18 10M12 20.5L3 11.5L12 2.5L21 11.5L12 20.5Z"/></svg></span>
-            <span class="layer-name">${pageName}</span>
-        </div>
-    </div>`;
-
-    const childrenContainer = document.createElement('ul');
-    childrenContainer.className = 'layer-children';
-    rootLi.appendChild(childrenContainer);
-
-    // Build the rest of the tree from the page's children
-    activePage.getChildren().forEach(element => buildLayerTree(element, childrenContainer));
-    DOM.layerTree.appendChild(rootLi);
-
-    // Ensure selection is reflected
-    if (state.selectedElement) {
-        const selectedItem = DOM.layerTree.querySelector(`.layer-item[data-target-id="${state.selectedElement.id}"]`);
-        if (selectedItem) {
-            selectedItem.classList.add('selected');
-        }
-    } else {
-        selectLayer(activePage);
-    }
 }
 
 export function initLayersPanelInteractions() {
