@@ -76,7 +76,7 @@ export function renderEventsPanel() {
         totalMeasuresDisplay.textContent = `Total measures: ${totalMeasures}`;
 
         // --- RENDER "TRANSITION" VIEW ---
-        const initialTransition = activePage.transition || { type: 'fade', duration: 2, durationUnit: 'beats', offsetBeats: 0, direction: 'left', perspective: { value: 2000, unit: 'px' } };
+        const initialTransition = activePage.transition || { type: 'fade', duration: 2, durationUnit: 'beats', offsetBeats: 0, direction: 'left', perspective: { value: 2000, unit: 'px' }, scaleFactor: 2 };
 
         const transitionGroup = document.createElement('div');
         transitionGroup.className = 'drawer-group';
@@ -90,6 +90,7 @@ export function renderEventsPanel() {
                     <option value="push" ${initialTransition.type === 'push' ? 'selected' : ''}>Push</option>
                     <option value="flip" ${initialTransition.type === 'flip' ? 'selected' : ''}>Flip</option>
                     <option value="cube" ${initialTransition.type === 'cube' ? 'selected' : ''}>Cube</option>
+                    <option value="scale-fade" ${initialTransition.type === 'scale-fade' ? 'selected' : ''}>Scale and Fade</option>
                     <option value="instant" ${initialTransition.type === 'instant' ? 'selected' : ''}>Instant</option>
                 </select>
             </div>
@@ -105,7 +106,7 @@ export function renderEventsPanel() {
             const transition = activePage.transition; // FIX: Read the latest transition state
             transition.type = currentType;
 
-            if (currentType === 'fade' || currentType === 'dip-to-black' || currentType === 'push' || currentType === 'flip' || currentType === 'cube') {
+            if (currentType === 'fade' || currentType === 'dip-to-black' || currentType === 'push' || currentType === 'flip' || currentType === 'cube' || currentType === 'scale-fade') {
                 transitionPropertiesContainer.innerHTML += `
                     <div class="form-group">
                         <label for="page-transition-duration">Duration</label>
@@ -134,6 +135,25 @@ export function renderEventsPanel() {
                             <option value="up" ${transition.direction === 'up' ? 'selected' : ''}>Up</option>
                             <option value="down" ${transition.direction === 'down' ? 'selected' : ''}>Down</option>
                         </select>
+                    </div>
+                `;
+            }
+
+            if (currentType === 'scale-fade') {
+                const direction = transition.direction === 'in' ? 'in' : 'out'; // Default to out
+                const scaleFactor = transition.scaleFactor !== undefined ? transition.scaleFactor : 2; // Default to 2
+
+                transitionPropertiesContainer.innerHTML += `
+                     <div class="form-group">
+                        <label for="page-transition-direction">Direction</label>
+                        <select id="page-transition-direction" class="form-select">
+                            <option value="out" ${direction === 'out' ? 'selected' : ''}>Out</option>
+                            <option value="in" ${direction === 'in' ? 'selected' : ''}>In</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="page-transition-scale-factor">Scale Factor</label>
+                        <input type="number" id="page-transition-scale-factor" class="form-input" min="0.1" step="0.1" value="${scaleFactor}">
                     </div>
                 `;
             }
@@ -183,6 +203,16 @@ export function renderEventsPanel() {
             if (directionSelect) {
                 directionSelect.addEventListener('change', () => {
                     activePage.transition.direction = directionSelect.value;
+                    markAsDirty();
+                    reprogramAllPageTransitions();
+                });
+            }
+
+            const scaleFactorInput = document.getElementById('page-transition-scale-factor');
+            if (scaleFactorInput) {
+                scaleFactorInput.addEventListener('change', () => {
+                    const val = parseFloat(scaleFactorInput.value);
+                    activePage.transition.scaleFactor = isFinite(val) && val > 0 ? val : 2;
                     markAsDirty();
                     reprogramAllPageTransitions();
                 });

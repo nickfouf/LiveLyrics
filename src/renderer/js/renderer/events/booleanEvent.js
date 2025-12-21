@@ -1,10 +1,13 @@
+// src/renderer/js/renderer/events/booleanEvent.js
+
 export class BooleanEvent {
     #value;
     #ease;
     #measureIndex;
     #measureProgress;
+    #isTransition; // Added
 
-    constructor({ value, ease = 'linear', measureIndex, measureProgress }) {
+    constructor({ value, ease = 'linear', measureIndex, measureProgress, isTransition = false }) { // Added isTransition
         if (typeof value !== 'boolean') {
             throw new TypeError('Value must be a boolean');
         }
@@ -21,7 +24,10 @@ export class BooleanEvent {
         this.setEase(ease);
         this.setMeasureIndex(measureIndex);
         this.setMeasureProgress(measureProgress);
+        this.#isTransition = isTransition; // Store it
     }
+
+    getIsTransition() { return this.#isTransition; } // Added getter
 
     getMeasureIndex() { return this.#measureIndex; }
     setMeasureIndex(index) { this.#measureIndex = index; }

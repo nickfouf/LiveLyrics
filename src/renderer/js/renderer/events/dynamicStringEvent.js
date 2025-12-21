@@ -6,8 +6,9 @@ export class DynamicStringEvent {
     #ease;
     #measureIndex;
     #measureProgress;
+    #isTransition; // Added
 
-    constructor({ value, id, ease = 'linear', measureIndex, measureProgress }) {
+    constructor({ value, id, ease = 'linear', measureIndex, measureProgress, isTransition = false }) { // Added isTransition
         if (typeof value !== 'string') {
             throw new TypeError('Value must be a string');
         }
@@ -28,7 +29,10 @@ export class DynamicStringEvent {
         this.setEase(ease);
         this.setMeasureIndex(measureIndex);
         this.setMeasureProgress(measureProgress);
+        this.#isTransition = isTransition; // Store it
     }
+
+    getIsTransition() { return this.#isTransition; } // Added getter
 
     getMeasureIndex() { return this.#measureIndex; }
     setMeasureIndex(index) { this.#measureIndex = index; }

@@ -29,10 +29,14 @@ import { showLoadingDialog, hideLoadingDialog } from './loadingDialog.js';
 import { showAlertDialog } from './alertDialog.js';
 import { VirtualTitle } from '../renderer/elements/title.js';
 import {
-    rebuildAllEventTimelines as sharedRebuildAllEventTimelines
+    rebuildAllEventTimelines as sharedRebuildAllEventTimelines,
+    reprogramAllPageTransitions as sharedReprogramAllPageTransitions
 } from '../player/events.js';
 import { NumberEvent } from '../renderer/events/numberEvent.js';
 import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
+import { BooleanEvent } from '../renderer/events/booleanEvent.js';
+import { UnitEvent } from '../renderer/events/unitEvent.js';
+import { StringEvent } from '../renderer/events/stringEvent.js';
 
 
 export function updateWindowTitle() {
@@ -200,7 +204,7 @@ function _timeInBeatsToMeasureInfo(timeInBeats, measureMap) {
     if (timeInBeats >= totalDuration) {
         return { measureIndex: measureMap.length, measureProgress: 0 };
     }
-    
+
     if (measureMap.length > 0 && timeInBeats < measureMap[0].startTime) {
         return { measureIndex: 0, measureProgress: 0 };
     }
@@ -211,101 +215,11 @@ function _timeInBeatsToMeasureInfo(timeInBeats, measureMap) {
 }
 
 
-function sharedReprogramAllPageTransitions() {
-    const measureMap = buildMeasureMap();
-    if (!measureMap) return;
-
-    // Clear all existing transition events from all pages first
-    const allPages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
-    for (const page of allPages) {
-        if (page.hasProperty('effects')) {
-            const opacityValue = page.getProperty('effects').getOpacity();
-            if (opacityValue.getEvents().clearTransitionEvents) {
-                opacityValue.getEvents().clearTransitionEvents();
-            }
-            opacityValue.applyDefaultEvent();
-        }
-        // In a full implementation, we would also clear transform properties here.
-    }
-
-    for (let toPageIndex = 0; toPageIndex < state.song.pages.length; toPageIndex++) {
-        const toPage = state.song.pages[toPageIndex];
-        const transition = toPage.transition || { type: 'instant', duration: 0, offsetBeats: 0 };
-
-        if (transition.type === 'instant' || !transition.duration || transition.duration <= 0) {
-            continue;
-        }
-
-        const firstMeasureOfPage = measureMap.find(m => m.pageIndex === toPageIndex);
-        if (!firstMeasureOfPage) continue;
-
-        // MODIFIED: Incorporate offsetBeats into the transition start time
-        const transitionStartTimeBeats = firstMeasureOfPage.startTime + (transition.offsetBeats || 0);
-        let durationInBeats;
-
-        if (transition.durationUnit === 'beats') {
-            durationInBeats = transition.duration || 1;
-        } else { // measures
-            durationInBeats = 0;
-            const firstMeasureGlobalIndex = measureMap.indexOf(firstMeasureOfPage);
-            for (let j = 0; j < (transition.duration || 1); j++) {
-                const currentMeasureIndex = firstMeasureGlobalIndex + j;
-                if (measureMap[currentMeasureIndex]) {
-                    durationInBeats += measureMap[currentMeasureIndex].duration;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        if (durationInBeats <= 0) continue;
-
-        const transitionEndTimeBeats = transitionStartTimeBeats + durationInBeats;
-        const fromPageIndex = findLastPageWithMusic(toPageIndex, measureMap);
-
-        const fromPage = (fromPageIndex > -1) ? state.song.pages[fromPageIndex] : state.song.thumbnailPage;
-        if (!fromPage) continue;
-
-        const fromOpacityValue = fromPage.getProperty('effects').getOpacity();
-        const toOpacityValue = toPage.getProperty('effects').getOpacity();
-
-        const startEventTime = _timeInBeatsToMeasureInfo(transitionStartTimeBeats, measureMap);
-        const endEventTime = _timeInBeatsToMeasureInfo(transitionEndTimeBeats, measureMap);
-
-        switch (transition.type) {
-            case 'fade': {
-                fromOpacityValue.addEvent(new NumberEvent({ value: 1, ...startEventTime, isTransition: true }));
-                fromOpacityValue.addEvent(new NumberEvent({ value: 0, ...endEventTime, isTransition: true }));
-
-                toOpacityValue.addEvent(new NumberEvent({ value: 0, ...startEventTime, isTransition: true }));
-                toOpacityValue.addEvent(new NumberEvent({ value: 1, ...endEventTime, isTransition: true }));
-                break;
-            }
-            case 'dip-to-black': {
-                const transitionMidTimeBeats = transitionStartTimeBeats + (durationInBeats / 2);
-                const midEventTime = _timeInBeatsToMeasureInfo(transitionMidTimeBeats, measureMap);
-
-                // From page fades out completely in the first half
-                fromOpacityValue.addEvent(new NumberEvent({ value: 1, ...startEventTime, isTransition: true }));
-                fromOpacityValue.addEvent(new NumberEvent({ value: 0, ...midEventTime, isTransition: true }));
-
-                // To page is invisible for the first half, then fades in
-                toOpacityValue.addEvent(new NumberEvent({ value: 0, ...startEventTime, isTransition: true }));
-                toOpacityValue.addEvent(new NumberEvent({ value: 0, ...midEventTime, isTransition: true }));
-                toOpacityValue.addEvent(new NumberEvent({ value: 1, ...endEventTime, isTransition: true }));
-                break;
-            }
-            // Other transitions like push, flip, cube would go here
-        }
-    }
-}
-
-
 /**
  * Programs all page transitions based on their settings.
  */
 export function reprogramAllPageTransitions() {
-    // MODIFIED: Call the new local function
+    // MODIFIED: Call the shared logic from player/events.js
     sharedReprogramAllPageTransitions();
     // After updating all data, refresh the timeline view to reflect changes.
     updateTimelineAndEditorView();
@@ -628,7 +542,6 @@ export function updateTimelineAndEditorView() {
         const pageFromTimeline = state.song.pages[currentMeasureForPageSwitch.pageIndex];
         // If the timeline points to a page different from the active one...
         if (pageFromTimeline && pageFromTimeline !== state.activePage) {
-            // ...switch to it, but ONLY if the currently active page is a musical one.
             // This prevents the timeline from overriding a user's explicit selection of a static page.
             const activePageIsMusical = pageHasMeasures(state.activePage);
             if (activePageIsMusical) {
@@ -885,8 +798,6 @@ export function initSlideInteractivity() {
     });
 }
 
-// ... (remaining boilerplate functions setupTitleBar, setupDrawerControls, etc.)
-// ... (rest of the file remains unchanged)
 function confirmCloseIfNeeded() {
     if (state.song.isDirty) {
         return showConfirmationDialog(
@@ -1009,7 +920,7 @@ function setupNewSongMenu() {
 
         // Create a title element with the song's name.
         const titleElement = new VirtualTitle({ textContent: songTitle }, 'Song Title');
-        
+
         // Create a vertical container to hold the title.
         const vContainer = new VirtualContainer({ name: 'Title Container', alignment: 'vertical' });
 
@@ -1227,8 +1138,22 @@ async function loadSong(filePath) {
         fontLoader.clear();
 
         const resizeCallbacks = {
-            onResizeStart: () => { /* ... */ },
-            onResizeEnd: () => { /* ... */ }
+            onResizeStart: () => {
+                if (DOM.resizingOverlay) {
+                    DOM.resizingOverlay.style.display = 'flex';
+                    requestAnimationFrame(() => {
+                        DOM.resizingOverlay.style.opacity = '1';
+                    });
+                }
+            },
+            onResizeEnd: () => {
+                if (DOM.resizingOverlay && DOM.resizingOverlay.style.opacity === '1') {
+                    DOM.resizingOverlay.style.opacity = '0';
+                    DOM.resizingOverlay.addEventListener('transitionend', function onTransitionEnd() {
+                        DOM.resizingOverlay.style.display = 'none';
+                    }, { once: true });
+                }
+            }
         };
         const domManager = new DomManager(DOM.pageContainer, resizeCallbacks);
         const stagingDomManager = new DomManager(DOM.stagingPageContainer, resizeCallbacks);
@@ -1494,3 +1419,4 @@ export function setupEventListeners() {
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
 }
+

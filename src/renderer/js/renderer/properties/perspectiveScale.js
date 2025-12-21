@@ -35,7 +35,7 @@ export class PerspectiveScaleProperty extends VirtualProperty {
     }
 
     setValue(key, value, setAsDefault = false) {
-        if(key === 'direction') return this.setDirection(value, setAsDefault);m
+        if(key === 'direction') return this.setDirection(value, setAsDefault);
         console.warn(`Value ${key} does not exist in PerspectiveScaleProperty.`);
         return false;
     }
@@ -79,4 +79,4 @@ export class PerspectiveScaleProperty extends VirtualProperty {
         const scaleValue = (perspective - translateZ) / perspective;
         parentPerspectiveProperty.setScale(scaleValue);
     }
-}
+}

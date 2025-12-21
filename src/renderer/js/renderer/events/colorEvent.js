@@ -1,10 +1,13 @@
+// src/renderer/js/renderer/events/colorEvent.js
+
 export class ColorEvent {
     #value;
     #ease;
     #measureIndex;
     #measureProgress;
+    #isTransition; // Added
 
-    constructor({ colorObject, ease = 'linear', measureIndex, measureProgress }) {
+    constructor({ colorObject, ease = 'linear', measureIndex, measureProgress, isTransition = false }) { // Added isTransition
         if (typeof colorObject !== 'object' || colorObject === null || colorObject.mode === 'gradient') {
             throw new TypeError('Value must be a color object');
         }
@@ -21,7 +24,10 @@ export class ColorEvent {
         this.setEase(ease);
         this.setMeasureIndex(measureIndex);
         this.setMeasureProgress(measureProgress);
+        this.#isTransition = isTransition; // Store it
     }
+
+    getIsTransition() { return this.#isTransition; } // Added getter
 
     getMeasureIndex() { return this.#measureIndex; }
     setMeasureIndex(index) { this.#measureIndex = index; }
@@ -38,8 +44,9 @@ export class GradientEvent {
     #ease;
     #measureIndex;
     #measureProgress;
+    #isTransition; // Added
 
-    constructor({ gradientObject, ease = 'linear', measureIndex, measureProgress }) {
+    constructor({ gradientObject, ease = 'linear', measureIndex, measureProgress, isTransition = false }) { // Added isTransition
         if (typeof gradientObject !== 'object' || gradientObject === null || gradientObject.mode !== 'gradient') {
             throw new TypeError('Value must be a gradient object');
         }
@@ -56,7 +63,10 @@ export class GradientEvent {
         this.setEase(ease);
         this.setMeasureIndex(measureIndex);
         this.setMeasureProgress(measureProgress);
+        this.#isTransition = isTransition; // Store it
     }
+
+    getIsTransition() { return this.#isTransition; } // Added getter
 
     getMeasureIndex() { return this.#measureIndex; }
     setMeasureIndex(index) { this.#measureIndex = index; }
@@ -73,8 +83,9 @@ export class ColorOrGradientEvent {
     #ease;
     #measureIndex;
     #measureProgress;
+    #isTransition; // Added
 
-    constructor({ colorOrGradientObject, ease = 'linear', measureIndex, measureProgress }) {
+    constructor({ colorOrGradientObject, ease = 'linear', measureIndex, measureProgress, isTransition = false }) { // Added isTransition
         if (typeof colorOrGradientObject !== 'object' || colorOrGradientObject === null) {
             throw new TypeError('Value must be a color or gradient object');
         }
@@ -91,7 +102,10 @@ export class ColorOrGradientEvent {
         this.setEase(ease);
         this.setMeasureIndex(measureIndex);
         this.setMeasureProgress(measureProgress);
+        this.#isTransition = isTransition; // Store it
     }
+
+    getIsTransition() { return this.#isTransition; } // Added getter
 
     getMeasureIndex() { return this.#measureIndex; }
     setMeasureIndex(index) { this.#measureIndex = index; }

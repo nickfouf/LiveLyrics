@@ -9,10 +9,20 @@ export class UnitValue {
     #unit;
     #pixelValue = 0;
     #shouldRender;
-    #lastRootWidth = 0;
-    #lastRootHeight = 0;
+    
+    // Instance-level cache (for parent tracking)
     #lastParentWidth = 0;
     #lastParentHeight = 0;
+
+    // --- FIX START ---
+    // Shared Static Cache.
+    // Stores the last valid root dimensions seen by ANY UnitValue in the app.
+    // This allows new pages (which have no history) to "borrow" the known viewport size 
+    // from previous pages during transitions when the DOM might report 0.
+    static #globalRootWidth = 0;
+    static #globalRootHeight = 0;
+    // --- FIX END ---
+
     static validUnits = ['px', 'pw', 'ph', 'vw', 'vh', '%', 'auto'];
 
     get shouldRender() {
@@ -46,7 +56,7 @@ export class UnitValue {
     applyDefaultEvent() {
         const defaultValue = this.#events.getDefaultValue();
         if (defaultValue) {
-            this.setValue(defaultValue);
+            this.batchUpdate(defaultValue);
         }
     }
 
@@ -70,25 +80,68 @@ export class UnitValue {
     }
 
     updatePixelValue({rootWidth, rootHeight, parentWidth, parentHeight}) {
-        this.#lastRootWidth = rootWidth;
-        this.#lastRootHeight = rootHeight;
-        this.#lastParentWidth = parentWidth;
-        this.#lastParentHeight = parentHeight;
+        // --- FIX START ---
+        
+        // 1. Update Global Cache if we have valid root data
+        if (rootWidth > 0) UnitValue.#globalRootWidth = rootWidth;
+        if (rootHeight > 0) UnitValue.#globalRootHeight = rootHeight;
+
+        // 2. Update Instance Cache for parent data
+        if (parentWidth > 0) this.#lastParentWidth = parentWidth;
+        if (parentHeight > 0) this.#lastParentHeight = parentHeight;
+
+        // 3. Resolve Dimensions using Hierarchical Fallback
+        
+        // Root: Current -> Global Cache -> Window Fallback (Last resort)
+        const rW = rootWidth || UnitValue.#globalRootWidth || window.innerWidth;
+        const rH = rootHeight || UnitValue.#globalRootHeight || window.innerHeight;
+
+        // Parent: Current -> Instance Cache -> Root (Effective fallback for top-level elements)
+        const pW = parentWidth || this.#lastParentWidth || rW;
+        const pH = parentHeight || this.#lastParentHeight || rH;
+
         let value;
 
-        if(parentWidth <= 0) throw new Error('Parent width cannot be zero when updating pixel value');
-        if(parentHeight <= 0) throw new Error('Parent height cannot be zero when updating pixel value');
-        if(rootWidth <= 0) throw new Error('Root width cannot be zero when updating pixel value');
-        if(rootHeight <= 0) throw new Error('Root height cannot be zero when updating pixel value');
         switch (this.#unit) {
-            case 'px': value = this.#value; break;
-            case 'pw': value = this.#value * parentWidth / 100; break;
-            case 'ph': value = this.#value * parentHeight / 100; break;
-            case 'vw': value = this.#value * rootWidth / 100; break;
-            case 'vh': value = this.#value * rootHeight / 100; break;
-            case '%': value = this.#value * parentWidth / 100; break;
-            case 'auto': value = null; break;
+            case 'px': 
+                value = this.#value; 
+                break;
+            case 'pw': 
+                value = (this.#value * pW / 100); 
+                break;
+            case 'ph': 
+                value = (this.#value * pH / 100); 
+                break;
+            case 'vw': 
+                value = (this.#value * rW / 100); 
+                break;
+            case 'vh': 
+                value = (this.#value * rH / 100); 
+                break;
+            case '%': 
+                value = (this.#value * pW / 100); 
+                break;
+            case 'auto': 
+                value = null; 
+                break;
         }
+
+        if (value !== null) {
+            value = Math.round(value * 100) / 100;
+        }
+
+        // 4. Final Safety Check
+        // If calculation yields 0, but the intention was non-zero (relative unit + non-zero value),
+        // and we suspect invalid parent data (parent <= 0), preserve the old pixel value.
+        // This stops the "collapse to 0" glitch.
+        const isRelative = ['pw', 'ph', 'vw', 'vh', '%'].includes(this.#unit);
+        const intendedNonZero = this.#value !== 0 && isRelative;
+        const resultIsZero = value === 0;
+        
+        if (intendedNonZero && resultIsZero && this.#pixelValue !== 0) {
+            return false;
+        }
+        // --- FIX END ---
 
         if(this.#pixelValue === value) return false;
         this.#pixelValue = value;
@@ -109,14 +162,13 @@ export class UnitValue {
         if (this.#unit === unit) return false;
         this.#unit = unit;
 
-        if (this.#lastParentWidth > 0) {
-            this.updatePixelValue({
-                rootWidth: this.#lastRootWidth,
-                rootHeight: this.#lastRootHeight,
-                parentWidth: this.#lastParentWidth,
-                parentHeight: this.#lastParentHeight
-            });
-        }
+        this.updatePixelValue({
+            rootWidth: UnitValue.#globalRootWidth,
+            rootHeight: UnitValue.#globalRootHeight,
+            parentWidth: this.#lastParentWidth,
+            parentHeight: this.#lastParentHeight
+        });
+        
         this.#shouldRender = true;
         return true;
     }
@@ -130,14 +182,13 @@ export class UnitValue {
         if (this.#value === num) return false;
         this.#value = num;
 
-        if (this.#lastParentWidth > 0) {
-            this.updatePixelValue({
-                rootWidth: this.#lastRootWidth,
-                rootHeight: this.#lastRootHeight,
-                parentWidth: this.#lastParentWidth,
-                parentHeight: this.#lastParentHeight
-            });
-        }
+        this.updatePixelValue({
+            rootWidth: UnitValue.#globalRootWidth,
+            rootHeight: UnitValue.#globalRootHeight,
+            parentWidth: this.#lastParentWidth,
+            parentHeight: this.#lastParentHeight
+        });
+
         this.#shouldRender = true;
         return true;
     }
@@ -174,4 +225,4 @@ export class UnitValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}

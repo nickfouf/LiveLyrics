@@ -7,10 +7,11 @@ import { VirtualAudio } from "./audio.js";
 import { BackgroundProperty } from "../properties/backgroundCG.js";
 import { ParentPerspectiveProperty } from "../properties/parentPerspective.js";
 import { PerspectiveScaleProperty } from "../properties/perspectiveScale.js";
+import { ZIndexProperty } from "../properties/zIndex.js"; // ADDED
 
 export class VirtualPage extends VirtualContainer {
     #musicElementsOrder = []; // Array of element IDs
-    transition = { type: 'fade', duration: 2, durationUnit: 'beats', offsetBeats: 0, direction: 'left', perspective: { value: 2000, unit: 'px' } };
+    transition = { type: 'fade', duration: 2, durationUnit: 'beats', offsetBeats: 0, direction: 'left', perspective: { value: 2000, unit: 'px' }, scaleFactor: 2 };
     constructor(options = {}) {
         super({ name: 'Page', ...options });
 
@@ -21,6 +22,10 @@ export class VirtualPage extends VirtualContainer {
         this.setProperty('background', new BackgroundProperty(backgroundOptions));
 
         this.setProperty('parentPerspective', new ParentPerspectiveProperty(options.parentPerspective));
+
+        // ADDED: Z-Index property for transition layering control
+        // Default to 0. Transitions will override this temporarily.
+        this.setProperty('zIndex', new ZIndexProperty(options.zIndex || 0));
 
         this.insertPropertyBefore('perspectiveScale', new PerspectiveScaleProperty(options.perspectiveScale), 'transform');
 
