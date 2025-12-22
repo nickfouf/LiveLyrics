@@ -331,7 +331,7 @@ export function reprogramAllPageTransitions() {
                 const sourceOpacity = sourcePage.getProperty('effects').getOpacity();
                 sourceOpacity.addEvent(new NumberEvent({ value: 1, ...startOpts }));
                 sourceOpacity.addEvent(new NumberEvent({ value: 0, ...midOpts }));
-            } else if (transition.type === 'scale-fade') {
+            } else if (transition.type === 'fly') {
                 const toTransform = destPage.getProperty('transform');
                 const fromTransform = sourcePage.getProperty('transform');
                 toTransform.getEnabled().addEvent(new BooleanEvent({ value: true, ...instantStartOpts }));

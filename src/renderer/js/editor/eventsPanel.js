@@ -24,6 +24,18 @@ export function renderEventsPanel() {
 
     if (!selectedElement || !activePage) return;
 
+    // --- MODIFICATION: Restrict Events Panel for Thumbnail Page ---
+    // If the active page is the thumbnail page, show a hint and exit.
+    if (activePage === state.song.thumbnailPage) {
+        drawerBody.innerHTML = `
+            <div class="drawer-group" style="text-align: center; padding: 2rem 1rem; color: #888; font-style: italic;">
+                Select a page to use this panel.
+            </div>
+        `;
+        return;
+    }
+    // -------------------------------------------------------------
+
     // --- RENDER "ELEMENTS ORDER" & "TRANSITION" VIEW (When Page is Selected) ---
     if (selectedElement.type === 'page') {
         drawerBody.innerHTML = `
@@ -90,7 +102,7 @@ export function renderEventsPanel() {
                     <option value="push" ${initialTransition.type === 'push' ? 'selected' : ''}>Push</option>
                     <option value="flip" ${initialTransition.type === 'flip' ? 'selected' : ''}>Flip</option>
                     <option value="cube" ${initialTransition.type === 'cube' ? 'selected' : ''}>Cube</option>
-                    <option value="scale-fade" ${initialTransition.type === 'scale-fade' ? 'selected' : ''}>Scale and Fade</option>
+                    <option value="fly" ${initialTransition.type === 'fly' ? 'selected' : ''}>Fly</option>
                     <option value="instant" ${initialTransition.type === 'instant' ? 'selected' : ''}>Instant</option>
                 </select>
             </div>
@@ -106,7 +118,7 @@ export function renderEventsPanel() {
             const transition = activePage.transition; // FIX: Read the latest transition state
             transition.type = currentType;
 
-            if (currentType === 'fade' || currentType === 'dip-to-black' || currentType === 'push' || currentType === 'flip' || currentType === 'cube' || currentType === 'scale-fade') {
+            if (currentType === 'fade' || currentType === 'dip-to-black' || currentType === 'push' || currentType === 'flip' || currentType === 'cube' || currentType === 'fly') {
                 transitionPropertiesContainer.innerHTML += `
                     <div class="form-group">
                         <label for="page-transition-duration">Duration</label>
@@ -127,7 +139,7 @@ export function renderEventsPanel() {
 
             if (currentType === 'push' || currentType === 'flip' || currentType === 'cube') {
                 transitionPropertiesContainer.innerHTML += `
-                     <div class="form-group">
+                        <div class="form-group">
                         <label for="page-transition-direction">Direction</label>
                         <select id="page-transition-direction" class="form-select">
                             <option value="left" ${transition.direction === 'left' ? 'selected' : ''}>Left</option>
@@ -139,12 +151,12 @@ export function renderEventsPanel() {
                 `;
             }
 
-            if (currentType === 'scale-fade') {
+            if (currentType === 'fly') {
                 const direction = transition.direction === 'in' ? 'in' : 'out'; // Default to out
                 const scaleFactor = transition.scaleFactor !== undefined ? transition.scaleFactor : 2; // Default to 2
 
                 transitionPropertiesContainer.innerHTML += `
-                     <div class="form-group">
+                        <div class="form-group">
                         <label for="page-transition-direction">Direction</label>
                         <select id="page-transition-direction" class="form-select">
                             <option value="out" ${direction === 'out' ? 'selected' : ''}>Out</option>
@@ -243,12 +255,10 @@ export function renderEventsPanel() {
 
         renderTransitionProperties();
 
-
     } else {
         // --- RENDER "EVENTS" VIEW (When a specific Element is Selected) ---
-        const isThumbnailPage = activePage === state.song.thumbnailPage;
-        const disabledAttr = isThumbnailPage ? 'disabled' : '';
-        const titleAttr = isThumbnailPage ? 'title="Events cannot be added to elements on the Thumbnail page."' : '';
+        const disabledAttr = '';
+        const titleAttr = '';
 
         drawerBody.innerHTML = `
             <div class="drawer-group">
@@ -387,4 +397,5 @@ export function initEventsPanelInteractions() {
             }, 1000);
         }
     });
-}
+}
+
