@@ -52,4 +52,5 @@ export class AlignmentProperty extends VirtualProperty {
             this.#alignment.markAsRendered();
         }
     }
-}
+}
+

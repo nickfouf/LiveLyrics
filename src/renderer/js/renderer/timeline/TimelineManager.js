@@ -85,4 +85,5 @@ export class TimelineManager {
         this.applyEventsAt(measureIndex, measureProgress);
         this.#domManager.render();
     }
-}
+}
+

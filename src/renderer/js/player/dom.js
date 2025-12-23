@@ -81,4 +81,5 @@ export function initDOM() {
     DOM.deviceStatusText = document.getElementById('device-status-text');
     DOM.deviceNameValue = document.getElementById('device-name-value');
     DOM.deviceRttList = document.getElementById('device-rtt-list'); // MODIFIED
-}
+}
+

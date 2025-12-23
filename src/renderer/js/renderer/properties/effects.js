@@ -95,4 +95,5 @@ export class EffectsProperty extends VirtualProperty {
             this.#mixBlendMode.markAsRendered();
         }
     }
-}
+}
+

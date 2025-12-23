@@ -98,4 +98,5 @@ export class DynamicStringValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

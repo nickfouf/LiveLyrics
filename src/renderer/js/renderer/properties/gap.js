@@ -52,4 +52,5 @@ export class GapProperty extends VirtualProperty {
         const parentHeight = parent.getHeight();
         this.#gap.updatePixelValue({ rootWidth, rootHeight, parentWidth, parentHeight });
     }
-}
+}
+

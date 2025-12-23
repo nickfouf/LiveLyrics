@@ -476,3 +476,5 @@ export function initSongsManager() {
         savePlaylistPaths();
     });
 }
+
+

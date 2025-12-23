@@ -26,4 +26,5 @@ class MonotonicSyncClock {
 
 const monotonicSyncClock = new MonotonicSyncClock();
 
-module.exports = { monotonicSyncClock };
+module.exports = { monotonicSyncClock };
+

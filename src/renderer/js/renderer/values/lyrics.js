@@ -879,4 +879,5 @@ export class LyricsLayout {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

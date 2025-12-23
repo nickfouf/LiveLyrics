@@ -125,3 +125,4 @@ export class FontLoader {
 }
 
 export const fontLoader = new FontLoader();
+

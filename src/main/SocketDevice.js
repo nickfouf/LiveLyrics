@@ -242,4 +242,5 @@ class SocketDevice extends EventEmitter {
     }
 }
 
-module.exports = { SocketDevice };
+module.exports = { SocketDevice };
+

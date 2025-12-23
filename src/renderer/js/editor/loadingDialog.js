@@ -51,4 +51,5 @@ export function showLoadingDialog(message = "Loading file into project...") {
 
     // Return a function to hide the dialog, making it easy to use with try/finally
     return hideLoadingDialog;
-}
+}
+

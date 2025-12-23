@@ -295,4 +295,5 @@ export function openColorPicker(initialColor, callback) {
     updateState({ colorPickerCallback: callback });
     dialog.classList.add('visible');
 }
-
+
+

@@ -317,4 +317,5 @@ export class GradientValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

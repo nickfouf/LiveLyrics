@@ -209,7 +209,8 @@ export class TextStyleSVGProperty extends VirtualProperty {
             if (value.type === 'linear') {
                 // SVG rotation is clockwise, 0 is horizontal right. CSS 0deg is vertical up.
                 // A CSS angle of 90deg (to right) corresponds to an SVG rotation of 0.
-                const svgAngle = (value.angle || 90) - 90;
+                const angle = value.angle !== undefined ? value.angle : 90;
+                const svgAngle = angle - 90;
                 existingGradient.setAttribute('gradientTransform', `rotate(${svgAngle})`);
             } else { // radial
                 existingGradient.removeAttribute('gradientTransform');
@@ -300,3 +301,5 @@ export class TextStyleSVGProperty extends VirtualProperty {
         return fontSizeChanged || lineHeightChanged || letterSpacingChanged || wordSpacingChanged;
     }
 }
+
+

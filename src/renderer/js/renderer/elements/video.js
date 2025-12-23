@@ -121,4 +121,5 @@ export class VirtualVideo extends VirtualElement {
             loopValue.markAsRendered();
         }
     }
-}
+}
+

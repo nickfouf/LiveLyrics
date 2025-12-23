@@ -188,4 +188,5 @@ export function calculateSyllableTimings(syllable, duration) {
     });
 
     return result;
-}
+}
+

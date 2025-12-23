@@ -263,4 +263,5 @@ export class TransformProperty extends VirtualProperty {
         this.#selfPerspective.updatePixelValue(dimensions);
         this.#childrenPerspective.updatePixelValue(dimensions);
     }
-}
+}
+

@@ -64,4 +64,5 @@ export class TextStyleLyricsProperty extends TextStyleSVGProperty {
             this.#karaokeColor.markAsRendered();
         }
     }
-}
+}
+

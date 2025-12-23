@@ -106,4 +106,5 @@
     font-size: 0.75rem;
     color: #666;
     -webkit-app-region: no-drag; /* Ensure it's not part of the draggable title bar region */
-}
+}
+

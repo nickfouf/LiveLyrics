@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onUpdaterError: (callback) => ipcRenderer.on('updater:error', (_event, err) => callback(err)),
     startDownload: () => ipcRenderer.send('updater:start-download'),
     quitAndInstall: () => ipcRenderer.send('updater:quit-and-install'),
-});
+});
+

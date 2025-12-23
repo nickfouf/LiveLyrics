@@ -179,4 +179,5 @@ export class HighlightManager {
         this.#nameLabelElement.style.top = `${labelTop}px`;
         this.#nameLabelElement.style.left = `${labelLeft}px`;
     }
-}
+}
+

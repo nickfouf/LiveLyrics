@@ -498,3 +498,5 @@ export function jumpToPage_Player(newPage) {
     const timestamp = performance.timeOrigin + performance.now();
     window.playerAPI.jumpToTime(newTimeAtPause, timestamp);
 }
+
+

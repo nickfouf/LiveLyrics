@@ -121,4 +121,5 @@ export class BorderProperty extends VirtualProperty {
         this.#width.updatePixelValue({ rootWidth, rootHeight, parentWidth, parentHeight });
         this.#radius.updatePixelValue({ rootWidth, rootHeight, parentWidth, parentHeight });
     }
-}
+}
+

@@ -31,4 +31,5 @@ export class Measure {
         this.#index = index;
         return true;
     }
-}
+}
+

@@ -17,6 +17,7 @@ import { calculateSyllableTimings } from '../language_parser.js';
 import { getTextMetrics } from '../textMetrics.js';
 import { TransformProperty } from '../properties/transform.js';
 import { resolveFontFamily } from '../utils.js';
+import { TextShadowProperty } from "../properties/textShadow.js";
 
 
 export class VirtualLyrics extends VirtualElement {
@@ -53,6 +54,7 @@ export class VirtualLyrics extends VirtualElement {
         this.setProperty('lyricsContent', new LyricsContentProperty(lyricsContentData));
         this.setProperty('textStyle', new TextStyleLyricsProperty(finalTextStyle));
         this.setProperty('highlightedPercentage', new HighlightedPercentage(options.highlightedPercentage));
+        this.setProperty('textShadow', new TextShadowProperty(options.textShadow));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {
             width: { value: 100, unit: 'auto' },
@@ -221,3 +223,5 @@ export class VirtualLyrics extends VirtualElement {
         this.setProgress(finalPercentage);
     }
 }
+
+

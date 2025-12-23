@@ -28,3 +28,4 @@ contextBridge.exposeInMainWorld('editorAPI', {
     onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
     notifyReady: () => ipcRenderer.send('editor:ready'),
 });
+

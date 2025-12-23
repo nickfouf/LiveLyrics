@@ -87,4 +87,5 @@ export function getTextMetrics(text, styles) {
         baseline: 0, // Baseline is at y=0 because of the 'text-before-edge' alignment
         advanceWidth: advanceWidth
     };
-}
+}
+

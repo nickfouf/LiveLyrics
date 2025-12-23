@@ -18,7 +18,7 @@ let localState = {
 
 // --- Helper Constants ---
 const COLOR_ONLY_PROPERTIES = new Set([
-    'borderColor', 'shadowColor', 'textStrokeColor', 'textShadowColor'
+    'borderColor', 'shadowColor', 'textStrokeColor', 'textShadowColor', 'textShadowColor'
 ]);
 
 const BLEND_MODES = [
@@ -82,7 +82,24 @@ function buildDialogUI() {
             break;
 
         case 'number':
-            if (localState.propKey.toLowerCase().includes('opacity')) {
+            // UPDATED: Handle Polar Angle for Shadows
+            if (localState.propKey.includes('Angle')) {
+                const angleValue = value !== undefined && value !== null ? parseFloat(value) : 90;
+                body.innerHTML = `
+                <div class="form-group">
+                    <label>Angle</label>
+                    <div class="input-with-unit">
+                         <input type="range" id="eep-angle-slider" class="form-input" min="0" max="360" step="1" value="${angleValue}" style="padding: 0;">
+                         <input type="number" id="eep-angle-number" class="form-input" min="0" max="360" step="1" value="${angleValue}" style="max-width: 80px;">
+                         <span class="unit-label">°</span>
+                    </div>
+                </div>`;
+                const slider = body.querySelector('#eep-angle-slider');
+                const numberInput = body.querySelector('#eep-angle-number');
+                slider.addEventListener('input', () => { numberInput.value = slider.value; });
+                numberInput.addEventListener('input', () => { slider.value = numberInput.value; });
+            }
+            else if (localState.propKey.toLowerCase().includes('opacity')) {
                 const opacityValue = value !== undefined && value !== null ? parseFloat(value) : 1.0;
                 body.innerHTML = `
                     <div class="form-group">
@@ -183,10 +200,10 @@ function buildDialogUI() {
                         </select>
                     </div>`;
             } else if (localState.propKey === 'mixBlendMode') {
-                const optionsHTML = BLEND_MODES.map(mode => 
+                const optionsHTML = BLEND_MODES.map(mode =>
                     `<option value="${mode}" ${value === mode ? 'selected' : ''}>${mode.charAt(0).toUpperCase() + mode.slice(1)}</option>`
                 ).join('');
-                
+
                 body.innerHTML = `
                     <div class="form-group">
                         <label for="eep-string-select">Blending Mode</label>
@@ -204,19 +221,45 @@ function buildDialogUI() {
             break;
 
         case 'size':
-            let unitOptionsArray = ['px', 'pw', 'ph', 'vw', 'vh'];
-            if (localState.propKey.includes('origin')) {
-                unitOptionsArray.push('%');
+            // UPDATED: Handle Polar Distance for Shadows
+            if (localState.propKey.includes('Distance')) {
+                const distVal = value?.value || 0;
+                const distUnit = value?.unit || 'px';
+                body.innerHTML = `
+                    <div class="form-group">
+                        <label>Distance</label>
+                        <div class="input-with-unit">
+                            <input type="range" id="eep-dist-slider" class="form-input" min="0" max="200" step="1" value="${distVal}" style="padding: 0;">
+                            <input type="number" id="eep-dist-number" class="form-input" value="${distVal}" style="max-width: 80px;">
+                            <select id="eep-dist-unit" class="form-select">
+                                <option value="px" ${distUnit === 'px' ? 'selected' : ''}>px</option>
+                                <option value="vw" ${distUnit === 'vw' ? 'selected' : ''}>vw</option>
+                                <option value="vh" ${distUnit === 'vh' ? 'selected' : ''}>vh</option>
+                                <option value="pw" ${distUnit === 'pw' ? 'selected' : ''}>pw</option>
+                                <option value="ph" ${distUnit === 'ph' ? 'selected' : ''}>ph</option>
+                                <option value="%" ${distUnit === '%' ? 'selected' : ''}>%</option>
+                            </select>
+                        </div>
+                    </div>`;
+                const slider = body.querySelector('#eep-dist-slider');
+                const numInput = body.querySelector('#eep-dist-number');
+                slider.addEventListener('input', () => { numInput.value = slider.value; });
+                numInput.addEventListener('input', () => { slider.value = numInput.value; });
+            } else {
+                let unitOptionsArray = ['px', 'pw', 'ph', 'vw', 'vh'];
+                if (localState.propKey.includes('origin')) {
+                    unitOptionsArray.push('%');
+                }
+                const unitOptions = unitOptionsArray.map(u => `<option value="${u}" ${value?.unit === u ? 'selected' : ''}>${u}</option>`).join('');
+                body.innerHTML = `
+                    <div class="form-group">
+                        <label for="eep-size-input">Value</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="eep-size-input" class="form-input" value="${value?.value || 0}">
+                            <select id="eep-size-unit" class="form-select">${unitOptions}</select>
+                        </div>
+                    </div>`;
             }
-            const unitOptions = unitOptionsArray.map(u => `<option value="${u}" ${value?.unit === u ? 'selected' : ''}>${u}</option>`).join('');
-            body.innerHTML = `
-                <div class="form-group">
-                    <label for="eep-size-input">Value</label>
-                    <div class="input-with-unit">
-                        <input type="number" id="eep-size-input" class="form-input" value="${value?.value || 0}">
-                        <select id="eep-size-unit" class="form-select">${unitOptions}</select>
-                    </div>
-                </div>`;
             break;
 
         case 'fontFamily': {
@@ -230,7 +273,7 @@ function buildDialogUI() {
                         </button>
                     </div>
                 </div>`;
-            
+
             body.querySelector('#eep-font-family-button').addEventListener('click', () => {
                 const element = findVirtualElementById(state.activePage, localState.elementId);
                 let previewText = '';
@@ -483,7 +526,7 @@ function buildDialogUI() {
                     body.querySelector('#eep-gradient-preview').style.backgroundImage = generateCSSGradient(target);
                 };
                 gradientTypeSelect.addEventListener('change', () => { const newType = gradientTypeSelect.value; toggleGradientControls(newType); updateGradientObject('type', newType); });
-                gradientAngleInput.addEventListener('input', () => updateGradientObject('angle', parseInt(gradientAngleInput.value, 10)));
+                gradientAngleInput.addEventListener('input', () => updateAngleObject('angle', parseInt(gradientAngleInput.value, 10)));
                 gradientScaleInput.addEventListener('input', () => updateGradientObject('scale', parseInt(gradientScaleInput.value, 10)));
 
                 body.querySelector('#eep-gradient-preview').addEventListener('click', () => {
@@ -555,7 +598,9 @@ function getValueFromUI() {
         case 'boolean':
             return body.querySelector('#eep-boolean-input').checked;
         case 'number':
-            if (localState.propKey.toLowerCase().includes('opacity')) {
+            if (localState.propKey.includes('Angle')) {
+                return parseFloat(body.querySelector('#eep-angle-slider').value);
+            } else if (localState.propKey.toLowerCase().includes('opacity')) {
                 return parseFloat(body.querySelector('#eep-opacity-slider').value);
             } else if (localState.propKey === 'audioVolume') {
                 return parseFloat(body.querySelector('#eep-volume-slider').value);
@@ -567,6 +612,12 @@ function getValueFromUI() {
                 return parseFloat(body.querySelector('#eep-number-input').value);
             }
         case 'size':
+            if (localState.propKey.includes('Distance')) {
+                return {
+                    value: parseFloat(body.querySelector('#eep-dist-number').value),
+                    unit: body.querySelector('#eep-dist-unit').value
+                };
+            }
             return {
                 value: parseFloat(body.querySelector('#eep-size-input').value),
                 unit: body.querySelector('#eep-size-unit').value
@@ -709,4 +760,6 @@ export function openPropertyValueEditor(elementId, propKey, currentEffectiveValu
     header.textContent = `Edit '${propName}'`;
     buildDialogUI();
     dialog.classList.add('visible');
-}
+}
+
+

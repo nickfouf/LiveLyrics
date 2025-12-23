@@ -67,4 +67,5 @@ export class VideoSrcProperty extends VirtualProperty {
             this.#src.markAsRendered();
         }
     }
-}
+}
+

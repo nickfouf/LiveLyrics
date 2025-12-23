@@ -139,4 +139,5 @@ window.addEventListener('DOMContentLoaded', () => {
     updateRestartNowBtn.addEventListener('click', () => {
         window.electronAPI.quitAndInstall();
     });
-});
+});
+

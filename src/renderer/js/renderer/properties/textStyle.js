@@ -251,3 +251,5 @@ export class TextStyleProperty extends VirtualProperty {
         return this.updateFontSize({rootFontSize, parentFontSize});
     }
 }
+
+

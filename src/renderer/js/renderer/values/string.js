@@ -78,4 +78,5 @@ export class StringValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

@@ -68,4 +68,5 @@ export class LyricsContentProperty extends VirtualProperty {
         element.getProperty("lyricsLayout").setLyricsObject({element, lyricsObject: this.#lyricsValue.getLyricsObject()});
         this.#lyricsValue.markAsRendered();
     }
-}
+}
+

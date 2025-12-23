@@ -45,4 +45,5 @@ export class VirtualImage extends VirtualElement {
         this.setProperty('border', new BorderProperty(options.border));
         this.setProperty('transform', new TransformProperty(options.transform));
     }
-}
+}
+

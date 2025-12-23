@@ -245,4 +245,5 @@ export function openOpaqueColorPicker(initialColor, callback) {
     updateState({ opaqueColorPickerCallback: callback });
     dialog.classList.add('visible');
 }
-
+
+

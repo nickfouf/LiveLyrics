@@ -251,31 +251,46 @@ export class VirtualElement {
 
         // --- 1. Build a map of property keys to their actual Value objects ---
         const keyToPath = {
+            // --- Effects ---
             opacity: { prop: 'effects', value: 'opacity' },
-            mixBlendMode: { prop: 'effects', value: 'mixBlendMode' }, // ADDED
+            mixBlendMode: { prop: 'effects', value: 'mixBlendMode' },
+
+            // --- Dimensions ---
             width: { prop: 'dimensions', value: 'width' },
             height: { prop: 'dimensions', value: 'height' },
+
+            // --- Margin ---
             top: { prop: 'margin', value: 'top' },
             left: { prop: 'margin', value: 'left' },
             right: { prop: 'margin', value: 'right' },
             bottom: { prop: 'margin', value: 'bottom' },
+
+            // --- Background ---
             bgEnabled: { prop: 'background', value: 'enabled' },
             bgColor: { prop: 'background', value: 'background' },
+
+            // --- Border ---
             borderEnabled: { prop: 'border', value: 'enabled' },
             borderSize: { prop: 'border', value: 'width' },
             borderRadius: { prop: 'border', value: 'radius' },
             borderColor: { prop: 'border', value: 'color' },
+
+            // --- Box Shadow ---
             shadowEnabled: { prop: 'boxShadow', value: 'enabled' },
             shadowInset: { prop: 'boxShadow', value: 'inset' },
-            shadowOffsetX: { prop: 'boxShadow', value: 'offsetX' },
-            shadowOffsetY: { prop: 'boxShadow', value: 'offsetY' },
-            shadowBlur: { prop: 'boxShadow', value: 'blur' },
-            shadowSpread: { prop: 'boxShadow', value: 'spread' },
-            shadowColor: { prop: 'boxShadow', value: 'color' },
+            shadowAngle: { prop: 'boxShadow', value: 'shadowAngle' },
+            shadowDistance: { prop: 'boxShadow', value: 'shadowDistance' },
+            shadowBlur: { prop: 'boxShadow', value: 'blur' },      // Internal key is 'blur'
+            shadowSpread: { prop: 'boxShadow', value: 'spread' },  // Internal key is 'spread'
+            shadowColor: { prop: 'boxShadow', value: 'color' },    // Internal key is 'color'
+
+            // --- Inner Padding ---
             paddingTop: { prop: 'inner_padding', value: 'top' },
             paddingLeft: { prop: 'inner_padding', value: 'left' },
             paddingBottom: { prop: 'inner_padding', value: 'bottom' },
             paddingRight: { prop: 'inner_padding', value: 'right' },
+
+            // --- Text Style ---
             fontSize: { prop: 'textStyle', value: 'fontSize' },
             textColor: { prop: 'textStyle', value: 'textColor' },
             lineHeight: { prop: 'textStyle', value: 'lineHeight' },
@@ -287,6 +302,21 @@ export class VirtualElement {
             fontStyle: { prop: 'textStyle', value: 'fontStyle' },
             textAlign: { prop: 'textStyle', value: 'textAlign' },
             justifyText: { prop: 'textStyle', value: 'justifyText' },
+
+            // --- Text Shadow ---
+            textShadowEnabled: { prop: 'textShadow', value: 'enabled' },
+            textShadowAngle: { prop: 'textShadow', value: 'textShadowAngle' },
+            textShadowDistance: { prop: 'textShadow', value: 'textShadowDistance' },
+            textShadowBlur: { prop: 'textShadow', value: 'blur' },  // Internal key is 'blur'
+            textShadowColor: { prop: 'textShadow', value: 'color' }, // Internal key is 'color'
+
+            // --- Layout ---
+            gap: { prop: 'gap', value: 'gap' },
+            justifyContent: { prop: 'gravity', value: 'justifyContent' },
+            alignItems: { prop: 'gravity', value: 'alignItems' },
+            alignment: { prop: 'alignment', value: 'alignment' },
+
+            // --- Media & Progress ---
             objectFit: { prop: 'objectFit', value: 'objectFit' },
             progressBgColor: { prop: 'progress', value: 'backgroundColor' },
             progressFillColor: { prop: 'progress', value: 'fillColor' },
@@ -299,6 +329,8 @@ export class VirtualElement {
             audioStartTime: { prop: 'playback', value: 'startTime' },
             audioEndTime: { prop: 'playback', value: 'endTime' },
             audioSrc: { prop: 'src', value: 'src' },
+
+            // --- Transform 2D & 3D ---
             translateX: { prop: 'transform', value: 'translateX' },
             translateY: { prop: 'transform', value: 'translateY' },
             translateZ: { prop: 'transform', value: 'translateZ' },
@@ -315,10 +347,23 @@ export class VirtualElement {
             'transform-origin-y': { prop: 'transform', value: 'transform-origin-y' },
             'transform-origin-z': { prop: 'transform', value: 'transform-origin-z' },
             'transform-style': { prop: 'transform', value: 'transform-style' },
-            perspective: { prop: 'parentPerspective', value: 'perspective' },
             selfPerspective: { prop: 'transform', value: 'selfPerspective' },
             childrenPerspective: { prop: 'transform', value: 'childrenPerspective' },
             'backface-visibility': { prop: 'transform', value: 'backface-visibility' },
+
+            // --- Page Specific ---
+            perspectiveScaleDirection: { prop: 'perspectiveScale', value: 'direction' },
+            parentPerspectiveEnabled: { prop: 'parentPerspective', value: 'enabled' },
+            perspective: { prop: 'parentPerspective', value: 'perspective' },
+            'parent-transform-style': { prop: 'parentPerspective', value: 'transform-style' },
+            'parent-rotateX': { prop: 'parentPerspective', value: 'rotateX' },
+            'parent-rotateY': { prop: 'parentPerspective', value: 'rotateY' },
+            'parent-rotateZ': { prop: 'parentPerspective', value: 'rotateZ' },
+            'parent-scale': { prop: 'parentPerspective', value: 'scale' },
+
+            // --- Misc ---
+            visible: { prop: 'visible', value: 'visible' },
+            zIndex: { prop: 'zIndex', value: 'zIndex' },
         };
 
         // --- 2. Clear all existing events ---
@@ -397,4 +442,6 @@ export class VirtualElement {
             processMeasureContent(measureNotes, measureInfo);
         });
     }
-}
+}
+
+

@@ -184,4 +184,5 @@ export class VirtualContainer extends VirtualElement {
             child.resize({root, parent: this});
         });
     }
-}
+}
+

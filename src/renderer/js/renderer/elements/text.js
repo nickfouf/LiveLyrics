@@ -12,6 +12,7 @@ import { BorderProperty } from "../properties/border.js";
 import { BoxShadowProperty } from "../properties/boxShadow.js";
 import { BackgroundProperty } from "../properties/backgroundCG.js";
 import { TransformProperty } from '../properties/transform.js';
+import { TextShadowProperty } from "../properties/textShadow.js";
 
 /**
  * Escapes HTML special characters to prevent HTML injection.
@@ -65,6 +66,7 @@ export class VirtualText extends VirtualElement {
         this.setProperty('background', new BackgroundProperty(options.background || { enabled: false }));
         this.setProperty('textContent', new TextContentProperty(initialText));
         this.setProperty('textStyle', new TextStyleProperty(finalTextStyle));
+        this.setProperty('textShadow', new TextShadowProperty(options.textShadow));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {width: {value:100, unit:'auto'}, height: {value:100, unit:'auto'}}));
         this.setProperty('margin', new MarginProperty(options.margin));
@@ -73,4 +75,6 @@ export class VirtualText extends VirtualElement {
         this.setProperty('inner_padding', new InnerPaddingProperty(options.inner_padding));
         this.setProperty('transform', new TransformProperty(options.transform));
     }
-}
+}
+
+

@@ -41,6 +41,8 @@ export function getPropertyType(propKey) {
         case 'audioVolume':
         case 'audioStartTime':
         case 'audioEndTime':
+        case 'shadowAngle':
+        case 'textShadowAngle': // Added
         case 'scaleX':
         case 'scaleY':
         case 'scaleZ':
@@ -82,6 +84,9 @@ export function getPropertyType(propKey) {
         case 'perspective':
         case 'perspective-origin-x':
         case 'perspective-origin-y':
+        case 'shadowDistance':
+        case 'textShadowDistance': // Added
+        case 'textShadowBlur':     // Added
             return 'size';
 
         // Color/Gradient (a complex color or gradient object)
@@ -90,6 +95,7 @@ export function getPropertyType(propKey) {
         case 'shadowColor':
         case 'textColor':
         case 'karaokeColor':
+        case 'textShadowColor': // Added
         case 'progressBgColor':
         case 'progressFillColor':
             return 'color/gradient';
@@ -99,6 +105,7 @@ export function getPropertyType(propKey) {
         case 'borderEnabled':
         case 'shadowEnabled':
         case 'shadowInset':
+        case 'textShadowEnabled': // Added
         case 'justifyText':
         case 'audioLoop':
             return 'boolean';
@@ -114,15 +121,15 @@ export function getPropertyType(propKey) {
         case 'audioSrc':
         case 'transform-style':
         case 'backface-visibility':
-        case 'mixBlendMode': 
+        case 'mixBlendMode':
             return 'string';
-        
+
         // Dynamic String (value + id to trigger actions)
         case 'videoState':
         case 'audioState':
             return 'dynamic-string';
 
-        case 'alignment': 
+        case 'alignment':
             return 'alignment';
         case 'justifyContent':
             return 'justifyContent';
@@ -305,7 +312,7 @@ export function generateCSSGradient(gradient) {
     const style = gradient.type;
 
     if (style === 'linear') {
-        const angle = gradient.angle || 90;
+        const angle = gradient.angle !== undefined ? gradient.angle : 90;
         return `linear-gradient(${angle}deg, ${colorStopsStr})`;
     } else if (style === 'radial') {
         return `radial-gradient(circle, ${colorStopsStr})`;
@@ -484,6 +491,14 @@ export function getAvailablePropertiesForElement(element) {
             "textAlign": "Alignment",
             "justifyText": "Justify"
         }};
+    const commonTextShadow = { "Text Shadow": {
+        "textShadowEnabled": "Enabled",
+        "textShadowColor": "Color",
+        "textShadowOffsetX": "Offset X",
+        "textShadowOffsetY": "Offset Y",
+        "textShadowBlur": "Blur"
+    }};
+
     const commonTransform2D = { "Transform 2D": {
         "translateX": "Translate X",
         "translateY": "Translate Y",
@@ -523,6 +538,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 ...commonTextStyle,
+                ...commonTextShadow,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonInnerPadding,
@@ -559,6 +575,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 ...commonTextStyle,
+                ...commonTextShadow,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonInnerPadding,
@@ -668,3 +685,4 @@ export function getAvailablePropertiesForElement(element) {
 
     return props;
 }
+

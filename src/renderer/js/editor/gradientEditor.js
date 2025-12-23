@@ -315,4 +315,5 @@ export function openGradientEditor(initialGradient, callback, useOpaquePicker = 
     renderGradientEditor();
     dialog.classList.add('visible');
 }
-
+
+

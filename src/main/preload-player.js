@@ -67,4 +67,5 @@ contextBridge.exposeInMainWorld('playerAPI', {
     respondToPairing: (deviceId, accepted) => ipcRenderer.send('device-controller:respond-to-pairing', { deviceId, accepted }),
     disconnectDevice: () => ipcRenderer.send('device-controller:disconnect-device'),
     readyForDevices: () => ipcRenderer.send('player:ready-for-devices'),
-});
+});
+

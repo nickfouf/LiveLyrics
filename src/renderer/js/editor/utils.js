@@ -310,13 +310,22 @@ export function getNameForElementType(type) {
     return names[type] || 'Element';
 }
 
+/**
+ * Determines the underlying data type of a property based on its key.
+ * This tells the Events Editor which specific value editor (Color, Number, Size, etc.) to open.
+ * @param {string} propKey - The property key (e.g., 'opacity', 'shadowBlur').
+ * @returns {string} The property type category.
+ */
 export function getPropertyType(propKey) {
     switch (propKey) {
+        // --- Number (single numeric value) ---
         case 'opacity':
         case 'videoSpeed':
         case 'audioVolume':
         case 'audioStartTime':
         case 'audioEndTime':
+        case 'shadowAngle':
+        case 'textShadowAngle':  // Added
         case 'scaleX':
         case 'scaleY':
         case 'scaleZ':
@@ -331,6 +340,7 @@ export function getPropertyType(propKey) {
         case 'parent-rotateZ':
             return 'number';
 
+        // --- Size (value + unit object: {value: 10, unit: 'px'}) ---
         case 'width':
         case 'height':
         case 'top':
@@ -339,10 +349,11 @@ export function getPropertyType(propKey) {
         case 'bottom':
         case 'borderSize':
         case 'borderRadius':
-        case 'shadowOffsetX':
-        case 'shadowOffsetY':
+        case 'shadowDistance':
+        case 'textShadowDistance': // Added
         case 'shadowBlur':
         case 'shadowSpread':
+        case 'textShadowBlur':     // Added
         case 'paddingTop':
         case 'paddingLeft':
         case 'paddingBottom':
@@ -363,47 +374,52 @@ export function getPropertyType(propKey) {
         case 'childrenPerspective':
             return 'size';
 
+        // --- Color/Gradient (Complex object with mode: 'color' or 'gradient') ---
         case 'bgColor':
         case 'borderColor':
         case 'shadowColor':
         case 'textColor':
         case 'karaokeColor':
+        case 'textShadowColor':  // Added
         case 'progressBgColor':
         case 'progressFillColor':
             return 'color/gradient';
 
+        // --- Boolean (true/false) ---
         case 'bgEnabled':
         case 'borderEnabled':
         case 'shadowEnabled':
         case 'shadowInset':
+        case 'textShadowEnabled': // Added
         case 'justifyText':
         case 'audioLoop':
+        case 'videoLoop':
         case 'visible':
             return 'boolean';
 
+        // --- String (Standard strings or fixed selection dropdowns) ---
         case 'content':
+        case 'fontFamily':
+        case 'fontWeight':
+        case 'fontStyle':
+        case 'textAlign':
         case 'objectFit':
         case 'videoSrc':
         case 'audioSrc':
         case 'transform-style':
         case 'backface-visibility':
         case 'parent-transform-style':
+        case 'mixBlendMode':
             return 'string';
 
+        // --- Dynamic String (Value + ID to trigger logic in renderers) ---
         case 'videoState':
         case 'audioState':
             return 'dynamic-string';
 
-        case 'alignment': 
+        // --- Alignment & Layout (Specific UI types) ---
+        case 'alignment':
             return 'alignment';
-        case 'fontFamily':
-            return 'fontFamily';
-        case 'fontWeight':
-            return 'fontWeight';
-        case 'fontStyle':
-            return 'fontStyle';
-        case 'textAlign':
-            return 'textAlign';
         case 'justifyContent':
             return 'justifyContent';
         case 'alignItems':
@@ -428,13 +444,30 @@ export function getAvailablePropertiesForElement(element) {
 
     let props = {};
 
-    const commonEffects = { "Effects": { "opacity": "Opacity" } };
+    const commonEffects = { "Effects": { "opacity": "Opacity", "mixBlendMode": "Blending Mode" } };
     const commonDimensions = { "Dimensions": { "width": "Width", "height": "Height" } };
     const commonMargin = { "Margin": { "top": "Top", "left": "Left", "bottom": "Bottom", "right": "Right" } };
     const commonInnerPadding = { "Inner Padding": { "paddingTop": "Top", "paddingLeft": "Left", "paddingBottom": "Bottom", "paddingRight": "Right" } };
     const commonBackground = { "Background": { "bgEnabled": "Enabled", "bgColor": "Color/Gradient" } };
     const commonBorder = { "Border": { "borderEnabled": "Enabled", "borderSize": "Width", "borderRadius": "Radius", "borderColor": "Color" } };
-    const commonBoxShadow = { "Box Shadow": { "shadowEnabled": "Enabled", "shadowInset": "Inset", "shadowOffsetX": "OffsetX", "shadowOffsetY": "OffsetY", "shadowBlur": "Blur", "shadowSpread": "Spread", "shadowColor": "Color" } };
+    const commonBoxShadow = { "Box Shadow": {
+            "shadowEnabled": "Enabled",
+            "shadowInset": "Inset",
+            "shadowAngle": "Angle",
+            "shadowDistance": "Distance",
+            "shadowBlur": "Blur",
+            "shadowSpread": "Spread",
+            "shadowColor": "Color"
+        }};
+
+    const commonTextShadow = { "Text Shadow": {
+            "textShadowEnabled": "Enabled",
+            "textShadowColor": "Color",
+            "textShadowAngle": "Angle",
+            "textShadowDistance": "Distance",
+            "textShadowBlur": "Blur"
+        }};
+
     const commonTextStyle = { "Text Style": {
             "fontFamily": "Font Family",
             "fontWeight": "Weight",
@@ -447,29 +480,31 @@ export function getAvailablePropertiesForElement(element) {
             "textAlign": "Alignment",
             "justifyText": "Justify"
         }};
+
     const commonTransform2D = { "Transform 2D": {
-        "translateX": "Translate X",
-        "translateY": "Translate Y",
-        "scaleX": "Scale X",
-        "scaleY": "Scale Y",
-        "rotate": "Rotate",
-        "skewX": "Skew X",
-        "skewY": "Skew Y",
-        "transform-origin-x": "Origin X",
-        "transform-origin-y": "Origin Y"
-    }};
+            "translateX": "Translate X",
+            "translateY": "Translate Y",
+            "scaleX": "Scale X",
+            "scaleY": "Scale Y",
+            "rotate": "Rotate",
+            "skewX": "Skew X",
+            "skewY": "Skew Y",
+            "transform-origin-x": "Origin X",
+            "transform-origin-y": "Origin Y"
+        }};
+
     const commonTransform3D = { "Transform 3D": {
-        "translateZ": "Translate Z",
-        "scaleZ": "Scale Z",
-        "rotateX": "Rotate X",
-        "rotateY": "Rotate Y",
-        "rotateZ": "Rotate Z",
-        "transform-origin-z": "Origin Z",
-        "transform-style": "Transform Style",
-        "selfPerspective": "Self-perspective",
-        "childrenPerspective": "Children Perspective",
-        "backface-visibility": "Backface Visibility"
-    }};
+            "translateZ": "Translate Z",
+            "scaleZ": "Scale Z",
+            "rotateX": "Rotate X",
+            "rotateY": "Rotate Y",
+            "rotateZ": "Rotate Z",
+            "transform-origin-z": "Origin Z",
+            "transform-style": "Transform Style",
+            "selfPerspective": "Self-perspective",
+            "childrenPerspective": "Children Perspective",
+            "backface-visibility": "Backface Visibility"
+        }};
 
     if (elementType === 'page') {
         props["Parent's Perspective"] = {
@@ -486,6 +521,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 ...commonTextStyle,
+                ...commonTextShadow, // Added here
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonInnerPadding,
@@ -522,6 +558,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 ...commonTextStyle,
+                ...commonTextShadow, // Added here
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonInnerPadding,
@@ -1376,3 +1413,4 @@ export function deepEqual(a, b) {
     }
     return false;
 }
+

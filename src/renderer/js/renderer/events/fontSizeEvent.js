@@ -67,4 +67,5 @@ export class FontSizeEvent {
     setEase(ease) {
         this.#ease = ease;
     }
-}
+}
+

@@ -64,7 +64,6 @@ export const DOM = {
     stagingPageContainer: null,
     emptyPageHint: null,
     dropHint: null,
-    resizingOverlay: null, // ADDED
 
     // Page Manager
     pageManager: null,
@@ -139,10 +138,10 @@ export function initDOM() {
     DOM.stagingPageContainer = document.getElementById('staging-page-container');
     DOM.emptyPageHint = document.getElementById('empty-page-hint');
     DOM.dropHint = document.getElementById('drop-hint');
-    DOM.resizingOverlay = document.getElementById('resizing-overlay'); // ADDED
 
     // Page Manager
     DOM.pageManager = document.querySelector('.page-manager');
     DOM.pageThumbnailsContainer = document.getElementById('page-thumbnails-container');
     DOM.addPageBtn = document.querySelector('.add-page-btn');
-}
+}
+

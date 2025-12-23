@@ -98,4 +98,5 @@ export class DimensionsProperty extends VirtualProperty {
         const heightChanged = this.updateHeight({rootWidth: rootWidth, rootHeight: rootHeight, parentWidth, parentHeight});
         return widthChanged || heightChanged;
     }
-}
+}
+

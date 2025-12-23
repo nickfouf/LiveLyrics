@@ -102,4 +102,5 @@ export function setActivePage_Player(newPage) {
     // The actual DOM manipulation is handled by `updateVisiblePagesForTime` in playback.js.
     // This function's only responsibility now is to update the state and the UI thumbnails.
     renderPageManager_Player();
-}
+}
+

@@ -14,4 +14,5 @@ export function initDOM() {
     // Main rendering containers
     DOM.pageContainer = document.getElementById('page-container');
     DOM.presentationSlide = document.getElementById('slide-viewport');
-}
+}
+

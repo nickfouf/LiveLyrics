@@ -261,12 +261,12 @@ function getNoteStartTime(noteIndex, flatNotes) {
 
 
 /**
- * Safely gets a property's root value from the main element's dataset, with defaults.
- * This is the ultimate fallback if no keyframes are found.
+ * Safely gets a property's root value from the VirtualElement's property objects.
+ * This is used as the fallback "Starting Value" in the Events Editor when no keyframe exists.
  */
 function getRootPropertyValue(virtualElement, propKey) {
     if (!virtualElement) {
-        console.error(`[Events Editor] Could not find VirtualElement: ${virtualElement}`);
+        console.error(`[Events Editor] getRootPropertyValue: virtualElement is null for key: ${propKey}`);
         return null;
     }
 
@@ -276,21 +276,21 @@ function getRootPropertyValue(virtualElement, propKey) {
         return dataProp?.effectData?.parameterValues?.[propKey] ?? null;
     }
 
-    // Map propKey to the structured property system
+    // Map the UI Event Key (propKey) to the structured property system
     switch (propKey) {
-        // Effects
+        // --- Effects ---
         case 'opacity':
             return virtualElement.getProperty('effects')?.getOpacity().getDefaultValue();
         case 'mixBlendMode':
             return virtualElement.getProperty('effects')?.getMixBlendMode().getDefaultValue();
 
-        // Dimensions
+        // --- Dimensions ---
         case 'width':
             return virtualElement.getProperty('dimensions')?.getWidth().getDefaultValue();
         case 'height':
             return virtualElement.getProperty('dimensions')?.getHeight().getDefaultValue();
 
-        // Margin
+        // --- Margin ---
         case 'top':
             return virtualElement.getProperty('margin')?.getTop().getDefaultValue();
         case 'left':
@@ -300,13 +300,13 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'right':
             return virtualElement.getProperty('margin')?.getRight().getDefaultValue();
 
-        // Background
+        // --- Background ---
         case 'bgEnabled':
             return virtualElement.getProperty('background')?.getEnabled().getDefaultValue();
         case 'bgColor':
             return virtualElement.getProperty('background')?.getBackground().getDefaultValue();
 
-        // Border
+        // --- Border ---
         case 'borderEnabled':
             return virtualElement.getProperty('border')?.getEnabled().getDefaultValue();
         case 'borderSize':
@@ -316,23 +316,23 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'borderColor':
             return virtualElement.getProperty('border')?.getColor().getDefaultValue();
 
-        // Box Shadow
+        // --- Box Shadow ---
         case 'shadowEnabled':
-            return virtualElement.getProperty('boxShadow')?.getValues().enabled.getDefaultValue();
+            return virtualElement.getProperty('boxShadow')?.getEnabled().getDefaultValue();
         case 'shadowInset':
-            return virtualElement.getProperty('boxShadow')?.getValues().inset.getDefaultValue();
-        case 'shadowOffsetX':
-            return virtualElement.getProperty('boxShadow')?.getValues().offsetX.getDefaultValue();
-        case 'shadowOffsetY':
-            return virtualElement.getProperty('boxShadow')?.getValues().offsetY.getDefaultValue();
-        case 'shadowBlur':
-            return virtualElement.getProperty('boxShadow')?.getValues().blur.getDefaultValue();
-        case 'shadowSpread':
-            return virtualElement.getProperty('boxShadow')?.getValues().spread.getDefaultValue();
-        case 'shadowColor':
-            return virtualElement.getProperty('boxShadow')?.getValues().color.getDefaultValue();
+            return virtualElement.getProperty('boxShadow')?.getInset().getDefaultValue();
+        case 'shadowAngle':
+            return virtualElement.getProperty('boxShadow')?.getShadowAngle().getDefaultValue();
+        case 'shadowDistance':
+            return virtualElement.getProperty('boxShadow')?.getShadowDistance().getDefaultValue();
+        case 'shadowBlur': // Maps shadowBlur to the internal 'blur' value
+            return virtualElement.getProperty('boxShadow')?.getBlur().getDefaultValue();
+        case 'shadowSpread': // Maps shadowSpread to the internal 'spread' value
+            return virtualElement.getProperty('boxShadow')?.getSpread().getDefaultValue();
+        case 'shadowColor': // Maps shadowColor to the internal 'color' value
+            return virtualElement.getProperty('boxShadow')?.getColor().getDefaultValue();
 
-        // Inner Padding
+        // --- Inner Padding ---
         case 'paddingTop':
             return virtualElement.getProperty('inner_padding')?.getTop().getDefaultValue();
         case 'paddingLeft':
@@ -342,7 +342,7 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'paddingRight':
             return virtualElement.getProperty('inner_padding')?.getRight().getDefaultValue();
 
-        // Text Style
+        // --- Text Style ---
         case 'fontSize':
             return virtualElement.getProperty('textStyle')?.getFontSize().getDefaultValue();
         case 'textColor':
@@ -354,11 +354,7 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'wordSpacing':
             return virtualElement.getProperty('textStyle')?.getWordSpacing().getDefaultValue();
         case 'karaokeColor':
-            const textStyleProp = virtualElement.getProperty('textStyle');
-            if (textStyleProp && typeof textStyleProp.getKaraokeColor === 'function') {
-                return textStyleProp.getKaraokeColor().getDefaultValue();
-            }
-            return null;
+            return virtualElement.getProperty('textStyle')?.getKaraokeColor()?.getDefaultValue();
         case 'fontFamily':
             return virtualElement.getProperty('textStyle')?.getFontFamily().getDefaultValue();
         case 'fontWeight':
@@ -370,34 +366,43 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'justifyText':
             return virtualElement.getProperty('textStyle')?.getJustifyText().getDefaultValue();
 
-        // Video & Audio Playback
-        case 'videoState': {
-            const stateValObj = virtualElement.getProperty('playback')?.getState().getDefaultValue();
-            return stateValObj ? stateValObj.value : 'paused';
-        }
+        // --- Text Shadow ---
+        case 'textShadowEnabled':
+            return virtualElement.getProperty('textShadow')?.getEnabled().getDefaultValue();
+        case 'textShadowAngle':
+            return virtualElement.getProperty('textShadow')?.getTextShadowAngle().getDefaultValue();
+        case 'textShadowDistance':
+            return virtualElement.getProperty('textShadow')?.getTextShadowDistance().getDefaultValue();
+        case 'textShadowBlur': // Maps textShadowBlur to the internal 'blur' value
+            return virtualElement.getProperty('textShadow')?.getBlur().getDefaultValue();
+        case 'textShadowColor': // Maps textShadowColor to the internal 'color' value
+            return virtualElement.getProperty('textShadow')?.getColor().getDefaultValue();
+
+        // --- Video & Audio Playback ---
+        case 'videoState':
+            return virtualElement.getProperty('playback')?.getState().getDefaultValue()?.value;
         case 'videoSpeed':
             return virtualElement.getProperty('playback')?.getSpeed().getDefaultValue();
         case 'videoLoop':
             return virtualElement.getProperty('playback')?.getLoop().getDefaultValue();
-        case 'audioState': {
-            const stateValObj = virtualElement.getProperty('playback')?.getState().getDefaultValue();
-            return stateValObj ? stateValObj.value : 'paused';
-        }
+        case 'audioState':
+            return virtualElement.getProperty('playback')?.getState().getDefaultValue()?.value;
         case 'audioVolume':
             return virtualElement.getProperty('playback')?.getVolume().getDefaultValue();
         case 'audioLoop':
             return virtualElement.getProperty('playback')?.getLoop().getDefaultValue();
 
-        // Orchestra Progress Bar
+        // --- Orchestra Progress Bar ---
         case 'progressBgColor':
             return virtualElement.getProperty('progress')?.getBackgroundColor().getDefaultValue();
         case 'progressFillColor':
             return virtualElement.getProperty('progress')?.getFillColor().getDefaultValue();
 
-        // Image
+        // --- Image ---
         case 'objectFit':
             return virtualElement.getProperty('objectFit')?.getObjectFit().getDefaultValue();
 
+        // --- Layout/Gravity ---
         case 'gap':
             return virtualElement.getProperty('gap')?.getGap().getDefaultValue();
         case 'justifyContent':
@@ -405,7 +410,7 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'alignItems':
             return virtualElement.getProperty('gravity')?.getAlignItems().getDefaultValue();
 
-        // Transform
+        // --- Transform ---
         case 'translateX':
             return virtualElement.getProperty('transform')?.getTranslateX().getDefaultValue();
         case 'translateY':
@@ -436,19 +441,17 @@ function getRootPropertyValue(virtualElement, propKey) {
             return virtualElement.getProperty('transform')?.getTransformOriginY().getDefaultValue();
         case 'transform-origin-z':
             return virtualElement.getProperty('transform')?.getTransformOriginZ().getDefaultValue();
-        case 'transform-style':
-            return virtualElement.getProperty('transform')?.getTransformStyle().getDefaultValue();
-        case 'perspective':
-            return virtualElement.getProperty('transform')?.getPerspective().getDefaultValue();
         case 'selfPerspective':
             return virtualElement.getProperty('transform')?.getSelfPerspective().getDefaultValue();
         case 'childrenPerspective':
             return virtualElement.getProperty('transform')?.getChildrenPerspective().getDefaultValue();
         case 'backface-visibility':
             return virtualElement.getProperty('transform')?.getBackfaceVisibility().getDefaultValue();
+        case 'transform-style':
+            return virtualElement.getProperty('transform')?.getTransformStyle().getDefaultValue();
 
         default:
-            console.warn(`[Events Editor] getRootPropertyValue not implemented for: ${propKey}`);
+            console.warn(`[Events Editor] getRootPropertyValue not implemented for UI key: ${propKey}`);
             return null;
     }
 }
@@ -1346,4 +1349,5 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
     eventsEditorDialog.addEventListener('transitionend', () => {
         renderEventConnectors();
     }, { once: true });
-}
+}
+

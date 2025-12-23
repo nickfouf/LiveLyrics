@@ -71,4 +71,5 @@ export class BackgroundProperty extends VirtualProperty {
             this.#background.markAsRendered();
         }
     }
-}
+}
+

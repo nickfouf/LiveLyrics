@@ -365,3 +365,4 @@ document.addEventListener('DOMContentLoaded', () => {
         await handlePlaybackUpdate(newState);
     });
 });
+

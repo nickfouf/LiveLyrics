@@ -1072,4 +1072,5 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
             }
         }, 0);
     });
-}
+}
+

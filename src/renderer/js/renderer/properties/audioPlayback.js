@@ -78,4 +78,5 @@ export class AudioPlaybackProperty extends VirtualProperty {
             value.applyEvent(measureIndex, measureProgress);
         }
     }
-}
+}
+

@@ -293,4 +293,5 @@ function createConnection(...args) {
     return smartSocket;
 }
 
-module.exports = { createServer, createConnection, SmartSocket, SmartServer };
+module.exports = { createServer, createConnection, SmartSocket, SmartServer };
+

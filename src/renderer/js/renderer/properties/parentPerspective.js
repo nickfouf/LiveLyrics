@@ -163,4 +163,5 @@ export class ParentPerspectiveProperty extends VirtualProperty {
         const dimensions = { rootWidth, rootHeight, parentWidth: grandparentWidth, parentHeight: grandparentHeight };
         this.#perspective.updatePixelValue(dimensions);
     }
-}
+}
+

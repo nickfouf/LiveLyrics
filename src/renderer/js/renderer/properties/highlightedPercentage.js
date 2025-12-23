@@ -45,4 +45,5 @@ export class HighlightedPercentage extends VirtualProperty {
             this.#progress.markAsRendered();
         }
     }
-}
+}
+

@@ -146,7 +146,7 @@ export class SmartEffectDataValue {
             return `radial-gradient(circle, ${colorStops})`;
         }
         if (gradient.type === 'linear') {
-            const angle = gradient.angle || '180deg';
+            const angle = gradient.angle !== undefined ? gradient.angle : '180deg';
             return `linear-gradient(${angle}, ${colorStops})`;
         }
         return '';
@@ -432,4 +432,6 @@ export class SmartEffectDataValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+
+

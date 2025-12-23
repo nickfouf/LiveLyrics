@@ -80,3 +80,5 @@ export class PerspectiveScaleProperty extends VirtualProperty {
         parentPerspectiveProperty.setScale(scaleValue);
     }
 }
+
+

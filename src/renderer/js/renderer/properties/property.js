@@ -99,4 +99,5 @@ export class VirtualProperty {
     resize({element, root, parent}) {
         // Default implementation does nothing
     }
-}
+}
+

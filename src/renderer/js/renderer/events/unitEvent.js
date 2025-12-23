@@ -67,4 +67,5 @@ export class UnitEvent {
     setEase(ease) {
         this.#ease = ease;
     }
-}
+}
+

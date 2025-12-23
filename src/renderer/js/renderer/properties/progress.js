@@ -94,4 +94,5 @@ export class ProgressProperty extends VirtualProperty {
             this.#fillColor.markAsRendered();
         }
     }
-}
+}
+

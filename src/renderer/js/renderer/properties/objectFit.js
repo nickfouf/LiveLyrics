@@ -42,4 +42,5 @@ export class ObjectFitProperty extends VirtualProperty {
             this.#objectFit.markAsRendered();
         }
     }
-}
+}
+

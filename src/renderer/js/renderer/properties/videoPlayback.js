@@ -72,4 +72,5 @@ export class VideoPlaybackProperty extends VirtualProperty {
             value.applyEvent(measureIndex, measureProgress);
         }
     }
-}
+}
+

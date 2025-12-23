@@ -108,4 +108,5 @@ export class SmartEffectSrcProperty extends VirtualProperty {
         //     this.#effectData.applyDifferences(element);
         // }
     }
-}
+}
+

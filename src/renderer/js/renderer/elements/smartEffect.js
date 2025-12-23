@@ -42,4 +42,5 @@ export class VirtualSmartEffect extends VirtualElement {
         this.setProperty('effects', new EffectsProperty(options.effects));
         this.setProperty('transform', new TransformProperty(options.transform));
     }
-}
+}
+

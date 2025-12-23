@@ -40,4 +40,5 @@ export class ZIndexProperty extends VirtualProperty {
             this.#zIndex.markAsRendered();
         }
     }
-}
+}
+

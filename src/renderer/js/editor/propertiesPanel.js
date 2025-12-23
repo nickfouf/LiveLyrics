@@ -18,6 +18,7 @@ import {triggerActivePageRender, renderPageManager} from './pageManager.js';
 import {updateEmptyPageHintVisibility} from './rendering.js';
 import { buildMeasureMap, calculateGlobalMeasureOffsetForElement } from './utils.js';
 import { showLoadingDialog } from './loadingDialog.js';
+import {UnitValue} from "../renderer/values/unit.js";
 
 let scrollTimeout = null;
 
@@ -1108,12 +1109,12 @@ function buildBackgroundColorProperty(element, isCollapsed) {
                             <option value="radial" ${bgObject.type === 'radial' ? 'selected' : ''}>Radial</option>
                         </select>
                     </div>
-                    <div class="form-group" id="prop-bg-gradient-angle-group" style="display: ${bgObject.type === 'linear' ? 'flex' : 'none'};">
-                        <label for="prop-bg-gradient-angle">Angle</label>
-                        <div class="input-with-unit">
-                            <input type="number" id="prop-bg-gradient-angle" class="form-input" value="${bgObject.angle || 90}">
-                            <span class="unit-label">deg</span>
-                        </div>
+                                    <div class="form-group" id="prop-bg-gradient-angle-group" style="display: ${bgObject.type === 'linear' ? 'flex' : 'none'};">
+                    <label>Angle</label>
+                    <div class="input-with-unit">
+                        <input type="range" id="prop-bg-gradient-angle-slider" class="form-input" min="0" max="360" step="1" value="${bgObject.angle !== undefined ? bgObject.angle : 90}" style="padding: 0;">
+                        <input type="number" id="prop-bg-gradient-angle" class="form-input" min="0" max="360" step="1" value="${bgObject.angle !== undefined ? bgObject.angle : 90}" style="max-width: 80px;">
+                        <span class="unit-label">deg</span>
                     </div>
                 </div>
             </div>
@@ -1128,6 +1129,7 @@ function buildBackgroundColorProperty(element, isCollapsed) {
     const gradientTypeSelect = propGroup.querySelector('#prop-bg-gradient-type');
     const gradientAngleGroup = propGroup.querySelector('#prop-bg-gradient-angle-group');
     const gradientAngleInput = propGroup.querySelector('#prop-bg-gradient-angle');
+    const gradientAngleSlider = propGroup.querySelector('#prop-bg-gradient-angle-slider');
 
     if (!isPage) {
         const enabledToggle = propGroup.querySelector('#prop-bg-enabled');
@@ -1182,11 +1184,26 @@ function buildBackgroundColorProperty(element, isCollapsed) {
         setPropertyAsDefaultValue(state.selectedElement, 'bgColor', currentObject);
     });
 
-    gradientAngleInput.addEventListener('input', () => {
-        const currentObject = backgroundValue.getDefaultValue();
-        currentObject.angle = parseInt(gradientAngleInput.value, 10) || 0;
-        setPropertyAsDefaultValue(state.selectedElement, 'bgColor', currentObject);
-    });
+    if (gradientAngleInput && gradientAngleSlider) {
+        const updateAngle = (val) => {
+            const currentObject = backgroundValue.getDefaultValue();
+            currentObject.angle = val;
+            setPropertyAsDefaultValue(state.selectedElement, 'bgColor', currentObject);
+        };
+
+        gradientAngleInput.addEventListener('input', () => {
+            let val = parseInt(gradientAngleInput.value, 10) || 0;
+            val = Math.max(0, Math.min(360, val));
+            gradientAngleSlider.value = val;
+            updateAngle(val);
+        });
+
+        gradientAngleSlider.addEventListener('input', () => {
+            let val = parseInt(gradientAngleSlider.value, 10) || 0;
+            gradientAngleInput.value = val;
+            updateAngle(val);
+        });
+    }
 
     propGroup.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1250,12 +1267,14 @@ function buildBorderProperties(element, isCollapsed) {
 }
 
 // --- MODIFIED: Box Shadow properties now use setPropertyAsDefaultValue and read from getDefaultValue ---
+
+// --- FIND THIS FUNCTION ---
 function buildBoxShadowProperties(element, isCollapsed) {
     const propGroup = document.createElement('div');
     propGroup.id = 'prop-group-boxshadow';
     propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
     const shadowProp = element.getProperty('boxShadow');
-    const values = shadowProp.getValues();
+    const values = shadowProp.getValues(); // After our fix, this contains { blur, spread, color ... }
 
     propGroup.innerHTML = `
         ${createPropHeader('Box Shadow')}
@@ -1274,22 +1293,36 @@ function buildBoxShadowProperties(element, isCollapsed) {
     DOM.propertiesPanelBody.appendChild(propGroup);
 
     const body = propGroup.querySelector('.prop-group-body');
-    buildUnitValueUI(body, 'shadowOffsetX', 'Offset X', values.offsetX);
-    buildUnitValueUI(body, 'shadowOffsetY', 'Offset Y', values.offsetY);
-    buildUnitValueUI(body, 'shadowBlur', 'Blur', values.blur);
-    buildUnitValueUI(body, 'shadowSpread', 'Spread', values.spread);
+    const controlsContainer = document.createElement('div');
+    if (!values.enabled.getDefaultValue()) {
+        controlsContainer.classList.add('controls-disabled');
+    }
+    body.appendChild(controlsContainer);
+
+    buildSliderWithInputUI(controlsContainer, 'shadowAngle', 'Angle', values.shadowAngle, { min: 0, max: 360, step: 1, unit: '°' });
+    buildSliderWithInputUI(controlsContainer, 'shadowDistance', 'Distance', values.shadowDistance, { min: 0, max: 200, step: 1 });
+
+    // --- FIX START: Use 'blur' and 'spread' instead of 'shadowBlur' and 'shadowSpread' ---
+    buildUnitValueUI(controlsContainer, 'shadowBlur', 'Blur', values.blur);
+    buildUnitValueUI(controlsContainer, 'shadowSpread', 'Spread', values.spread);
+    // --- FIX END ---
 
     const colorGroup = document.createElement('div');
     colorGroup.className = 'form-group';
+
+    // --- FIX START: Use 'color' instead of 'shadowColor' ---
     const defaultColor = values.color.getDefaultValue();
     colorGroup.innerHTML = `
         <label>Color</label>
         <div class="color-swatch" id="prop-shadow-color"><div class="color-swatch-inner" style="background: ${generateCSSColor(defaultColor)};"></div></div>
     `;
-    body.appendChild(colorGroup);
+    controlsContainer.appendChild(colorGroup);
+
     checkAndSetEventControl(colorGroup, values.color);
+    // --- FIX END ---
 
     colorGroup.querySelector('#prop-shadow-color').addEventListener('click', () => {
+        // FIX: Match key to 'color'
         openColorPicker(generateCSSColor(values.color.getDefaultValue()), (newColor) => {
             setPropertyAsDefaultValue(state.selectedElement, 'shadowColor', parseColorString(newColor));
             renderPropertiesPanel();
@@ -1384,7 +1417,7 @@ function buildProgressProperties(element, isCollapsed) {
                 <div class="form-group" id="prop-progress-fill-gradient-angle-group" style="display: ${fillColorObject.type === 'linear' ? 'flex' : 'none'};">
                     <label for="prop-progress-fill-gradient-angle">Angle</label>
                     <div class="input-with-unit">
-                        <input type="number" id="prop-progress-fill-gradient-angle" class="form-input" value="${fillColorObject.angle || 90}">
+                        <input type="number" id="prop-progress-fill-gradient-angle" class="form-input" value="${fillColorObject.angle !== undefined ? fillColorObject.angle : 90}">
                         <span class="unit-label">deg</span>
                     </div>
                 </div>
@@ -1691,7 +1724,7 @@ function buildTextStyleProperties(element, isCollapsed) {
             <div class="form-group" id="prop-text-gradient-angle-group" style="display: ${textColorObject.type === 'linear' ? 'flex' : 'none'};">
                 <label for="prop-text-gradient-angle">Angle</label>
                 <div class="input-with-unit">
-                    <input type="number" id="prop-text-gradient-angle" class="form-input" value="${textColorObject.angle || 90}">
+                    <input type="number" id="prop-text-gradient-angle" class="form-input" value="${textColorObject.angle !== undefined ? textColorObject.angle : 90}">
                     <span class="unit-label">deg</span>
                 </div>
             </div>
@@ -1736,7 +1769,7 @@ function buildTextStyleProperties(element, isCollapsed) {
                 <div class="form-group" id="prop-karaoke-gradient-angle-group" style="display: ${karaokeColorObject.type === 'linear' ? 'flex' : 'none'};">
                     <label for="prop-karaoke-gradient-angle">Angle</label>
                     <div class="input-with-unit">
-                        <input type="number" id="prop-karaoke-gradient-angle" class="form-input" value="${karaokeColorObject.angle || 90}">
+                        <input type="number" id="prop-karaoke-gradient-angle" class="form-input" value="${karaokeColorObject.angle !== undefined ? karaokeColorObject.angle : 90}">
                         <span class="unit-label">deg</span>
                     </div>
                 </div>
@@ -1931,6 +1964,104 @@ function buildTextStyleProperties(element, isCollapsed) {
             });
         }
     }
+}
+
+function buildTextShadowProperties(element, isCollapsed) {
+    const propGroup = document.createElement('div');
+    propGroup.id = 'prop-group-textshadow';
+    propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
+    const shadowProp = element.getProperty('textShadow');
+    if (!shadowProp) return;
+    const values = shadowProp.getValues();
+
+    propGroup.innerHTML = `
+        ${createPropHeader('Text Shadow')}
+        <div class="prop-group-body">
+            <div class="form-group">
+                <div class="toggle-switch-container">
+                    <label for="prop-textshadow-enabled">Enabled</label>
+                    <label class="toggle-switch"><input type="checkbox" id="prop-textshadow-enabled" ${values.enabled.getDefaultValue() ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+        </div>`;
+    DOM.propertiesPanelBody.appendChild(propGroup);
+
+    const body = propGroup.querySelector('.prop-group-body');
+    const controlsContainer = document.createElement('div');
+    if (!values.enabled.getDefaultValue()) {
+        controlsContainer.classList.add('controls-disabled');
+    }
+    body.appendChild(controlsContainer);
+
+    checkAndSetEventControl(propGroup.querySelector('.toggle-switch-container'), values.enabled);
+
+    // New Angle and Distance Seekbars
+    buildSliderWithInputUI(controlsContainer, 'textShadowAngle', 'Angle', values.textShadowAngle, { min: 0, max: 360, step: 1, unit: '°' });
+    buildSliderWithInputUI(controlsContainer, 'textShadowDistance', 'Distance', values.textShadowDistance, { min: 0, max: 200, step: 1 });
+
+    buildUnitValueUI(controlsContainer, 'textShadowBlur', 'Blur', values.blur);
+
+    const colorGroup = document.createElement('div');
+    colorGroup.className = 'form-group';
+    colorGroup.dataset.propKey = 'textShadowColor';
+    const defaultColor = values.color.getDefaultValue();
+    colorGroup.innerHTML = `
+        <label>Color</label>
+        <div class="color-swatch" id="prop-textshadow-color"><div class="color-swatch-inner" style="background: ${generateCSSColor(defaultColor)};"></div></div>
+    `;
+    controlsContainer.appendChild(colorGroup);
+    checkAndSetEventControl(colorGroup, values.color);
+
+    colorGroup.querySelector('#prop-textshadow-color').addEventListener('click', () => {
+        openOpaqueColorPicker(generateCSSColor(values.color.getDefaultValue()), (newColor) => {
+            setPropertyAsDefaultValue(state.selectedElement, 'textShadowColor', parseColorString(newColor));
+            renderPropertiesPanel();
+        });
+    });
+
+    propGroup.querySelector('#prop-textshadow-enabled').addEventListener('change', (e) => {
+        setPropertyAsDefaultValue(state.selectedElement, 'textShadowEnabled', e.target.checked);
+        renderPropertiesPanel();
+    });
+}
+
+/**
+ * Helper to build a property row with a seekbar (range) and a numeric input.
+ */
+function buildSliderWithInputUI(container, propKey, label, valueObject, { min, max, step, unit = '' }) {
+    const isUnitValue = valueObject instanceof UnitValue;
+    const defaultValue = isUnitValue ? valueObject.getDefaultValue().value : valueObject.getDefaultValue();
+    const defaultUnit = isUnitValue ? valueObject.getDefaultValue().unit : unit;
+
+    const formGroup = document.createElement('div');
+    formGroup.className = 'form-group';
+    formGroup.dataset.propKey = propKey;
+    formGroup.innerHTML = `
+        <label>${label}</label>
+        <div class="input-with-unit">
+            <input type="range" class="form-input slider-input" min="${min}" max="${max}" step="${step}" value="${defaultValue}" style="padding:0; flex-grow:2;">
+            <input type="number" class="form-input number-input" value="${defaultValue}" style="max-width: 65px;">
+            <span class="unit-label">${defaultUnit}</span>
+        </div>
+    `;
+    container.appendChild(formGroup);
+
+    const slider = formGroup.querySelector('.slider-input');
+    const num = formGroup.querySelector('.number-input');
+
+    const update = (val) => {
+        const finalValue = isUnitValue ? { value: val, unit: 'px' } : val;
+        setPropertyAsDefaultValue(state.selectedElement, propKey, finalValue);
+    };
+
+    slider.addEventListener('input', () => {
+        num.value = slider.value;
+        update(parseFloat(slider.value));
+    });
+    num.addEventListener('input', () => {
+        slider.value = num.value;
+        update(parseFloat(num.value));
+    });
 }
 
 // --- MODIFIED: Effects properties now use setPropertyAsDefaultValue and read from getDefaultValue ---
@@ -2186,6 +2317,7 @@ export function renderPropertiesPanel(element = state.selectedElement) {
     if (element.getProperty('orchestraContent')) buildOrchestraProperties(element, isCollapsed('prop-group-orchestra'));
 
     if (element.getProperty('textStyle')) buildTextStyleProperties(element, isCollapsed('prop-group-textstyle'));
+    if (element.getProperty('textShadow')) buildTextShadowProperties(element, isCollapsed('prop-group-textshadow')); // New call
     if (element.getProperty('progress')) buildProgressProperties(element, isCollapsed('prop-group-progress'));
 
     if (!isPage && element.getProperty('dimensions')) buildDimensionProperties(element, isCollapsed('prop-group-dimensions'));
@@ -2205,4 +2337,6 @@ export function renderPropertiesPanel(element = state.selectedElement) {
             DOM.propertiesPanelBody.scrollTop = savedScroll;
         }
     });
-}
+}
+
+

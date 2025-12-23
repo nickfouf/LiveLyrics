@@ -502,3 +502,4 @@ function handlePageDrop(e) {
 }
 
 export { setActivePage, renderPageManager, addPage, jumpToPage, deletePage };
+

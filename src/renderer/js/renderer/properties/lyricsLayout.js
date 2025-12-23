@@ -188,4 +188,5 @@ export class LyricsLayoutProperty extends VirtualProperty {
     resize({element, root, parent}) {
         return this.rebuildLayout({element});
     }
-}
+}
+

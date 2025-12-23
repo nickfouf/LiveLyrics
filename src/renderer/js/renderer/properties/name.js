@@ -36,4 +36,5 @@ export class NameProperty extends VirtualProperty {
     applyChanges(domElement) {
         // This property does not affect the DOM element's appearance
     }
-}
+}
+

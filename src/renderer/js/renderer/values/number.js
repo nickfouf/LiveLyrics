@@ -83,4 +83,5 @@ export class NumberValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

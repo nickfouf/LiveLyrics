@@ -45,4 +45,5 @@ export class DynamicStringEvent {
     getFullValue() { return { value: this.#value, id: this.#id }; }
     getEase() { return this.#ease; }
     setEase(ease) { this.#ease = ease; }
-}
+}
+

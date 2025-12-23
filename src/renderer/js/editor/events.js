@@ -87,8 +87,8 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
         borderColor: { prop: 'border', valueKey: 'color' },
         shadowEnabled: { prop: 'boxShadow', valueKey: 'enabled' },
         shadowInset: { prop: 'boxShadow', valueKey: 'inset' },
-        shadowOffsetX: { prop: 'boxShadow', valueKey: 'offsetX' },
-        shadowOffsetY: { prop: 'boxShadow', valueKey: 'offsetY' },
+        shadowAngle: { prop: 'boxShadow', valueKey: 'shadowAngle' },
+        shadowDistance: { prop: 'boxShadow', valueKey: 'shadowDistance' },
         shadowBlur: { prop: 'boxShadow', valueKey: 'blur' },
         shadowSpread: { prop: 'boxShadow', valueKey: 'spread' },
         shadowColor: { prop: 'boxShadow', valueKey: 'color' },
@@ -98,6 +98,14 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
         paddingRight: { prop: 'inner_padding', valueKey: 'right' },
         fontSize: { prop: 'textStyle', valueKey: 'fontSize' },
         textColor: { prop: 'textStyle', valueKey: 'textColor' },
+
+        // --- ADDED: Text Shadow Mappings ---
+        textShadowEnabled: { prop: 'textShadow', valueKey: 'enabled' },
+        textShadowColor: { prop: 'textShadow', valueKey: 'color' },
+        textShadowAngle: { prop: 'textShadow', valueKey: 'textShadowAngle' },
+        textShadowDistance: { prop: 'textShadow', valueKey: 'textShadowDistance' },
+        textShadowBlur: { prop: 'textShadow', valueKey: 'blur' },
+
         lineHeight: { prop: 'textStyle', valueKey: 'lineHeight' },
         letterSpacing: { prop: 'textStyle', valueKey: 'letterSpacing' },
         wordSpacing: { prop: 'textStyle', valueKey: 'wordSpacing' },
@@ -151,13 +159,13 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
 
     const path = keyToPath[propKey];
     if (!path || !element.hasProperty(path.prop)) {
-        console.warn(`[setPropertyAsInitialEvent] Could not find path for propKey: ${propKey}`);
+        console.warn(`[setPropertyAsDefaultValue] Could not find path for propKey: ${propKey}`);
         return;
     }
 
     const propertyObject = element.getProperty(path.prop);
     if (!propertyObject || typeof propertyObject.setValue !== 'function') {
-        console.error(`[setPropertyAsInitialEvent] Invalid property object for ${propKey}`);
+        console.error(`[setPropertyAsDefaultValue] Invalid property object for ${propKey}`);
         return;
     }
 
@@ -873,8 +881,6 @@ function setupNewSongMenu() {
     });
     DOM.backToMenuBtn.addEventListener('click', () => showPage('main-menu-page'));
 
-    let currentResizeActionId = 0;
-
     DOM.createSongBtn.addEventListener('click', async () => { // MODIFIED: Made async
         const songTitle = DOM.songTitleInput.value.trim();
         if (!songTitle) return;
@@ -890,28 +896,8 @@ function setupNewSongMenu() {
             DOM.resizingOverlay.style.display = 'none';
         }
 
-        const resizeCallbacks = {
-            onResizeStart: () => {
-                currentResizeActionId++;
-                DOM.resizingOverlay.style.display = 'flex';
-                requestAnimationFrame(() => {
-                    DOM.resizingOverlay.style.opacity = '1';
-                });
-            },
-            onResizeEnd: () => {
-                if (DOM.resizingOverlay.style.opacity === '0') return;
-                DOM.resizingOverlay.style.opacity = '0';
-                const hideActionId = currentResizeActionId;
-                DOM.resizingOverlay.addEventListener('transitionend', function onTransitionEnd() {
-                    if (hideActionId === currentResizeActionId) {
-                        DOM.resizingOverlay.style.display = 'none';
-                    }
-                }, { once: true });
-            }
-        };
-
-        const domManager = new DomManager(DOM.pageContainer, resizeCallbacks);
-        const stagingDomManager = new DomManager(DOM.stagingPageContainer, resizeCallbacks);
+        const domManager = new DomManager(DOM.pageContainer);
+        const stagingDomManager = new DomManager(DOM.stagingPageContainer);
         const timelineManager = new TimelineManager();
         timelineManager.setDomManager(domManager);
 
@@ -1134,29 +1120,12 @@ async function loadSong(filePath) {
         if (DOM.pageContainer) DOM.pageContainer.innerHTML = '';
         if (DOM.stagingPageContainer) DOM.stagingPageContainer.innerHTML = '';
 
-        // ADDED: Clear previous project fonts to prevent leaks
+        // Clear previous project fonts to prevent leaks
         fontLoader.clear();
 
-        const resizeCallbacks = {
-            onResizeStart: () => {
-                if (DOM.resizingOverlay) {
-                    DOM.resizingOverlay.style.display = 'flex';
-                    requestAnimationFrame(() => {
-                        DOM.resizingOverlay.style.opacity = '1';
-                    });
-                }
-            },
-            onResizeEnd: () => {
-                if (DOM.resizingOverlay && DOM.resizingOverlay.style.opacity === '1') {
-                    DOM.resizingOverlay.style.opacity = '0';
-                    DOM.resizingOverlay.addEventListener('transitionend', function onTransitionEnd() {
-                        DOM.resizingOverlay.style.display = 'none';
-                    }, { once: true });
-                }
-            }
-        };
-        const domManager = new DomManager(DOM.pageContainer, resizeCallbacks);
-        const stagingDomManager = new DomManager(DOM.stagingPageContainer, resizeCallbacks);
+        // DomManagers are now initialized without the second "resizeCallbacks" argument
+        const domManager = new DomManager(DOM.pageContainer);
+        const stagingDomManager = new DomManager(DOM.stagingPageContainer);
         const timelineManager = new TimelineManager();
         timelineManager.setDomManager(domManager);
 
@@ -1164,7 +1133,6 @@ async function loadSong(filePath) {
         const thumbnailPage = deserializeElement(songData.thumbnailPage);
         const pages = songData.pages.map(p => deserializeElement(p));
 
-        // --- START: MODIFICATION ---
         // Second pass for the thumbnail page's music element order
         if (songData.thumbnailPage && songData.thumbnailPage.musicElementsOrder) {
             const orderedElements = songData.thumbnailPage.musicElementsOrder
@@ -1172,7 +1140,6 @@ async function loadSong(filePath) {
                 .filter(Boolean);
             thumbnailPage.setMusicElementsOrder(orderedElements);
         }
-        // --- END: MODIFICATION ---
 
         // Second pass to set music element order (requires all elements to exist first)
         pages.forEach((page, index) => {
@@ -1198,7 +1165,7 @@ async function loadSong(filePath) {
                 isDirty: false,
                 bpm: songData.bpm || 120,
                 bpmUnit: songData.bpmUnit || 'q_note',
-                fonts: songData.fonts || {} // ADDED
+                fonts: songData.fonts || {}
             },
             activePage: null,
             selectedElement: null,
@@ -1218,22 +1185,21 @@ async function loadSong(filePath) {
             }
         }
 
-        // ADDED: Load Project Fonts
+        // Load Project Fonts
         if (songData.fonts) {
             fontLoader.loadFonts(songData.fonts);
         }
 
         jumpToPage(thumbnailPage);
-        // Update the window title to show the opened file name.
         updateWindowTitle();
         showPage('editor-page');
-        rebuildAllEventTimelines(); // Re-process all element events with the new structure
-        reprogramAllPageTransitions(); // ADDED: Re-process all page transitions
+        rebuildAllEventTimelines();
+        reprogramAllPageTransitions();
 
-        hideLoadingDialog(); // Hide dialog on success
+        hideLoadingDialog();
     } catch (error) {
         console.error('Failed to load song:', error);
-        hideLoadingDialog(); // Hide dialog on failure, BEFORE showing alert
+        hideLoadingDialog();
         await showAlertDialog('Failed to Open Project', error.message);
     }
 }
@@ -1419,4 +1385,6 @@ export function setupEventListeners() {
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
 }
+
+
 

@@ -65,4 +65,5 @@ export class TextContentProperty extends VirtualProperty {
             this.#textContent.markAsRendered();
         }
     }
-}
+}
+

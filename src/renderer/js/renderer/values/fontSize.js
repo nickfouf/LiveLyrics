@@ -158,4 +158,5 @@ export class FontSizeValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

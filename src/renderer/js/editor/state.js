@@ -63,3 +63,4 @@ export const state = {
 export function updateState(newPartialState) {
     Object.assign(state, newPartialState);
 }
+

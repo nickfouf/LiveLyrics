@@ -65,4 +65,5 @@ export class GravityProperty extends VirtualProperty {
             this.#alignItems.markAsRendered();
         }
     }
-}
+}
+

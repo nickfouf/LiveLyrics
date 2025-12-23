@@ -5,19 +5,15 @@ export class DomManager {
     #root = null;
     #resizeTimeout = null;
     #resizeDelay = 10;
-    #onResizeStart = null;
-    #onResizeEnd = null;
-    #firstResizeCallTime = null;
     #maxResizeWaitDelay = 10;
+    #firstResizeCallTime = null;
 
     get domElement() {
         return this.#root;
     }
 
-    constructor(rootElement, { onResizeStart, onResizeEnd } = {}) {
+    constructor(rootElement) {
         this.#root = rootElement;
-        this.#onResizeStart = onResizeStart;
-        this.#onResizeEnd = onResizeEnd;
     }
 
     clear() {
@@ -135,9 +131,6 @@ export class DomManager {
             page.resize({root: this, parent: this});
         }
         this.render();
-        if (this.#onResizeEnd && !manualResize) {
-            this.#onResizeEnd();
-        }
     }
 
     resize(manualResize = false) {
@@ -155,9 +148,6 @@ export class DomManager {
         // If this is the first call in a sequence, set the start time and trigger the start callback.
         if (this.#firstResizeCallTime === null) {
             this.#firstResizeCallTime = now;
-            if (this.#onResizeStart) {
-                this.#onResizeStart();
-            }
         }
 
         // Clear any existing debounce timeout.
@@ -193,4 +183,5 @@ export class DomManager {
         return 16;
     }
 }
-
+
+

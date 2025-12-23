@@ -19,4 +19,5 @@ export class VirtualTitle extends VirtualText {
         this.domElement.dataset.elementType = this.type;
         this.setProperty('name', new NameProperty(name));
     }
-}
+}
+

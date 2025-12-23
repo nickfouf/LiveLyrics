@@ -408,3 +408,5 @@ export function initDragDrop() {
     DOM.mainEditorArea.addEventListener('dragleave', (e) => handleDragLeave(e, DOM.mainEditorArea));
     DOM.layerTree.addEventListener('dragleave', (e) => handleDragLeave(e, DOM.layerTree));
 }
+
+

@@ -56,4 +56,5 @@ export class ImageSrcProperty extends VirtualProperty {
             this.#src.markAsRendered();
         }
     }
-}
+}
+

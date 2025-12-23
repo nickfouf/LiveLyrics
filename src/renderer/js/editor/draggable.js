@@ -83,4 +83,5 @@ export function makeDraggable(dialogId) {
     };
 
     header.addEventListener('mousedown', onMouseDown);
-}
+}
+

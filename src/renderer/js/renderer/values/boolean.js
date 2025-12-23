@@ -75,4 +75,5 @@ export class BooleanValue {
     markAsDirty() {
         this.#shouldRender = true;
     }
-}
+}
+

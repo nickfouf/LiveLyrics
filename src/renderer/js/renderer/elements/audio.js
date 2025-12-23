@@ -168,4 +168,5 @@ export class VirtualAudio extends VirtualElement {
         }
         stateValue.markAsRendered();
     }
-}
+}
+

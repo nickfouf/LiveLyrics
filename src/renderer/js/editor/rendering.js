@@ -88,4 +88,5 @@ export function applyViewportScaling(wrapperElement) {
         stagingContainer.style.height = '100%';
         stagingContainer.style.transform = 'none';
     }
-}
+}
+

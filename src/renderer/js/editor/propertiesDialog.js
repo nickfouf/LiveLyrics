@@ -127,4 +127,5 @@ export function openPropertiesDialog(element, currentSelection, callback) {
 
     propertiesDialog.classList.add('visible');
 }
-
+
+

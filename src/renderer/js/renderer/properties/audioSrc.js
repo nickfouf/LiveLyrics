@@ -66,4 +66,5 @@ export class AudioSrcProperty extends VirtualProperty {
             this.#src.markAsRendered();
         }
     }
-}
+}
+
