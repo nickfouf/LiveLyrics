@@ -15,6 +15,8 @@ const { ConnectionManager } = require('./connectionManager');
 const { machineIdSync } = require('node-machine-id');
 const os = require('os');
 
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // --- ADDED: Robust Updater Logging and Configuration ---
 // This will create a log file in the app's user data directory
 log.transports.file.resolvePath = () => path.join(app.getPath('userData'), 'logs', 'main.log');
