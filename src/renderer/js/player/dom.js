@@ -83,3 +83,5 @@ export function initDOM() {
     DOM.deviceRttList = document.getElementById('device-rtt-list'); // MODIFIED
 }
 
+
+

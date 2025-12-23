@@ -37,3 +37,5 @@ contextBridge.exposeInMainWorld('audienceAPI', {
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
 });
 
+
+

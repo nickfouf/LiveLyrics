@@ -29,3 +29,5 @@ contextBridge.exposeInMainWorld('editorAPI', {
     notifyReady: () => ipcRenderer.send('editor:ready'),
 });
 
+
+

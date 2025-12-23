@@ -145,3 +145,5 @@ export function initDOM() {
     DOM.addPageBtn = document.querySelector('.add-page-btn');
 }
 
+
+

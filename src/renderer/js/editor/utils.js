@@ -313,7 +313,7 @@ export function getNameForElementType(type) {
 /**
  * Determines the underlying data type of a property based on its key.
  * This tells the Events Editor which specific value editor (Color, Number, Size, etc.) to open.
- * @param {string} propKey - The property key (e.g., 'opacity', 'shadowBlur').
+ * @param {string} propKey - The property key (e.g., 'opacity', 'width').
  * @returns {string} The property type category.
  */
 export function getPropertyType(propKey) {
@@ -325,7 +325,7 @@ export function getPropertyType(propKey) {
         case 'audioStartTime':
         case 'audioEndTime':
         case 'shadowAngle':
-        case 'textShadowAngle':  // Added
+        case 'textShadowAngle': 
         case 'scaleX':
         case 'scaleY':
         case 'scaleZ':
@@ -350,10 +350,10 @@ export function getPropertyType(propKey) {
         case 'borderSize':
         case 'borderRadius':
         case 'shadowDistance':
-        case 'textShadowDistance': // Added
+        case 'textShadowDistance':
         case 'shadowBlur':
         case 'shadowSpread':
-        case 'textShadowBlur':     // Added
+        case 'textShadowBlur':
         case 'paddingTop':
         case 'paddingLeft':
         case 'paddingBottom':
@@ -380,7 +380,7 @@ export function getPropertyType(propKey) {
         case 'shadowColor':
         case 'textColor':
         case 'karaokeColor':
-        case 'textShadowColor':  // Added
+        case 'textShadowColor':
         case 'progressBgColor':
         case 'progressFillColor':
             return 'color/gradient';
@@ -390,7 +390,7 @@ export function getPropertyType(propKey) {
         case 'borderEnabled':
         case 'shadowEnabled':
         case 'shadowInset':
-        case 'textShadowEnabled': // Added
+        case 'textShadowEnabled':
         case 'justifyText':
         case 'audioLoop':
         case 'videoLoop':
@@ -410,6 +410,9 @@ export function getPropertyType(propKey) {
         case 'backface-visibility':
         case 'parent-transform-style':
         case 'mixBlendMode':
+        // --- ADDED ---
+        case 'objectPositionX':
+        case 'objectPositionY':
             return 'string';
 
         // --- Dynamic String (Value + ID to trigger logic in renderers) ---
@@ -506,6 +509,12 @@ export function getAvailablePropertiesForElement(element) {
             "backface-visibility": "Backface Visibility"
         }};
 
+    // --- ADDED: Object Position Group ---
+    const commonObjectPosition = { "Object Position": { 
+        "objectPositionX": "Pos Horizontal", 
+        "objectPositionY": "Pos Vertical" 
+    }};
+
     if (elementType === 'page') {
         props["Parent's Perspective"] = {
             "perspective": "Perspective",
@@ -575,6 +584,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 "Object Fit": { "objectFit": "Fit" },
+                ...commonObjectPosition, // ADDED
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonBackground,
@@ -591,6 +601,7 @@ export function getAvailablePropertiesForElement(element) {
                 ...props,
                 "Playback": { "videoState": "State", "videoSpeed": "Speed", "videoLoop": "Loop" },
                 "Object Fit": { "objectFit": "Fit" },
+                ...commonObjectPosition, // ADDED
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonBackground,
@@ -1413,4 +1424,3 @@ export function deepEqual(a, b) {
     }
     return false;
 }
-

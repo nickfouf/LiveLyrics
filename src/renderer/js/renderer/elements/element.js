@@ -320,6 +320,9 @@ export class VirtualElement {
             objectFit: { prop: 'objectFit', value: 'objectFit' },
             progressBgColor: { prop: 'progress', value: 'backgroundColor' },
             progressFillColor: { prop: 'progress', value: 'fillColor' },
+            // --- Object Position ---
+            objectPositionX: { prop: 'objectPosition', value: 'xPosition' },
+            objectPositionY: { prop: 'objectPosition', value: 'yPosition' },
             videoState: { prop: 'playback', value: 'state' },
             videoSpeed: { prop: 'playback', value: 'speed' },
             videoLoop: { prop: 'playback', value: 'loop' },
@@ -443,5 +446,7 @@ export class VirtualElement {
         });
     }
 }
+
+
 
 

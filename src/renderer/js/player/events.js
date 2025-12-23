@@ -151,7 +151,8 @@ export function reprogramAllPageTransitions() {
         if (!startMeasureInfo) continue;
 
         const transitionStartMeasure = startMeasureInfo.globalIndex;
-        const transitionStartProgress = startMeasureInfo.duration > 0 ? (transitionStartBeat - startMeasureInfo.startTime) / startMeasureInfo.duration : 0;
+        let transitionStartProgress = startMeasureInfo.duration > 0 ? (transitionStartBeat - startMeasureInfo.startTime) / startMeasureInfo.duration : 0;
+        transitionStartProgress = Math.max(0, Math.min(0.99999, transitionStartProgress));
 
         let durationInBeats = 0;
         if (transition.durationUnit === 'beats') {
@@ -174,12 +175,14 @@ export function reprogramAllPageTransitions() {
             || measureMap[measureMap.length - 1];
 
         const transitionEndMeasure = endMeasureInfo.globalIndex;
-        const transitionEndProgress = endMeasureInfo.duration > 0 ? (transitionEndBeat - endMeasureInfo.startTime) / endMeasureInfo.duration : 0;
+        let transitionEndProgress = endMeasureInfo.duration > 0 ? (transitionEndBeat - endMeasureInfo.startTime) / endMeasureInfo.duration : 0;
+        transitionEndProgress = Math.max(0, Math.min(0.99999, transitionEndProgress));
 
         const midpointBeatTime = transitionStartBeat + (durationInBeats / 2);
         const midMeasureInfo = measureMap.find(m => m.startTime <= midpointBeatTime && (m.startTime + m.duration) > midpointBeatTime) || measureMap[measureMap.length - 1];
         const transitionMidMeasure = midMeasureInfo.globalIndex;
-        const transitionMidProgress = midMeasureInfo.duration > 0 ? (midpointBeatTime - midMeasureInfo.startTime) / midMeasureInfo.duration : 0;
+        let transitionMidProgress = midMeasureInfo.duration > 0 ? (midpointBeatTime - midMeasureInfo.startTime) / midMeasureInfo.duration : 0;
+        transitionMidProgress = Math.max(0, Math.min(0.99999, transitionMidProgress));
 
         // --- Event Object Helpers ---
         const startOpts = { ease: 'linear', measureIndex: transitionStartMeasure, measureProgress: transitionStartProgress, isTransition: true };
@@ -413,4 +416,6 @@ export function reprogramAllPageTransitions() {
         }
     }
 }
+
+
 

@@ -39,3 +39,5 @@ export class BooleanEvent {
     setEase(ease) { this.#ease = ease; }
 }
 
+
+

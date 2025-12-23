@@ -149,3 +149,4 @@ export class BoxShadowProperty extends VirtualProperty {
         this.#spread.updatePixelValue(dimensions);
     }
 }
+

@@ -39,3 +39,5 @@ export class StringEvent {
     setEase(ease) { this.#ease = ease; }
 }
 
+
+

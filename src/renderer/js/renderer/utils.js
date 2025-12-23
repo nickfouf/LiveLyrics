@@ -122,6 +122,9 @@ export function getPropertyType(propKey) {
         case 'transform-style':
         case 'backface-visibility':
         case 'mixBlendMode':
+        // --- Object Position ---
+        case 'objectPositionX':
+        case 'objectPositionY':
             return 'string';
 
         // Dynamic String (value + id to trigger actions)
@@ -469,6 +472,8 @@ export function getAvailablePropertiesForElement(element) {
 
     let props = {};
 
+    const commonObjectPosition = { "Object Position": { "objectPositionX": "Pos X", "objectPositionY": "Pos Y" } };
+
     const commonEffects = { "Effects": { 
         "opacity": "Opacity",
         "mixBlendMode": "Blending Mode"
@@ -592,6 +597,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 "Object Fit": { "objectFit": "Fit" },
+                ...commonObjectPosition,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonBackground,
@@ -608,6 +614,7 @@ export function getAvailablePropertiesForElement(element) {
                 ...props,
                 "Playback": { "videoState": "State", "videoSpeed": "Speed", "videoLoop": "Loop" },
                 "Object Fit": { "objectFit": "Fit" },
+                ...commonObjectPosition,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonBackground,
@@ -685,4 +692,6 @@ export function getAvailablePropertiesForElement(element) {
 
     return props;
 }
+
+
 

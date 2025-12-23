@@ -444,6 +444,7 @@
     padding: 0;
     line-height: 1;
     transition: color 0.2s;
+    transform: translateY(-3px);
 }
 .drawer-header.clickable:hover .drawer-collapse-icon {
     color: #fff;
@@ -615,6 +616,14 @@
     opacity: 1;
 }
 
+#properties-drawer-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    white-space: nowrap;
+    flex-grow: 1; /* Allow it to take space */
+    display: flex; /* Allow flex children */
+    align-items: center; /* Vertically align */
+}
 
 /* --- Main Editor Area --- */
 .main-editor-area {

@@ -7,6 +7,7 @@ import { BorderProperty } from "../properties/border.js";
 import { BoxShadowProperty } from "../properties/boxShadow.js";
 import { ImageSrcProperty } from "../properties/imageSrc.js";
 import { ObjectFitProperty } from "../properties/objectFit.js";
+import { ObjectPositionProperty } from "../properties/objectPosition.js";
 import { BackgroundProperty } from "../properties/backgroundCG.js";
 import { TransformProperty } from "../properties/transform.js";
 
@@ -38,6 +39,7 @@ export class VirtualImage extends VirtualElement {
         this.setProperty('background', new BackgroundProperty(options.background || { enabled: false }));
         this.setProperty('src', new ImageSrcProperty(options.src));
         this.setProperty('objectFit', new ObjectFitProperty(options.objectFit));
+        this.setProperty('objectPosition', new ObjectPositionProperty(options.objectPosition));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions));
         this.setProperty('margin', new MarginProperty(options.margin));
@@ -46,4 +48,6 @@ export class VirtualImage extends VirtualElement {
         this.setProperty('transform', new TransformProperty(options.transform));
     }
 }
+
+
 

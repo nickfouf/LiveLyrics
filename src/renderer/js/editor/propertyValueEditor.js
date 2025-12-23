@@ -82,7 +82,7 @@ function buildDialogUI() {
             break;
 
         case 'number':
-            // UPDATED: Handle Polar Angle for Shadows
+            // Handle Polar Angle for Shadows
             if (localState.propKey.includes('Angle')) {
                 const angleValue = value !== undefined && value !== null ? parseFloat(value) : 90;
                 body.innerHTML = `
@@ -211,6 +211,26 @@ function buildDialogUI() {
                             ${optionsHTML}
                         </select>
                     </div>`;
+            } else if (localState.propKey === 'objectPositionX') {
+                body.innerHTML = `
+                    <div class="form-group">
+                        <label>Horizontal Position</label>
+                        <select id="eep-string-select" class="form-select">
+                            <option value="left" ${value === 'left' ? 'selected' : ''}>Left</option>
+                            <option value="center" ${value === 'center' ? 'selected' : ''}>Center</option>
+                            <option value="right" ${value === 'right' ? 'selected' : ''}>Right</option>
+                        </select>
+                    </div>`;
+            } else if (localState.propKey === 'objectPositionY') {
+                body.innerHTML = `
+                    <div class="form-group">
+                        <label>Vertical Position</label>
+                        <select id="eep-string-select" class="form-select">
+                            <option value="top" ${value === 'top' ? 'selected' : ''}>Top</option>
+                            <option value="center" ${value === 'center' ? 'selected' : ''}>Center</option>
+                            <option value="bottom" ${value === 'bottom' ? 'selected' : ''}>Bottom</option>
+                        </select>
+                    </div>`;
             } else {
                 body.innerHTML = `
                     <div class="form-group">
@@ -221,45 +241,24 @@ function buildDialogUI() {
             break;
 
         case 'size':
-            // UPDATED: Handle Polar Distance for Shadows
+            // Handle Polar Distance for Shadows
             if (localState.propKey.includes('Distance')) {
-                const distVal = value?.value || 0;
-                const distUnit = value?.unit || 'px';
-                body.innerHTML = `
-                    <div class="form-group">
-                        <label>Distance</label>
-                        <div class="input-with-unit">
-                            <input type="range" id="eep-dist-slider" class="form-input" min="0" max="200" step="1" value="${distVal}" style="padding: 0;">
-                            <input type="number" id="eep-dist-number" class="form-input" value="${distVal}" style="max-width: 80px;">
-                            <select id="eep-dist-unit" class="form-select">
-                                <option value="px" ${distUnit === 'px' ? 'selected' : ''}>px</option>
-                                <option value="vw" ${distUnit === 'vw' ? 'selected' : ''}>vw</option>
-                                <option value="vh" ${distUnit === 'vh' ? 'selected' : ''}>vh</option>
-                                <option value="pw" ${distUnit === 'pw' ? 'selected' : ''}>pw</option>
-                                <option value="ph" ${distUnit === 'ph' ? 'selected' : ''}>ph</option>
-                                <option value="%" ${distUnit === '%' ? 'selected' : ''}>%</option>
-                            </select>
-                        </div>
-                    </div>`;
-                const slider = body.querySelector('#eep-dist-slider');
-                const numInput = body.querySelector('#eep-dist-number');
-                slider.addEventListener('input', () => { numInput.value = slider.value; });
-                numInput.addEventListener('input', () => { slider.value = numInput.value; });
-            } else {
-                let unitOptionsArray = ['px', 'pw', 'ph', 'vw', 'vh'];
-                if (localState.propKey.includes('origin')) {
-                    unitOptionsArray.push('%');
-                }
-                const unitOptions = unitOptionsArray.map(u => `<option value="${u}" ${value?.unit === u ? 'selected' : ''}>${u}</option>`).join('');
-                body.innerHTML = `
-                    <div class="form-group">
-                        <label for="eep-size-input">Value</label>
-                        <div class="input-with-unit">
-                            <input type="number" id="eep-size-input" class="form-input" value="${value?.value || 0}">
-                            <select id="eep-size-unit" class="form-select">${unitOptions}</select>
-                        </div>
-                    </div>`;
+                return {
+                    value: parseFloat(body.querySelector('#eep-dist-number').value),
+                    unit: body.querySelector('#eep-dist-unit').value
+                };
             }
+            // Standard size input
+            body.innerHTML = `
+                <div class="form-group">
+                    <label for="eep-size-input">Value</label>
+                    <div class="input-with-unit">
+                        <input type="number" id="eep-size-input" class="form-input" value="${value?.value || 0}">
+                        <select id="eep-size-unit" class="form-select">
+                            ${['px', 'pw', 'ph', 'vw', 'vh', '%'].map(u => `<option value="${u}" ${value?.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>`;
             break;
 
         case 'fontFamily': {
@@ -526,7 +525,7 @@ function buildDialogUI() {
                     body.querySelector('#eep-gradient-preview').style.backgroundImage = generateCSSGradient(target);
                 };
                 gradientTypeSelect.addEventListener('change', () => { const newType = gradientTypeSelect.value; toggleGradientControls(newType); updateGradientObject('type', newType); });
-                gradientAngleInput.addEventListener('input', () => updateAngleObject('angle', parseInt(gradientAngleInput.value, 10)));
+                gradientAngleInput.addEventListener('input', () => updateGradientObject('angle', parseInt(gradientAngleInput.value, 10)));
                 gradientScaleInput.addEventListener('input', () => updateGradientObject('scale', parseInt(gradientScaleInput.value, 10)));
 
                 body.querySelector('#eep-gradient-preview').addEventListener('click', () => {
@@ -592,7 +591,6 @@ function getValueFromUI() {
     }
 
     const propType = propConfig ? propConfig.type : getPropertyType(localState.propKey, mainElement);
-    const isColorOnly = COLOR_ONLY_PROPERTIES.has(localState.propKey) || localState.propKey === 'textColor' || propType === 'color' || propType === 'svg_color';
 
     switch (propType) {
         case 'boolean':
@@ -623,7 +621,7 @@ function getValueFromUI() {
                 unit: body.querySelector('#eep-size-unit').value
             };
         case 'fontFamily':
-            return localState.currentValue; // The value is updated in local state by the picker callback
+            return localState.currentValue;
         case 'fontWeight':
             return body.querySelector('#eep-font-weight-select').value;
         case 'fontStyle':
@@ -646,19 +644,12 @@ function getValueFromUI() {
             if (localState.propKey === 'audioState' || localState.propKey === 'videoState') {
                 const activeBtn = body.querySelector('#eep-state-tabs .tab-btn.active');
                 return activeBtn ? activeBtn.dataset.state : 'paused';
-            } else if (localState.propKey === 'transform-style') {
+            } else if (localState.propKey === 'objectPositionX' || localState.propKey === 'objectPositionY' || localState.propKey === 'transform-style' || localState.propKey === 'backface-visibility' || localState.propKey === 'mixBlendMode') {
                 const selectInput = body.querySelector('#eep-string-select');
                 return selectInput ? selectInput.value : '';
-            } else if (localState.propKey === 'backface-visibility') {
-                const selectInput = body.querySelector('#eep-string-select');
-                return selectInput ? selectInput.value : '';
-            } else if (localState.propKey === 'mixBlendMode') {
-                const selectInput = body.querySelector('#eep-string-select');
-                return selectInput ? selectInput.value : 'normal';
             }
             // Fallback for other string types
-            const stringInput = body.querySelector('#eep-string-input');
-            return stringInput ? stringInput.value : '';
+            return body.querySelector('#eep-string-input').value;
 
         case 'color/gradient':
         case 'color':
@@ -666,6 +657,7 @@ function getValueFromUI() {
         case 'gradient':
         case 'svg_gradient': {
             const isSvg = propType.startsWith('svg_');
+            const isColorOnly = COLOR_ONLY_PROPERTIES.has(localState.propKey) || localState.propKey === 'textColor' || propType === 'color' || propType === 'svg_color';
             const activeTabIsColor = isColorOnly || (body.querySelector('.tab-btn.active') && body.querySelector('.tab-btn.active').dataset.tab === 'color');
 
             if (activeTabIsColor) {
@@ -761,5 +753,3 @@ export function openPropertyValueEditor(elementId, propKey, currentEffectiveValu
     buildDialogUI();
     dialog.classList.add('visible');
 }
-
-

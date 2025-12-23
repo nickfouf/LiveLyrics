@@ -116,6 +116,8 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
         textAlign: { prop: 'textStyle', valueKey: 'textAlign' },
         justifyText: { prop: 'textStyle', valueKey: 'justifyText' },
         objectFit: { prop: 'objectFit', valueKey: 'objectFit' },
+        objectPositionX: { prop: 'objectPosition', valueKey: 'xPosition' },
+        objectPositionY: { prop: 'objectPosition', valueKey: 'yPosition' },
         videoState: { prop: 'playback', valueKey: 'state' },
         videoSpeed: { prop: 'playback', valueKey: 'speed' },
         videoLoop: { prop: 'playback', valueKey: 'loop' },
@@ -155,6 +157,9 @@ export function setPropertyAsDefaultValue(element, propKey, newValue) {
         'perspectiveScaleDirection': { prop: 'perspectiveScale', valueKey: 'direction' },
         visible: { prop: 'visible', valueKey: 'visible' },
         gap: { prop: 'gap', valueKey: 'gap' },
+        justifyContent: { prop: 'gravity', valueKey: 'justifyContent' },
+        alignItems: { prop: 'gravity', valueKey: 'alignItems' },
+        alignment: { prop: 'alignment', valueKey: 'alignment' },
     };
 
     const path = keyToPath[propKey];
@@ -1385,6 +1390,8 @@ export function setupEventListeners() {
     });
     if (DOM.presentationSlide) slideObserver.observe(DOM.presentationSlide);
 }
+
+
 
 
 

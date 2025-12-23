@@ -20,3 +20,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     quitAndInstall: () => ipcRenderer.send('updater:quit-and-install'),
 });
 
+
+

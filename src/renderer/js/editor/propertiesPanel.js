@@ -19,6 +19,8 @@ import {updateEmptyPageHintVisibility} from './rendering.js';
 import { buildMeasureMap, calculateGlobalMeasureOffsetForElement } from './utils.js';
 import { showLoadingDialog } from './loadingDialog.js';
 import {UnitValue} from "../renderer/values/unit.js";
+import {internalClipboard} from "./internalClipboard.js";
+import {copyStyle, pasteStyle, canPasteStyle} from "./styleClipboard.js";
 
 let scrollTimeout = null;
 
@@ -711,6 +713,51 @@ function buildObjectFitProperty(element, isCollapsed) {
     });
 }
 
+function buildObjectPositionProperties(element, isCollapsed) {
+    const propGroup = document.createElement('div');
+    propGroup.id = 'prop-group-objectposition';
+    propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
+    const opProp = element.getProperty('objectPosition');
+
+    propGroup.innerHTML = `
+        ${createPropHeader('Object Position')}
+        <div class="prop-group-body">
+            <div class="form-group input-grid-2">
+                <div>
+                    <label>Horizontal</label>
+                    <select id="prop-op-x" class="form-select">
+                        <option value="left" ${opProp.getX().getDefaultValue() === 'left' ? 'selected' : ''}>Left</option>
+                        <option value="center" ${opProp.getX().getDefaultValue() === 'center' ? 'selected' : ''}>Center</option>
+                        <option value="right" ${opProp.getX().getDefaultValue() === 'right' ? 'selected' : ''}>Right</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Vertical</label>
+                    <select id="prop-op-y" class="form-select">
+                        <option value="top" ${opProp.getY().getDefaultValue() === 'top' ? 'selected' : ''}>Top</option>
+                        <option value="center" ${opProp.getY().getDefaultValue() === 'center' ? 'selected' : ''}>Center</option>
+                        <option value="bottom" ${opProp.getY().getDefaultValue() === 'bottom' ? 'selected' : ''}>Bottom</option>
+                    </select>
+                </div>
+            </div>
+        </div>`;
+    DOM.propertiesPanelBody.appendChild(propGroup);
+
+    const xSelect = propGroup.querySelector('#prop-op-x');
+    const ySelect = propGroup.querySelector('#prop-op-y');
+
+    checkAndSetEventControl(xSelect.parentElement, opProp.getX());
+    checkAndSetEventControl(ySelect.parentElement, opProp.getY());
+
+    xSelect.addEventListener('input', (e) => {
+        setPropertyAsDefaultValue(state.selectedElement, 'objectPositionX', e.target.value);
+        renderPropertiesPanel();
+    });
+    ySelect.addEventListener('input', (e) => {
+        setPropertyAsDefaultValue(state.selectedElement, 'objectPositionY', e.target.value);
+        renderPropertiesPanel();
+    });
+}
 
 function buildContentProperty(element, isCollapsed) {
     const propGroup = document.createElement('div');
@@ -2219,9 +2266,77 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
  * Main function to build the entire properties panel for a given element.
  * @param {VirtualElement} [element=state.selectedElement] The selected virtual element.
  */
+/**
+ * Main function to build the entire properties panel for a given element.
+ * @param {VirtualElement} [element=state.selectedElement] The selected virtual element.
+ */
 export function renderPropertiesPanel(element = state.selectedElement) {
     DOM.propertiesPanelBody.innerHTML = '';
-    DOM.propertiesPanelTitle.textContent = 'Properties';
+
+    DOM.propertiesPanelTitle.innerHTML = ''; // Clear text content
+
+    const headerContainer = document.createElement('div');
+    headerContainer.style.display = 'flex';
+    headerContainer.style.justifyContent = 'space-between';
+    headerContainer.style.alignItems = 'center';
+    headerContainer.style.width = '100%';
+
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = 'Properties';
+    titleSpan.style.fontWeight = 'bold';
+
+    const actionsDiv = document.createElement('div');
+    actionsDiv.style.display = 'flex';
+    actionsDiv.style.gap = '6px';
+    actionsDiv.style.marginRight = '10px';
+    actionsDiv.style.marginTop = '2px';
+
+    const createIconButton = (iconName, title, onClick) => {
+        const btn = document.createElement('button');
+        btn.className = 'layer-action-btn';
+        btn.title = title;
+        btn.style.padding = '4px';
+        btn.innerHTML = `<img src="../../icons/${iconName}.svg" style="width:14px; height:14px; display:block;">`;
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            onClick(e);
+        };
+        return btn;
+    };
+
+    const copyBtn = createIconButton('copy', 'Copy Style', () => copyStyle(element));
+    const pasteBtn = createIconButton('paste', 'Paste Style', () => pasteStyle(element));
+
+    if (!element) {
+        copyBtn.disabled = true;
+        pasteBtn.disabled = true;
+        copyBtn.style.opacity = '0.4';
+        pasteBtn.style.opacity = '0.4';
+        copyBtn.style.cursor = 'default';
+        pasteBtn.style.cursor = 'default';
+    } else {
+        // The button is enabled ONLY if clipboard has data AND types are compatible.
+        const isPasteCompatible = canPasteStyle(element);
+
+        if (!isPasteCompatible) {
+            pasteBtn.disabled = true;
+            pasteBtn.style.opacity = '0.4';
+            pasteBtn.style.cursor = 'default';
+
+            // Optional: Update title to explain why
+            if (internalClipboard.has('style')) {
+                pasteBtn.title = "Paste Style (Incompatible Type)";
+            }
+        }
+    }
+
+    actionsDiv.appendChild(copyBtn);
+    actionsDiv.appendChild(pasteBtn);
+
+    headerContainer.appendChild(titleSpan);
+    headerContainer.appendChild(actionsDiv);
+    DOM.propertiesPanelTitle.appendChild(headerContainer);
+
     if (!element) {
         return;
     }
@@ -2266,6 +2381,9 @@ export function renderPropertiesPanel(element = state.selectedElement) {
                 break;
             case 'image':
                 if (groupId === 'prop-group-imagesrc') return false;
+                // Expand Object Fit/Position by default for images if convenient
+                if (groupId === 'prop-group-objectfit') return true;
+                if (groupId === 'prop-group-objectposition') return true;
                 break;
             case 'video':
                 if (groupId === 'prop-group-videosrc') return false;
@@ -2299,13 +2417,15 @@ export function renderPropertiesPanel(element = state.selectedElement) {
         }
     }
 
-    if (elementType === 'image' && element.getProperty('objectFit')) {
-        buildObjectFitProperty(element, isCollapsed('prop-group-objectfit'));
+    if (elementType === 'image') {
+        if (element.getProperty('objectFit')) buildObjectFitProperty(element, isCollapsed('prop-group-objectfit'));
+        if (element.getProperty('objectPosition')) buildObjectPositionProperties(element, isCollapsed('prop-group-objectposition'));
     }
 
     if (elementType === 'video') {
         if (element.getProperty('playback')) buildVideoPlaybackProperties(element, isCollapsed('prop-group-videoplayback'));
         if (element.getProperty('objectFit')) buildObjectFitProperty(element, isCollapsed('prop-group-objectfit'));
+        if (element.getProperty('objectPosition')) buildObjectPositionProperties(element, isCollapsed('prop-group-objectposition'));
     }
 
     if (elementType === 'audio') {
@@ -2317,7 +2437,7 @@ export function renderPropertiesPanel(element = state.selectedElement) {
     if (element.getProperty('orchestraContent')) buildOrchestraProperties(element, isCollapsed('prop-group-orchestra'));
 
     if (element.getProperty('textStyle')) buildTextStyleProperties(element, isCollapsed('prop-group-textstyle'));
-    if (element.getProperty('textShadow')) buildTextShadowProperties(element, isCollapsed('prop-group-textshadow')); // New call
+    if (element.getProperty('textShadow')) buildTextShadowProperties(element, isCollapsed('prop-group-textshadow'));
     if (element.getProperty('progress')) buildProgressProperties(element, isCollapsed('prop-group-progress'));
 
     if (!isPage && element.getProperty('dimensions')) buildDimensionProperties(element, isCollapsed('prop-group-dimensions'));
@@ -2328,6 +2448,7 @@ export function renderPropertiesPanel(element = state.selectedElement) {
     if (!isPage && element.getProperty('border')) buildBorderProperties(element, isCollapsed('prop-group-border'));
     if (!isPage && element.getProperty('boxShadow')) buildBoxShadowProperties(element, isCollapsed('prop-group-boxshadow'));
     if (!isPage && element.getProperty('effects')) buildEffectsProperties(element, isCollapsed('prop-group-effects'));
+    if (isPage && element.getProperty('parentPerspective')) buildParentPerspectiveProperties(element, isCollapsed('prop-group-parent-perspective'));
     if (!isPage && element.getProperty('transform')) buildTransformProperties(element, isCollapsed('prop-group-transform-2d'), isCollapsed('prop-group-transform-3d'));
 
     // Restore scroll position after the DOM has been updated
@@ -2338,5 +2459,7 @@ export function renderPropertiesPanel(element = state.selectedElement) {
         }
     });
 }
+
+
 
 

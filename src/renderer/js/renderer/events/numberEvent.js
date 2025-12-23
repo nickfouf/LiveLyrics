@@ -36,3 +36,5 @@ export class NumberEvent {
     setEase(ease) { this.#ease = ease; }
 }
 
+
+

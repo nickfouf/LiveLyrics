@@ -69,3 +69,5 @@ contextBridge.exposeInMainWorld('playerAPI', {
     readyForDevices: () => ipcRenderer.send('player:ready-for-devices'),
 });
 
+
+

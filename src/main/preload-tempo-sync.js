@@ -46,3 +46,5 @@ contextBridge.exposeInMainWorld('tempoSyncAPI', {
     }
 });
 
+
+

@@ -10,6 +10,7 @@ import { BackgroundProperty } from "../properties/backgroundCG.js";
 import { VideoSrcProperty } from "../properties/videoSrc.js";
 import { VideoPlaybackProperty } from "../properties/videoPlayback.js";
 import { ObjectFitProperty } from "../properties/objectFit.js";
+import { ObjectPositionProperty } from "../properties/objectPosition.js";
 import { TransformProperty } from "../properties/transform.js";
 
 export class VirtualVideo extends VirtualElement {
@@ -45,6 +46,7 @@ export class VirtualVideo extends VirtualElement {
         this.setProperty('src', new VideoSrcProperty(options.src));
         this.setProperty('playback', new VideoPlaybackProperty(options.playback || { loop: false }));
         this.setProperty('objectFit', new ObjectFitProperty(options.objectFit || 'cover'));
+        this.setProperty('objectPosition', new ObjectPositionProperty(options.objectPosition));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || { width: { value: 100, unit: 'pw' }, height: { value: 100, unit: 'ph' } }));
         this.setProperty('background', new BackgroundProperty(options.background || { enabled: true, background: { r: 0, g: 0, b: 0, a: 1, mode: 'color' } }));
         this.setProperty('margin', new MarginProperty(options.margin));
@@ -122,4 +124,6 @@ export class VirtualVideo extends VirtualElement {
         }
     }
 }
+
+
 

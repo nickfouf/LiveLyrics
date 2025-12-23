@@ -31,7 +31,7 @@ export function clearEventsEditorCache() {
 // --- END: NEW CACHE AND STATE MANAGEMENT ---
 
 /**
- * ADDED: Helper to find the page an element belongs to.
+ * Helper to find the page an element belongs to.
  * @param {VirtualElement} element
  * @returns {VirtualPage|null}
  */
@@ -398,9 +398,15 @@ function getRootPropertyValue(virtualElement, propKey) {
         case 'progressFillColor':
             return virtualElement.getProperty('progress')?.getFillColor().getDefaultValue();
 
-        // --- Image ---
+        // --- Image/Video ---
         case 'objectFit':
             return virtualElement.getProperty('objectFit')?.getObjectFit().getDefaultValue();
+            
+        // --- ADDED: Object Position ---
+        case 'objectPositionX':
+            return virtualElement.getProperty('objectPosition')?.getX().getDefaultValue();
+        case 'objectPositionY':
+            return virtualElement.getProperty('objectPosition')?.getY().getDefaultValue();
 
         // --- Layout/Gravity ---
         case 'gap':
@@ -409,6 +415,8 @@ function getRootPropertyValue(virtualElement, propKey) {
             return virtualElement.getProperty('gravity')?.getJustifyContent().getDefaultValue();
         case 'alignItems':
             return virtualElement.getProperty('gravity')?.getAlignItems().getDefaultValue();
+        case 'alignment':
+            return virtualElement.getProperty('alignment')?.getAlignment().getDefaultValue();
 
         // --- Transform ---
         case 'translateX':
@@ -449,6 +457,27 @@ function getRootPropertyValue(virtualElement, propKey) {
             return virtualElement.getProperty('transform')?.getBackfaceVisibility().getDefaultValue();
         case 'transform-style':
             return virtualElement.getProperty('transform')?.getTransformStyle().getDefaultValue();
+            
+        // --- Page Properties ---
+        case 'parentPerspectiveEnabled':
+             return virtualElement.getProperty('parentPerspective')?.getEnabled().getDefaultValue();
+        case 'perspective':
+             return virtualElement.getProperty('parentPerspective')?.getPerspective().getDefaultValue();
+        case 'parent-transform-style':
+             return virtualElement.getProperty('parentPerspective')?.getTransformStyle().getDefaultValue();
+        case 'parent-rotateX':
+             return virtualElement.getProperty('parentPerspective')?.getRotateX().getDefaultValue();
+        case 'parent-rotateY':
+             return virtualElement.getProperty('parentPerspective')?.getRotateY().getDefaultValue();
+        case 'parent-rotateZ':
+             return virtualElement.getProperty('parentPerspective')?.getRotateZ().getDefaultValue();
+        case 'parent-scale':
+             return virtualElement.getProperty('parentPerspective')?.getScale().getDefaultValue();
+        case 'perspectiveScaleDirection':
+             return virtualElement.getProperty('perspectiveScale')?.getDirection().getDefaultValue();
+             
+        case 'visible':
+             return virtualElement.getProperty('visible')?.getVisible().getDefaultValue();
 
         default:
             console.warn(`[Events Editor] getRootPropertyValue not implemented for UI key: ${propKey}`);
@@ -669,7 +698,7 @@ function getFormattedValuePreview(propKey, value, isOverridden) {
             case 'right': iconSrc = '../../icons/right_alignment.svg'; break;
         }
         innerHTML = `<img src="${iconSrc}" class="value-preview-icon" style="height: 100%;">`;
-    } else if (['fontFamily', 'fontWeight', 'fontStyle', 'objectFit', 'string', 'justifyContent', 'alignItems', 'dynamic-string'].includes(propType)) {
+    } else if (['fontFamily', 'fontWeight', 'fontStyle', 'objectFit', 'string', 'justifyContent', 'alignItems', 'dynamic-string', 'objectPositionX', 'objectPositionY'].includes(propType)) {
         let text = String(displayValue);
         if (text.length > 10) {
             text = text.substring(0, 7) + '...';
@@ -1043,7 +1072,7 @@ export function initEventsEditor() {
             const removedProperties = currentSelection.filter(prop => !newSelection.includes(prop));
 
             if (removedProperties.length > 0) {
-                eventsState.measures.forEach(measure => { // <-- MUTATION
+                eventsState.measures.forEach(measure => { 
                     if (measure.content) {
                         measure.content.forEach(note => {
                             if (note.events && note.events.values) {
@@ -1057,7 +1086,7 @@ export function initEventsEditor() {
                 });
             }
 
-            eventsState.selectedProperties = newSelection; // <-- MUTATION
+            eventsState.selectedProperties = newSelection; 
             refreshEditorView();
         });
     });
@@ -1065,25 +1094,20 @@ export function initEventsEditor() {
     document.getElementById('ee-ok-btn').addEventListener('click', () => {
         if (state.eventsEditorCallback) {
             
-            // --- FIX START ---
             // Construct the eventsToSave object correctly without mangling IDs.
             const eventsToSave = {
                 content: {},
                 format: 'map'
             };
 
-            // FIX: Removed the filter that was incorrectly excluding measures for non-musical elements.
-            // We now check ALL measures in the state to see if they have content for this element.
             eventsState.measures.forEach(measure => {
                 if (measure.content && measure.content.length > 0) {
-                    // Use the measure.id directly. Do NOT strip the suffix.
+                    // Use the measure.id directly.
                     eventsToSave.content[measure.id] = measure.content;
                 }
             });
 
-            // Save the ID-mapped content object to the cache, NOT the raw array.
             editorDataCache.set(eventsState.elementId, structuredClone(eventsToSave.content));
-            // --- FIX END ---
 
             const element = document.getElementById(eventsState.elementId);
             if (element) {
@@ -1318,7 +1342,7 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
 
     eventsEditorDialog.classList.add('visible');
 
-    // --- ADDED: Precise Auto-scroll Logic ---
+    // Precise Auto-scroll Logic
     requestAnimationFrame(() => {
         setTimeout(() => {
             if (!measuresContainer) return;
@@ -1327,19 +1351,14 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
             // Find the first measure belonging to the current page (or a later page if current has none)
             let targetIndex = measures.findIndex(m => m.pageIndex >= eventsState.elementPageIndex);
 
-            // --- CHANGED SCROLL LOGIC ---
-            // The scrollable area is the parent of the measures container.
             const scrollContainer = measuresContainer.parentElement;
             const GAP_OFFSET = 8; // 0.5rem
 
-            // If not found, it means the page is at the end or after all existing measures
             if (targetIndex === -1) {
-                 // Scroll to the end
                  scrollContainer.scrollLeft = scrollContainer.scrollWidth;
             } else {
                 const el = measuresContainer.querySelector(`.measure-box[data-index="${targetIndex}"]`);
                 if (el) {
-                    // Precise scroll calculation:
                     scrollContainer.scrollLeft = el.offsetLeft - GAP_OFFSET;
                 }
             }
