@@ -447,30 +447,18 @@ export function getAvailablePropertiesForElement(element) {
 
     let props = {};
 
-    const commonEffects = { "Effects": { "opacity": "Opacity", "mixBlendMode": "Blending Mode" } };
+    const commonObjectPosition = { "Object Position": { "objectPositionX": "Pos X", "objectPositionY": "Pos Y" } };
+
+    const commonEffects = { "Effects": {
+            "opacity": "Opacity",
+            "mixBlendMode": "Blending Mode"
+        }};
     const commonDimensions = { "Dimensions": { "width": "Width", "height": "Height" } };
     const commonMargin = { "Margin": { "top": "Top", "left": "Left", "bottom": "Bottom", "right": "Right" } };
     const commonInnerPadding = { "Inner Padding": { "paddingTop": "Top", "paddingLeft": "Left", "paddingBottom": "Bottom", "paddingRight": "Right" } };
     const commonBackground = { "Background": { "bgEnabled": "Enabled", "bgColor": "Color/Gradient" } };
     const commonBorder = { "Border": { "borderEnabled": "Enabled", "borderSize": "Width", "borderRadius": "Radius", "borderColor": "Color" } };
-    const commonBoxShadow = { "Box Shadow": {
-            "shadowEnabled": "Enabled",
-            "shadowInset": "Inset",
-            "shadowAngle": "Angle",
-            "shadowDistance": "Distance",
-            "shadowBlur": "Blur",
-            "shadowSpread": "Spread",
-            "shadowColor": "Color"
-        }};
-
-    const commonTextShadow = { "Text Shadow": {
-            "textShadowEnabled": "Enabled",
-            "textShadowColor": "Color",
-            "textShadowAngle": "Angle",
-            "textShadowDistance": "Distance",
-            "textShadowBlur": "Blur"
-        }};
-
+    const commonBoxShadow = { "Box Shadow": { "shadowEnabled": "Enabled", "shadowInset": "Inset", "shadowOffsetX": "OffsetX", "shadowOffsetY": "OffsetY", "shadowBlur": "Blur", "shadowSpread": "Spread", "shadowColor": "Color" } };
     const commonTextStyle = { "Text Style": {
             "fontFamily": "Font Family",
             "fontWeight": "Weight",
@@ -482,6 +470,13 @@ export function getAvailablePropertiesForElement(element) {
             "wordSpacing": "Word Spacing",
             "textAlign": "Alignment",
             "justifyText": "Justify"
+        }};
+    const commonTextShadow = { "Text Shadow": {
+            "textShadowEnabled": "Enabled",
+            "textShadowColor": "Color",
+            "textShadowOffsetX": "Offset X",
+            "textShadowOffsetY": "Offset Y",
+            "textShadowBlur": "Blur"
         }};
 
     const commonTransform2D = { "Transform 2D": {
@@ -495,7 +490,6 @@ export function getAvailablePropertiesForElement(element) {
             "transform-origin-x": "Origin X",
             "transform-origin-y": "Origin Y"
         }};
-
     const commonTransform3D = { "Transform 3D": {
             "translateZ": "Translate Z",
             "scaleZ": "Scale Z",
@@ -508,12 +502,6 @@ export function getAvailablePropertiesForElement(element) {
             "childrenPerspective": "Children Perspective",
             "backface-visibility": "Backface Visibility"
         }};
-
-    // --- ADDED: Object Position Group ---
-    const commonObjectPosition = { "Object Position": { 
-        "objectPositionX": "Pos Horizontal", 
-        "objectPositionY": "Pos Vertical" 
-    }};
 
     if (elementType === 'page') {
         props["Parent's Perspective"] = {
@@ -530,7 +518,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 ...commonTextStyle,
-                ...commonTextShadow, // Added here
+                ...commonTextShadow,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonInnerPadding,
@@ -567,7 +555,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 ...commonTextStyle,
-                ...commonTextShadow, // Added here
+                ...commonTextShadow,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonInnerPadding,
@@ -584,7 +572,7 @@ export function getAvailablePropertiesForElement(element) {
             props = {
                 ...props,
                 "Object Fit": { "objectFit": "Fit" },
-                ...commonObjectPosition, // ADDED
+                ...commonObjectPosition,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonBackground,
@@ -601,7 +589,7 @@ export function getAvailablePropertiesForElement(element) {
                 ...props,
                 "Playback": { "videoState": "State", "videoSpeed": "Speed", "videoLoop": "Loop" },
                 "Object Fit": { "objectFit": "Fit" },
-                ...commonObjectPosition, // ADDED
+                ...commonObjectPosition,
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonBackground,
@@ -632,24 +620,11 @@ export function getAvailablePropertiesForElement(element) {
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonEffects,
+                ...commonBorder,
+                ...commonBoxShadow,
                 ...commonTransform2D,
                 ...commonTransform3D
             };
-            if (element.dataset.effectJson) {
-                try {
-                    const effectData = JSON.parse(element.dataset.effectJson);
-                    if (effectData.parameters) {
-                        props["Effect Parameters"] = {};
-                        for (const [key, config] of Object.entries(effectData.parameters)) {
-                            if (['number', 'color', 'gradient', 'svg_color', 'svg_gradient', 'size', 'boolean', 'string'].includes(config.type)) {
-                                props["Effect Parameters"][key] = config.name || key;
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error("Could not parse effect JSON for properties dialog:", e);
-                }
-            }
             break;
 
         case 'container':

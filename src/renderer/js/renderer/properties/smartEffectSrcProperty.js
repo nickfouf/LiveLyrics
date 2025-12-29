@@ -1,24 +1,20 @@
 import { VirtualProperty } from './property.js';
 import { StringValue } from '../values/string.js';
-import { SmartEffectDataValue } from '../values/smartEffectData.js';
 
 export class SmartEffectSrcProperty extends VirtualProperty {
     #src = new StringValue('');
     #alias = new StringValue('');
-    #effectData = new SmartEffectDataValue(null);
 
     constructor(options = {}) {
         super('src', 'Source');
-        // MODIFIED: Handle deserialization of the full effect data object.
+        
+        // Handle input options
         if (typeof options === 'string') {
             this.setSrcValue(options || '', true);
             this.setAlias('', true);
         } else if (options) {
             this.setSrcValue(options.src || '', true);
             this.setAlias(options.alias || '', true);
-            if (options.effectData) {
-                this.#effectData.setEffectData(options.effectData);
-            }
         }
     }
 
@@ -30,10 +26,6 @@ export class SmartEffectSrcProperty extends VirtualProperty {
         return this.#alias;
     }
 
-    getEffectData() {
-        return this.#effectData;
-    }
-
     setSrcValue(value, setAsDefault = false) {
         return this.#src.setValue(value, setAsDefault);
     }
@@ -43,34 +35,17 @@ export class SmartEffectSrcProperty extends VirtualProperty {
     }
 
     /**
-     * Sets the source for the smart effect from a file dialog result.
-     * @param {object} fileData - The object returned from the IPC call.
-     * @param {string} fileData.filePath - The path to the selected file.
-     * @param {string} fileData.content - The JSON content of the file.
-     * @param {string} fileData.alias - The original filename.
-     * @param {boolean} setAsDefault - Whether to set the value as default.
+     * Sets the source from a file dialog result.
+     * @param {object} fileData - { filePath, alias }
      */
     setSrc(fileData, setAsDefault = false) {
-        if (!fileData || !fileData.filePath || !fileData.content) {
+        if (!fileData || !fileData.filePath) {
             return;
         }
-
         this.setSrcValue(fileData.filePath, setAsDefault);
         this.setAlias(fileData.alias || '', setAsDefault);
-
-        try {
-            const data = JSON.parse(fileData.content);
-            this.#effectData.setEffectData(data);
-        } catch (e) {
-            console.error("Failed to parse Smart Effect JSON content:", e);
-            this.#effectData.setEffectData(null); // Reset on error
-        }
     }
 
-    /**
-     * MODIFIED: Custom serialization to only save the source path and alias.
-     * The effect data will be reloaded from the source file when the project is opened.
-     */
     toJSON() {
         return {
             src: this.#src.getDefaultValue(),
@@ -81,15 +56,13 @@ export class SmartEffectSrcProperty extends VirtualProperty {
     getValues() {
         return {
             src: this.getSrc(),
-            alias: this.getAlias(),
-            effectData: this.getEffectData()
+            alias: this.getAlias()
         }
     }
 
     getValue(name) {
         if (name === 'src') return this.getSrc();
         if (name === 'alias') return this.getAlias();
-        if (name === 'effectData') return this.getEffectData();
         console.warn(`Value ${name} not found in SmartEffectSrcProperty.`);
         return null;
     }
@@ -97,18 +70,19 @@ export class SmartEffectSrcProperty extends VirtualProperty {
     setValue(key, value, setAsDefault = false) {
         if (key === 'src') return this.setSrc(value, setAsDefault);
         if (key === 'alias') return this.setAlias(value, setAsDefault);
-        if (key === 'effectData') return this.#effectData.setEffectData(value);
         console.warn(`Value ${key} not found in SmartEffectSrcProperty.`);
         return null;
     }
 
     applyChanges(element) {
-        this.#effectData.applyDifferences(element);
-        // if (this.#effectData.shouldRender) {
-        //     this.#effectData.applyDifferences(element);
-        // }
+        if (this.#src.shouldRender && element.iframe) {
+            const url = this.#src.getValue();
+            // Prevent reloading if URL is the same
+            if (element.iframe.src !== url) {
+                element.iframe.src = url;
+            }
+            this.#src.markAsRendered();
+        }
     }
 }
-
-
 

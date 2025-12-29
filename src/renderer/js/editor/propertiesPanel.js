@@ -326,7 +326,20 @@ function buildSmartEffectSrcProperty(element, isCollapsed) {
     const srcProp = element.getProperty('src');
     const currentPath = srcProp.getSrc().getValue();
     const alias = srcProp.getAlias().getValue();
-    const fileName = alias || (currentPath ? currentPath.split(/[\\/]/).pop() : 'No file selected');
+
+    // Display file name or "No Effect"
+    let fileName = 'No effect loaded';
+    if (alias) fileName = alias;
+    else if (currentPath) {
+        // If it's a URL to index.html inside a checksum folder, just show the checksum or generic
+        if (currentPath.includes('index.html')) {
+            // Maybe extract just the .lyfx name if we had it, but alias handles that.
+            // Fallback
+            fileName = 'Smart Effect';
+        } else {
+            fileName = currentPath.split(/[\\/]/).pop();
+        }
+    }
 
     propGroup.innerHTML = `
         ${createPropHeader('Effect Source')}
@@ -341,28 +354,35 @@ function buildSmartEffectSrcProperty(element, isCollapsed) {
     DOM.propertiesPanelBody.appendChild(propGroup);
 
     propGroup.querySelector('#prop-effect-src-choose').addEventListener('click', async () => {
-        if (!window.editorAPI) {
-            console.warn('editorAPI is not available.');
-            return;
-        }
+        if (!window.editorAPI) return;
 
+        // CHANGED FILTER TO .lyfx
         const originalPath = await window.editorAPI.showOpenDialog({
             properties: ['openFile'],
-            filters: [{ name: 'Smart Effects', extensions: ['json'] }]
+            filters: [{ name: 'Smart Effects', extensions: ['lyfx'] }]
         });
         if (!originalPath) return;
 
+        // Uses standard loading dialog
+        const { showLoadingDialog, hideLoadingDialog } = await import('./loadingDialog.js');
         const hideLoading = showLoadingDialog('Importing effect...');
         try {
+            // Main process extracts zip and returns path to index.html
             const result = await window.editorAPI.addAsset(originalPath);
-            if (result && result.filePath && result.content) {
+            if (result && result.filePath) {
                 srcProp.setSrc(result, true);
+                // Also trigger asset tracking update implicitly via markAsDirty
+                // (Asset cleanup happens on delete, tracking happens on save)
+
+                // Redraw
                 markAsDirty();
                 triggerActivePageRender(true);
-                renderPropertiesPanel();
+                // Re-render properties panel to show new alias
+                renderPropertiesPanel(element);
             }
         } catch (error) {
             console.error("Failed to add smart effect asset:", error);
+            alert("Failed to load Smart Effect. " + error.message);
         } finally {
             hideLoading();
         }

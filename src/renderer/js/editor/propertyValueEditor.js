@@ -55,16 +55,11 @@ function isSolidColorGradient(gradient) {
 function buildDialogUI() {
     body.innerHTML = '';
     const mainElement = document.getElementById(localState.elementId);
-    const isSmartEffect = mainElement?.dataset.elementType === 'smart-effect';
-    let propConfig = null;
-    if (isSmartEffect) {
-        try {
-            const effectData = JSON.parse(mainElement.dataset.effectJson);
-            propConfig = effectData.parameters?.[localState.propKey];
-        } catch (e) {}
-    }
+    
+    // Removed SmartEffect custom parameter parsing logic here.
+    // Smart Effects now use standard properties.
 
-    const propType = propConfig ? propConfig.type : getPropertyType(localState.propKey, mainElement);
+    const propType = getPropertyType(localState.propKey, mainElement);
     const value = localState.currentValue;
 
     switch (propType) {
@@ -383,15 +378,13 @@ function buildDialogUI() {
         case 'svg_color':
         case 'gradient':
         case 'svg_gradient': {
-            const isSvg = propType.startsWith('svg_');
             const isColorOnly = COLOR_ONLY_PROPERTIES.has(localState.propKey) || localState.propKey === 'textColor' || propType === 'color' || propType === 'svg_color';
 
-            let isColor = (isSmartEffect && value?.type?.includes('color')) ||
-                (!isSmartEffect && typeof value === 'object' && value !== null && !value.hasOwnProperty('colorStops'));
+            // Simplified logic: Check if value is a gradient object
+            let isColor = (typeof value === 'object' && value !== null && !value.hasOwnProperty('colorStops'));
 
             if (!isColor && typeof value === 'object' && value !== null && value.hasOwnProperty('colorStops')) {
-                const gradientObject = isSmartEffect && value.value ? value.value : value;
-                if (isSolidColorGradient(gradientObject)) {
+                if (isSolidColorGradient(value)) {
                     isColor = true;
                 }
             }
@@ -408,7 +401,7 @@ function buildDialogUI() {
                     ]
                 };
             } else {
-                gradientForUI = isSmartEffect && value.value ? value.value : value;
+                gradientForUI = value;
             }
 
             const gradientCSS = generateCSSGradient(gradientForUI);
@@ -421,14 +414,12 @@ function buildDialogUI() {
 
             let initialSwatchColor = '#000000';
             if (isColor) {
-                const colorValue = isSmartEffect ? localState.currentValue.value : localState.currentValue;
-                if (typeof colorValue === 'object' && colorValue !== null) {
-                    initialSwatchColor = generateCSSColor(colorValue);
+                if (typeof localState.currentValue === 'object' && localState.currentValue !== null) {
+                    initialSwatchColor = generateCSSColor(localState.currentValue);
                 }
             } else {
-                const gradientObject = isSmartEffect ? localState.currentValue.value : localState.currentValue;
-                if (gradientObject && gradientObject.colorStops && gradientObject.colorStops.length > 0) {
-                    initialSwatchColor = generateCSSColor(gradientObject.colorStops[0].color);
+                if (localState.currentValue && localState.currentValue.colorStops && localState.currentValue.colorStops.length > 0) {
+                    initialSwatchColor = generateCSSColor(localState.currentValue.colorStops[0].color);
                 }
             }
 
@@ -490,21 +481,10 @@ function buildDialogUI() {
                                     { color: { r: 0, g: 255, b: 224, a: 1 }, position: 100 }
                                 ]
                             };
-                            if (isSmartEffect) {
-                                const finalType = isSvg ? 'svg_gradient' : 'gradient';
-                                localState.currentValue = { type: finalType, value: newGradient };
-                            } else {
-                                localState.currentValue = newGradient;
-                            }
+                            localState.currentValue = newGradient;
                         } else {
-                            const gradientObject = isSmartEffect ? localState.currentValue.value : localState.currentValue;
-                            const representativeColor = gradientObject?.colorStops?.[0]?.color || { r: 0, g: 0, b: 0, a: 1 };
-                            if (isSmartEffect) {
-                                const finalType = isSvg ? 'svg_color' : 'color';
-                                localState.currentValue = { type: finalType, value: representativeColor };
-                            } else {
-                                localState.currentValue = representativeColor;
-                            }
+                            const representativeColor = localState.currentValue?.colorStops?.[0]?.color || { r: 0, g: 0, b: 0, a: 1 };
+                            localState.currentValue = representativeColor;
                         }
                     });
                 });
@@ -516,10 +496,10 @@ function buildDialogUI() {
                 const gradientScaleGroup = body.querySelector('#eep-gradient-scale-group');
                 const toggleGradientControls = (type) => { gradientAngleGroup.style.display = type === 'linear' ? 'flex' : 'none'; gradientScaleGroup.style.display = (type === 'radial' || type === 'linear') ? 'flex' : 'none'; };
                 const updateGradientObject = (prop, val) => {
-                    let target = isSmartEffect ? localState.currentValue.value : localState.currentValue;
+                    let target = localState.currentValue;
                     if (typeof target !== 'object' || target === null || !target.hasOwnProperty('colorStops')) {
                         target = { type: 'linear', angle: 90, scale: 100, colorStops: [] };
-                        if (isSmartEffect) localState.currentValue.value = target; else localState.currentValue = target;
+                        localState.currentValue = target;
                     }
                     target[prop] = val;
                     body.querySelector('#eep-gradient-preview').style.backgroundImage = generateCSSGradient(target);
@@ -533,7 +513,7 @@ function buildDialogUI() {
                     const isGradient = typeof currentValue === 'object' && currentValue !== null && currentValue.hasOwnProperty('colorStops');
                     let initialGradient;
                     if (isGradient) {
-                        initialGradient = isSmartEffect ? currentValue.value : currentValue;
+                        initialGradient = currentValue;
                     } else {
                         initialGradient = {
                             type: 'linear', angle: 90, scale: 100,
@@ -544,11 +524,7 @@ function buildDialogUI() {
                         };
                     }
                     openGradientEditor(initialGradient, (newGradientFromEditor) => {
-                        if (isSmartEffect) {
-                            localState.currentValue.value = newGradientFromEditor;
-                        } else {
-                            localState.currentValue = newGradientFromEditor;
-                        }
+                        localState.currentValue = newGradientFromEditor;
                         body.querySelector('#eep-gradient-preview').style.backgroundImage = generateCSSGradient(newGradientFromEditor);
                     });
                 });
@@ -559,12 +535,7 @@ function buildDialogUI() {
                 openColorPicker(swatchInner.style.backgroundColor, (newColor) => {
                     swatchInner.style.backgroundColor = newColor;
                     const newColorRgba = parseColorString(newColor);
-                    if (isSmartEffect) {
-                        const propType = propConfig.type.startsWith('svg_') ? 'svg_color' : 'color';
-                        localState.currentValue = { type: propType, value: newColorRgba };
-                    } else {
-                        localState.currentValue = newColorRgba;
-                    }
+                    localState.currentValue = newColorRgba;
                 });
             });
             break;
@@ -581,16 +552,8 @@ function getValueFromUI() {
     const mainElement = document.getElementById(localState.elementId);
     if (!mainElement) return null;
 
-    const isSmartEffect = mainElement.dataset.elementType === 'smart-effect';
-    let propConfig = null;
-    if (isSmartEffect) {
-        try {
-            const effectData = JSON.parse(mainElement.dataset.effectJson);
-            propConfig = effectData.parameters?.[localState.propKey];
-        } catch (e) {}
-    }
-
-    const propType = propConfig ? propConfig.type : getPropertyType(localState.propKey, mainElement);
+    // Smart Effect custom parsing removed.
+    const propType = getPropertyType(localState.propKey, mainElement);
 
     switch (propType) {
         case 'boolean':
@@ -656,18 +619,12 @@ function getValueFromUI() {
         case 'svg_color':
         case 'gradient':
         case 'svg_gradient': {
-            const isSvg = propType.startsWith('svg_');
             const isColorOnly = COLOR_ONLY_PROPERTIES.has(localState.propKey) || localState.propKey === 'textColor' || propType === 'color' || propType === 'svg_color';
             const activeTabIsColor = isColorOnly || (body.querySelector('.tab-btn.active') && body.querySelector('.tab-btn.active').dataset.tab === 'color');
 
             if (activeTabIsColor) {
                 const colorStr = body.querySelector('#eep-color-swatch .color-swatch-inner').style.backgroundColor;
-                const colorVal = parseColorString(colorStr);
-                if (isSmartEffect) {
-                    const finalType = isSvg ? 'svg_color' : 'color';
-                    return { type: finalType, value: colorVal };
-                }
-                return colorVal;
+                return parseColorString(colorStr);
             } else { // Gradient tab is active
                 return localState.currentValue;
             }
@@ -725,22 +682,7 @@ export function openPropertyValueEditor(elementId, propKey, currentEffectiveValu
     const flatProps = Object.values(allProps).reduce((acc, val) => ({ ...acc, ...val }), {});
     const propName = flatProps[propKey] || propKey;
 
-    if (mainElement.dataset.elementType === 'smart-effect') {
-        try {
-            const effectData = JSON.parse(mainElement.dataset.effectJson);
-            const paramConfig = effectData.parameters?.[propKey];
-            if (paramConfig && (paramConfig.type.includes('gradient') || paramConfig.type.includes('color'))) {
-                if (valueToEdit && valueToEdit.hasOwnProperty('colorStops') && !valueToEdit.hasOwnProperty('value')) {
-                    valueToEdit = { type: paramConfig.type, value: valueToEdit };
-                }
-                else if (typeof valueToEdit !== 'object' || !valueToEdit.hasOwnProperty('colorStops')) {
-                    if (!valueToEdit.hasOwnProperty('type')) {
-                        valueToEdit = { type: paramConfig.type, value: valueToEdit };
-                    }
-                }
-            }
-        } catch (e) {}
-    }
+    // Smart effect custom parameter handling removed.
 
     localState = {
         callback,
@@ -753,3 +695,4 @@ export function openPropertyValueEditor(elementId, propKey, currentEffectiveValu
     buildDialogUI();
     dialog.classList.add('visible');
 }
+

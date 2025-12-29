@@ -367,8 +367,6 @@ function createPlayerWindow() {
 
     playerWindow.loadFile(htmlPath);
 
-    // REMOVED: createTempoSyncWindow(); <-- No longer opening automatically
-
     if (connectionManager) {
         connectionManager.start();
     }
@@ -1022,17 +1020,6 @@ ipcMain.handle('get-system-fonts', async () => {
     }
 });
 
-function generateFileChecksum(filePath) {
-    return new Promise((resolve, reject) => {
-        const hash = crypto.createHash('sha256');
-        const stream = fs.createReadStream(filePath);
-        stream.on('error', err => reject(err));
-        stream.on('data', chunk => hash.update(chunk));
-        stream.on('end', () => resolve(hash.digest('hex')));
-    });
-}
-
-
 ipcMain.handle('project:init-temp-folder', async () => {
     try {
         await safeRm(projectTempPath); // Use safeRm
@@ -1050,7 +1037,6 @@ ipcMain.on('project:cancel-copy', () => {
     }
 });
 
-
 ipcMain.handle('dialog:openSong', async (event) => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
     const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, { properties: ['openFile'], filters: [{ name: 'LiveLyrics Project', extensions: ['lyx'] }] });
@@ -1066,8 +1052,19 @@ ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
     return null;
 });
 
+function generateFileChecksum(filePath) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        const stream = fs.createReadStream(filePath);
+        stream.on('error', err => reject(err));
+        stream.on('data', chunk => hash.update(chunk));
+        stream.on('end', () => resolve(hash.digest('hex')));
+    });
+}
+
 /**
  * Shared logic to process and copy an asset to the project temp folder.
+ * MODIFIED: Added support for .lyfx (Smart Effect Zip) extraction.
  * @param {string} originalPath The absolute path to the asset.
  * @returns {Promise<{filePath: string, alias: string, content?: string}>}
  */
@@ -1080,18 +1077,43 @@ async function processAssetAddition(originalPath) {
     await fs.promises.mkdir(assetsTempPath, { recursive: true });
 
     const checksum = await generateFileChecksum(originalPath);
-    const extension = path.extname(originalPath);
+    const extension = path.extname(originalPath).toLowerCase();
+    
+    // --- NEW LOGIC FOR SMART EFFECTS (.lyfx) ---
+    if (extension === '.lyfx') {
+        const effectFolderName = checksum; // Use checksum as folder name
+        const effectFolderPath = path.join(assetsTempPath, effectFolderName);
+        
+        const alias = path.basename(originalPath);
+
+        // If the folder doesn't exist (or is empty), extract the zip
+        if (!fs.existsSync(effectFolderPath)) {
+            console.log(`[Main] Extracting Smart Effect: ${originalPath} -> ${effectFolderPath}`);
+            await extract(originalPath, { dir: effectFolderPath });
+        } else {
+            console.log(`[Main] Smart Effect already extracted: ${effectFolderPath}`);
+        }
+
+        // We assume the entry point is index.html. 
+        // We return the full URL to index.html.
+        const indexHtmlPath = path.join(effectFolderPath, 'index.html');
+        if (!fs.existsSync(indexHtmlPath)) {
+            throw new Error("Invalid .lyfx file: index.html not found in archive.");
+        }
+
+        const finalUrl = url.pathToFileURL(indexHtmlPath).href;
+        return { filePath: finalUrl, alias };
+    }
+    // -------------------------------------------
+
     const newFileName = `${checksum}${extension}`;
     const destPath = path.join(assetsTempPath, newFileName);
-
-    // FIX: Use pathToFileURL to generate correct file:/// URLs (handles encoding and slashes)
     const finalUrl = url.pathToFileURL(destPath).href;
     const alias = path.basename(originalPath);
 
     if (fs.existsSync(destPath)) {
         console.log(`[Main] Asset already exists, skipping copy: ${newFileName}`);
-        
-        if (extension.toLowerCase() === '.json') {
+        if (extension === '.json') {
             const content = await fs.promises.readFile(originalPath, 'utf-8');
             return { filePath: finalUrl, content, alias };
         }
@@ -1124,8 +1146,7 @@ async function processAssetAddition(originalPath) {
 
         writeStream.on('finish', async () => {
             cleanup();
-            
-            if (extension.toLowerCase() === '.json') {
+            if (extension === '.json') {
                 try {
                     const content = await fs.promises.readFile(originalPath, 'utf-8');
                     resolve({ filePath: finalUrl, content, alias });
@@ -1185,6 +1206,13 @@ ipcMain.handle('project:cleanUnusedAssets', async (event, usedAssets) => {
         const usedFileNames = new Set(usedAssets.map(assetUrl => {
             try {
                 const filePath = url.fileURLToPath(assetUrl);
+                // Handle subdirectories (for Smart Effects)
+                // If path contains assets/checksum/index.html, we want to keep "checksum" folder
+                if (filePath.startsWith(assetsTempPath)) {
+                    const relative = path.relative(assetsTempPath, filePath);
+                    const parts = relative.split(path.sep);
+                    return parts[0];
+                }
                 return path.basename(filePath);
             } catch (e) {
                 console.warn(`[Main] Could not parse asset URL: ${assetUrl}`);
@@ -1192,7 +1220,7 @@ ipcMain.handle('project:cleanUnusedAssets', async (event, usedAssets) => {
             }
         }).filter(Boolean));
 
-        console.log('[Main] Cleaning unused assets. Used files:', usedFileNames);
+        console.log('[Main] Cleaning unused assets. Used root names:', usedFileNames);
 
         const filesInTemp = await fs.promises.readdir(assetsTempPath);
 
@@ -1201,7 +1229,7 @@ ipcMain.handle('project:cleanUnusedAssets', async (event, usedAssets) => {
                 const filePathToDelete = path.join(assetsTempPath, fileName);
                 console.log(`[Main] Deleting unused asset: ${fileName}`);
                 try {
-                    await fs.promises.unlink(filePathToDelete);
+                    await safeRm(filePathToDelete);
                 } catch (deleteError) {
                     console.error(`[Main] Failed to delete unused asset ${filePathToDelete}:`, deleteError);
                 }
@@ -1223,8 +1251,14 @@ async function saveProject(filePath, { songData, usedAssets }) {
             if (typeof obj[key] === 'string' && obj[key].startsWith('file:///')) {
                 try {
                     const assetPath = url.fileURLToPath(obj[key]);
-                    const assetFilename = path.basename(assetPath);
-                    obj[key] = `assets/${assetFilename}`;
+                    
+                    // Check if this path is inside our temp assets folder
+                    if (assetPath.startsWith(assetsTempPath)) {
+                        // Calculate relative path from assetsTempPath
+                        const relative = path.relative(assetsTempPath, assetPath);
+                        // Store as assets/relative/path
+                        obj[key] = `assets/${relative.replace(/\\/g, '/')}`;
+                    }
                 } catch (e) {
                     console.warn(`Could not convert asset URL to path: ${obj[key]}`);
                 }
@@ -1264,14 +1298,33 @@ async function saveProject(filePath, { songData, usedAssets }) {
         archive.pipe(output);
         archive.append(JSON.stringify(songData, null, 2), { name: 'song.json' });
 
+        const addedFolders = new Set();
+
         for (const assetUrl of usedAssets) {
             try {
                 const assetPath = url.fileURLToPath(assetUrl);
-                const assetFilename = path.basename(assetPath);
-                if (fs.existsSync(assetPath)) {
-                    archive.file(assetPath, { name: `assets/${assetFilename}` });
+                
+                // If it's a file inside the assets temp path
+                if (assetPath.startsWith(assetsTempPath) && fs.existsSync(assetPath)) {
+                    const relativePath = path.relative(assetsTempPath, assetPath);
+                    const pathParts = relativePath.split(path.sep);
+
+                    // Check if it's inside a subdirectory (Smart Effect Folder)
+                    // e.g. "checksum/index.html" -> pathParts.length > 1
+                    if (pathParts.length > 1) {
+                        const rootFolder = pathParts[0]; // The checksum folder
+                        if (!addedFolders.has(rootFolder)) {
+                            // Add the entire folder to the archive
+                            const sourceDir = path.join(assetsTempPath, rootFolder);
+                            archive.directory(sourceDir, `assets/${rootFolder}`);
+                            addedFolders.add(rootFolder);
+                        }
+                    } else {
+                        // It's a flat file (image, audio, etc.)
+                        archive.file(assetPath, { name: `assets/${relativePath}` });
+                    }
                 } else {
-                    console.warn(`[Main] Asset not found in temp folder, skipping: ${assetFilename}`);
+                    console.warn(`[Main] Asset not found or external, skipping: ${assetPath}`);
                 }
             } catch (e) {
                 console.warn(`[Main] Could not process asset URL for saving: ${assetUrl}`);
@@ -1310,46 +1363,6 @@ ipcMain.handle('project:open', async (event, filePath) => {
         const songData = JSON.parse(songDataRaw);
 
         // --- Smart Effect Hydration ---
-        async function hydrateSmartEffects(elementObject) {
-            if (!elementObject || typeof elementObject !== 'object') {
-                return;
-            }
-
-            // If this is a smart effect, load its data from the src path
-            if (elementObject.type === 'smart-effect' && elementObject.properties?.src?.src) {
-                const relativePath = elementObject.properties.src.src; // e.g., 'assets/checksum.json'
-                const absolutePath = path.join(projectTempPath, relativePath);
-                if (fs.existsSync(absolutePath)) {
-                    try {
-                        const content = await fs.promises.readFile(absolutePath, 'utf-8');
-                        const effectData = JSON.parse(content);
-                        // Inject the loaded data back into the object
-                        if (elementObject.properties.src) {
-                            elementObject.properties.src.effectData = effectData;
-                        }
-                    } catch (e) {
-                        console.error(`[Main] Failed to read or parse smart effect JSON at ${absolutePath}:`, e);
-                    }
-                }
-            }
-
-            // Recurse into children if they exist
-            if (elementObject.children && Array.isArray(elementObject.children)) {
-                for (const child of elementObject.children) {
-                    await hydrateSmartEffects(child);
-                }
-            }
-        }
-
-        if (songData.thumbnailPage) {
-            await hydrateSmartEffects(songData.thumbnailPage);
-        }
-        if (songData.pages && Array.isArray(songData.pages)) {
-            for (const page of songData.pages) {
-                await hydrateSmartEffects(page);
-            }
-        }
-        // --- END: Smart Effect Hydration ---
 
         // --- Version Check ---
         const songAppVersion = songData.appVersion;
@@ -1557,6 +1570,4 @@ if (!gotTheLock) {
         }
     });
 }
-
-
 
