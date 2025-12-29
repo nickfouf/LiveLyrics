@@ -24,6 +24,7 @@ import {copyStyle, pasteStyle, canPasteStyle} from "./styleClipboard.js";
 
 let scrollTimeout = null;
 
+
 const BLEND_MODES = [
     'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 
     'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 
