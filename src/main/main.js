@@ -69,7 +69,7 @@ async function safeRm(targetPath, retries = 5, delay = 200) {
         } catch (err) {
             // Check for common locking error codes
             const isLocked = err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'ENOTEMPTY' || err.code === 'EACCES';
-            
+
             if (isLocked && i < retries - 1) {
                 console.warn(`[Main] safeRm: File busy/locked at ${targetPath} (${err.code}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -233,6 +233,33 @@ function sendDisplaysUpdate() {
     }
 }
 
+/**
+ * ADDED: Helper function to completely lock zoom on a window.
+ * 1. Sets limits when loaded.
+ * 2. Intercepts Keyboard shortcuts (Ctrl +/-, Ctrl Scroll) to prevent zoom changes.
+ */
+function preventWindowZoom(win) {
+    if (!win || win.isDestroyed()) return;
+
+    // 1. Force visual limits once the content is loaded
+    win.webContents.on('did-finish-load', () => {
+        win.webContents.setZoomFactor(1);
+        win.webContents.setVisualZoomLevelLimits(1, 1);
+    });
+
+    // 2. Intercept keyboard shortcuts
+    win.webContents.on('before-input-event', (event, input) => {
+        // Check for Control (Windows/Linux) or Command (macOS)
+        if (input.control || input.meta) {
+            const key = input.key.toLowerCase();
+            // Block +, =, -, _, 0
+            if (key === '+' || key === '=' || key === '-' || key === '_' || key === '0') {
+                event.preventDefault();
+            }
+        }
+    });
+}
+
 function createMainWindow() {
     const preloadScriptPath = path.join(app.getAppPath(), 'src', 'main', 'preload.js');
     const htmlPath = path.join(app.getAppPath(), 'src', 'renderer', 'html', 'index.html');
@@ -254,6 +281,9 @@ function createMainWindow() {
             nodeIntegration: false,
         },
     });
+
+    // Apply Zoom Lock
+    preventWindowZoom(mainWindow);
 
     mainWindow.loadFile(htmlPath);
 
@@ -301,6 +331,9 @@ function createEditorWindow() {
         },
     });
 
+    // Apply Zoom Lock
+    preventWindowZoom(editorWindow);
+
     editorWindow.loadFile(htmlPath);
 
     const sendMaximizedState = () => {
@@ -336,6 +369,9 @@ function createTempoSyncWindow() {
         },
     });
 
+    // Apply Zoom Lock
+    preventWindowZoom(tempoSyncWindow);
+
     tempoSyncWindow.loadFile(htmlPath);
 
     tempoSyncWindow.on('closed', () => {
@@ -364,6 +400,9 @@ function createPlayerWindow() {
             contextIsolation: true,
         },
     });
+
+    // Apply Zoom Lock
+    preventWindowZoom(playerWindow);
 
     playerWindow.loadFile(htmlPath);
 
@@ -421,6 +460,9 @@ function createAudienceWindow(display) {
             contextIsolation: true,
         },
     });
+
+    // Apply Zoom Lock
+    preventWindowZoom(audienceWindow);
 
     audienceWindow.loadFile(htmlPath);
 
@@ -521,7 +563,7 @@ app.whenReady().then(() => {
     const handleRemoteCommand = (command, remoteIp) => {
         if (!command || typeof command !== 'object' || !playbackManager) return;
         console.log(`[Main] Handling remote command from ${remoteIp}:`, command);
-    
+
         // --- ADDED: Latency Compensation ---
         const rttStats = connectionManager.getRttStats();
         const stats = rttStats.get(remoteIp);
@@ -529,7 +571,7 @@ app.whenReady().then(() => {
         const latency = avgRtt / 2; // One-way latency
         const timestamp = (performance.timeOrigin + performance.now()) - latency;
         // --- END: Latency Compensation ---
-    
+
         switch (command.type) {
             case 'play':
                 playbackManager.play(timestamp); // FIX: Default to 'normal' playback
@@ -595,12 +637,12 @@ app.whenReady().then(() => {
 
         connectionManager.on('pairingRequest', (device, accept, reject) => {
             console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId}).`);
-            
+
             // --- MODIFIED: Check Auto-Accept Preference ---
             if (autoAcceptConnections) {
                 console.log(`[Main] Auto-accept enabled. Automatically accepting request from ${device.deviceId}.`);
                 accept();
-                // We don't store in pairingRequests map or alert UI, 
+                // We don't store in pairingRequests map or alert UI,
                 // connectionManager will emit 'deviceConnected' shortly, updating the status.
             } else {
                 console.log(`[Main] Auto-accept disabled. Asking UI.`);
@@ -631,7 +673,7 @@ app.whenReady().then(() => {
             // Directly use playbackManager to get the state and send it
             if (playbackManager && connectionManager) {
                 const currentSyncState = playbackManager.getCurrentSyncState();
-                
+
                 // Always send the playback state (status, bpm, etc)
                 connectionManager.sendMessageToPairedDevice({
                     type: 'playbackUpdate',
@@ -672,10 +714,10 @@ app.whenReady().then(() => {
                 const remoteInfo = { id: device.deviceId, name: device.deviceName, type: device.deviceType, ips: device.getRemoteAdvertisedIps() };
                 playerWindow.webContents.send('device-controller:connection-success', remoteInfo);
             }
-            
-            // MODIFIED: Removed automatic data pushing here. 
+
+            // MODIFIED: Removed automatic data pushing here.
             // We now wait for 'playlistRequest' and 'currentSongRequest' events.
-            
+
             device.on('infoUpdated', (updatedDevice) => {
                 if (playerWindow && !playerWindow.isDestroyed()) {
                     const updatedInfo = { id: updatedDevice.deviceId, name: updatedDevice.deviceName, type: updatedDevice.deviceType, ips: updatedDevice.getRemoteAdvertisedIps() };
@@ -720,7 +762,7 @@ app.whenReady().then(() => {
                 connectionManager.disconnectFromPairedDevice();
             }
         });
-        
+
         // --- ADDED: IPC handler for Auto-Accept preference ---
         ipcMain.on('device-controller:set-auto-accept', (event, enabled) => {
             console.log(`[Main] Auto-accept connections set to: ${enabled}`);
@@ -1078,12 +1120,12 @@ async function processAssetAddition(originalPath) {
 
     const checksum = await generateFileChecksum(originalPath);
     const extension = path.extname(originalPath).toLowerCase();
-    
+
     // --- NEW LOGIC FOR SMART EFFECTS (.lyfx) ---
     if (extension === '.lyfx') {
         const effectFolderName = checksum; // Use checksum as folder name
         const effectFolderPath = path.join(assetsTempPath, effectFolderName);
-        
+
         const alias = path.basename(originalPath);
 
         // If the folder doesn't exist (or is empty), extract the zip
@@ -1094,7 +1136,7 @@ async function processAssetAddition(originalPath) {
             console.log(`[Main] Smart Effect already extracted: ${effectFolderPath}`);
         }
 
-        // We assume the entry point is index.html. 
+        // We assume the entry point is index.html.
         // We return the full URL to index.html.
         const indexHtmlPath = path.join(effectFolderPath, 'index.html');
         if (!fs.existsSync(indexHtmlPath)) {
@@ -1176,14 +1218,14 @@ ipcMain.handle('project:importSystemFont', async (event, fontFamily) => {
     try {
         console.log(`[Main] Attempting to import font: ${fontFamily}`);
         const sourcePath = await findFontFile(fontFamily);
-        
+
         if (!sourcePath) {
             throw new Error(`Could not locate font file for "${fontFamily}"`);
         }
 
         // Reuse the asset processing logic to hash/copy the font file
         const assetData = await processAssetAddition(sourcePath);
-        
+
         // Return data specifically formatted for the font loader
         return {
             family: fontFamily,
@@ -1251,7 +1293,7 @@ async function saveProject(filePath, { songData, usedAssets }) {
             if (typeof obj[key] === 'string' && obj[key].startsWith('file:///')) {
                 try {
                     const assetPath = url.fileURLToPath(obj[key]);
-                    
+
                     // Check if this path is inside our temp assets folder
                     if (assetPath.startsWith(assetsTempPath)) {
                         // Calculate relative path from assetsTempPath
@@ -1275,7 +1317,7 @@ async function saveProject(filePath, { songData, usedAssets }) {
 
     return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(filePath);
-        
+
         // --- FIX: Add error listener for the write stream ---
         // This catches 'EBUSY' and 'EPERM' if the file is locked, preventing the app from crashing.
         output.on('error', (err) => {
@@ -1303,7 +1345,7 @@ async function saveProject(filePath, { songData, usedAssets }) {
         for (const assetUrl of usedAssets) {
             try {
                 const assetPath = url.fileURLToPath(assetUrl);
-                
+
                 // If it's a file inside the assets temp path
                 if (assetPath.startsWith(assetsTempPath) && fs.existsSync(assetPath)) {
                     const relativePath = path.relative(assetsTempPath, assetPath);
@@ -1453,7 +1495,7 @@ ipcMain.on('playback:load-song', (event, { songMetadata, measureMap, songData })
     if (songData && songData.fonts && !songMetadata.fonts) {
         songMetadata.fonts = songData.fonts;
     }
-    
+
     playbackManager.loadSong(songMetadata, measureMap, songData);
     // ADDED: Send the new song data to the connected device.
     if (connectionManager) {
@@ -1570,4 +1612,3 @@ if (!gotTheLock) {
         }
     });
 }
-
