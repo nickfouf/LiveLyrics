@@ -11,6 +11,25 @@ body {
     flex-direction: column;
 }
 
+/* Mirror Video Layer */
+.mirror-video-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Or 'fill' to stretch */
+    background-color: black;
+    z-index: 1000; /* Above DOM container */
+    display: none; /* Hidden by default */
+}
+
+/* Adjust presentation slide to allow stacking */
+.presentation-slide {
+    position: relative; 
+}
+
+
 /* MODIFIED: Player Layout is now a flex container for panels */
 .player-layout {
     display: flex;
@@ -21,7 +40,7 @@ body {
 
 /* MODIFIED: Songs Manager Panel (Left) */
 .songs-manager-panel {
-    width: 280px; /* Give it a fixed width */
+    width: 280px;
     background-color: #252526;
     flex-shrink: 0;
     display: flex;
@@ -31,7 +50,6 @@ body {
     border-right: 1px solid #444;
 }
 
-/* ADDED: Collapsed state for left panel */
 .songs-manager-panel.collapsed {
     width: 0;
     border-right: none;
@@ -79,9 +97,9 @@ body {
     padding: 0.5rem;
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Pushes the button to the bottom */
+    justify-content: space-between;
     flex-grow: 1;
-    overflow-y: auto; /* Allow body to scroll if content overflows */
+    overflow-y: auto;
 }
 
 .song-playlist {
@@ -117,9 +135,8 @@ body {
     color: white;
 }
 
-/* MODIFIED: Style for highlighting a duplicate song with a distinctive yellow-orange */
 .song-item.highlight-duplicate {
-    background-color: #f3a412; /* A rich, distinctive golden-orange */
+    background-color: #f3a412;
     border-color: #f3a412;
     transition: background-color 0.2s ease-in, border-color 0.2s ease-in;
 }
@@ -128,8 +145,8 @@ body {
     display: flex;
     flex-direction: column;
     flex-grow: 1;
-    min-width: 0; /* Crucial for child ellipsis to work correctly */
-    padding-right: 30px; /* Space for the absolute-positioned delete button */
+    min-width: 0;
+    padding-right: 30px;
 }
 
 .song-title-primary {
@@ -146,7 +163,6 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    /* CSS trick for middle-ellipsis effect */
     direction: rtl;
     text-align: left;
 }
@@ -195,7 +211,7 @@ body {
     border-bottom: 2px solid #ff00e5;
 }
 
-/* --- ADDED: Drawer Handles (copied from editor.css) --- */
+/* Drawer Handles */
 .drawer-handle {
     width: 0;
     opacity: 0;
@@ -231,14 +247,13 @@ body {
     border-right: 1px solid #444;
 }
 
-/* Show handle when its preceding sibling drawer is collapsed */
 #songs-manager-panel-handle.visible,
 .configuration-panel.collapsed + #configuration-panel-handle {
     width: 28px;
     opacity: 1;
 }
 
-/* --- ADDED: Configuration Panel (Right) - similar to editor's properties-panel --- */
+/* Configuration Panel (Right) */
 .configuration-panel {
     width: 280px;
     background-color: #252526;
@@ -297,15 +312,14 @@ body {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 1rem; /* Space between groups */
-    flex-grow: 1; /* Make body fill available space */
+    gap: 1rem;
+    flex-grow: 1;
 }
 
-/* MODIFIED: Drawer Group styles */
 .configuration-panel .drawer-group {
     display: flex;
     flex-direction: column;
-    flex-shrink: 0; /* Prevent the group from shrinking */
+    flex-shrink: 0;
 }
 
 .drawer-group h4 {
@@ -317,14 +331,12 @@ body {
     border-bottom: 1px solid #444;
 }
 
-/* --- MODIFIED & ADDED: Styles for new Display Settings --- */
-/* The selected/viewed tab gets the blue background */
+/* Display Settings */
 .segmented-tabs .tab-btn.active {
     background-color: rgb(0, 123, 255);
     color: white;
 }
 
-/* The presenter tab gets an underline */
 .segmented-tabs .tab-btn.presenter {
     text-decoration: underline;
     text-underline-offset: 4px;
@@ -366,7 +378,7 @@ body {
     width: fit-content;
 }
 
-/* ADDED: Latency control styles */
+/* Latency control styles */
 .latency-control {
     display: flex;
     align-items: center;
@@ -380,7 +392,7 @@ body {
 }
 
 .latency-control .form-input {
-    width: 60px; /* A small, fixed width for the number input */
+    width: 60px;
     padding: 0.4rem;
     text-align: right;
 }
@@ -390,7 +402,7 @@ body {
     color: #aaa;
 }
 
-/* ADDED: Volume Slider Styles */
+/* Volume Slider */
 .volume-slider-container {
     display: flex;
     align-items: center;
@@ -434,11 +446,11 @@ body {
 #volume-level-display {
     color: #ccc;
     font-size: 0.9rem;
-    min-width: 40px; /* Prevent layout shift */
+    min-width: 40px;
     text-align: right;
 }
 
-/* MODIFIED: Device Info Container styles for horizontal layout */
+/* Device Info Container */
 .device-info-container {
     display: flex;
     flex-direction: column;
@@ -472,7 +484,6 @@ body {
     max-width: 70%;
 }
 
-/* NEW: Styles for the RTT list container */
 #device-rtt-list {
     display: flex;
     flex-direction: column;
@@ -495,14 +506,14 @@ body {
 }
 
 .status-indicator.offline {
-    background-color: #dc3545; /* Red */
+    background-color: #dc3545;
 }
 
 .status-indicator.online {
-    background-color: #28a745; /* Green */
+    background-color: #28a745;
 }
 
-/* --- NEW: Device List Dialog Styles --- */
+/* Device List Dialog */
 .device-list {
     list-style: none;
     padding: 0;
@@ -532,7 +543,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 0; /* For ellipsis */
+    min-width: 0;
 }
 
 .device-name {
@@ -557,7 +568,7 @@ body {
 }
 
 
-/* --- Renderer Area (Right) --- */
+/* Renderer Area (Right) */
 .renderer-area {
     flex-grow: 1;
     display: flex;
@@ -572,7 +583,7 @@ body {
     background-color: #252526;
     border-bottom: 1px solid #444;
     display: flex;
-    justify-content: space-between; /* Center the timeline controls */
+    justify-content: space-between;
     align-items: center;
     position: relative;
     padding: 0 0.5rem;
@@ -598,7 +609,6 @@ body {
     position: relative;
 }
 
-/* Ensure the player's slide viewport takes up the available space */
 .player-viewport .presentation-slide {
     position: absolute;
     top: 50%;
@@ -609,10 +619,7 @@ body {
     gap: 0.5rem;
 }
 
-/* Indexing */
 .player-header {
     z-index: 10;
 }
-
-
 

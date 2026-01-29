@@ -1185,6 +1185,18 @@ export function serializeElement(element) {
         }
     }
 
+    // --- NEW: Save selectedEventProperties ---
+    // If the element has a DOM node with this dataset property, save it.
+    if (element.domElement && element.domElement.dataset.selectedEventProperties) {
+        try {
+            const props = JSON.parse(element.domElement.dataset.selectedEventProperties);
+            if (Array.isArray(props) && props.length > 0) {
+                serialized.selectedEventProperties = props;
+            }
+        } catch (e) { /* ignore */ }
+    }
+    // -----------------------------------------
+
     if (element instanceof VirtualContainer) {
         serialized.children = element.getChildren().map(child => serializeElement(child));
     }
@@ -1221,6 +1233,12 @@ export function deserializeElement(data) {
     if (data.eventsData) {
         element.tempEventsData = data.eventsData;
     }
+
+    // --- NEW: Restore selectedEventProperties ---
+    if (data.selectedEventProperties && Array.isArray(data.selectedEventProperties)) {
+        element.domElement.dataset.selectedEventProperties = JSON.stringify(data.selectedEventProperties);
+    }
+    // -------------------------------------------
 
     if (data.children && element instanceof VirtualContainer) {
         data.children.forEach(childData => {

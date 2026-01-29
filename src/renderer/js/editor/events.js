@@ -36,6 +36,7 @@ import { fontLoader } from '../renderer/fontLoader.js';
 
 
 export function updateWindowTitle() {
+    // ... (rest of function)
     const fileName = state.song.currentFilePath ? state.song.currentFilePath.split(/[\\/]/).pop() : 'Untitled.lyx';
     const dirtyMarker = state.song.isDirty ? '*' : '';
     const titleString = `LiveLyrics - ${fileName}${dirtyMarker}`;
@@ -49,20 +50,16 @@ export function updateWindowTitle() {
 }
 
 export function markAsDirty() {
+    // ... (rest of function)
     if (!state.song.isDirty) {
         updateState({ song: { ...state.song, isDirty: true } });
         updateWindowTitle();
     }
 }
 
-/**
- * Sets a property value on an element by creating or updating an event
- * at the very beginning of the element's timeline.
- * @param {VirtualElement} element The element to modify.
- * @param {string} propKey The property key (e.g., 'opacity', 'width').
- * @param {*} newValue The new value for the property.
- */
+// ... (setPropertyAsDefaultValue implementation)
 export function setPropertyAsDefaultValue(element, propKey, newValue) {
+    // ... (existing implementation)
     if (!element) return;
 
     const keyToPath = {
@@ -278,7 +275,12 @@ function animationLoop(timestamp) {
     const allPossiblePages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
     for (const page of allPossiblePages) {
         if (pagesToKeepInDom.has(page)) {
+            const wasAdded = page.addedInDom;
             state.domManager.addToDom(page);
+            // ADDED: Notify page if it was just added so A/V triggers work
+            if (!wasAdded) {
+                page.handlePlaybackStateChange(true);
+            }
         } else {
             state.domManager.removeFromDom(page);
         }
@@ -316,6 +318,7 @@ function animationLoop(timestamp) {
     state.playback.animationFrameId = requestAnimationFrame(animationLoop);
 }
 
+// ... (rest of file remains the same)
 function play() {
     if (state.playback.songHasEnded) {
         state.playback.timeAtPause = 0;

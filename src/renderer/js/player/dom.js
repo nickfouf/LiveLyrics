@@ -19,10 +19,12 @@ export function initDOM() {
     // Player Layout
     DOM.windowTitle = document.getElementById('window-title');
     DOM.pageContainer = document.getElementById('page-container');
-    DOM.slideViewportWrapper = document.getElementById('slide-viewport-wrapper'); // ADDED
+    DOM.slideViewportWrapper = document.getElementById('slide-viewport-wrapper');
     DOM.presentationSlide = document.getElementById('slide-viewport');
     DOM.pageThumbnailsContainer = document.getElementById('page-thumbnails-container');
     DOM.pageManager = document.querySelector('.page-manager');
+    // ADDED: Mirror video element
+    DOM.mirrorVideo = document.getElementById('mirror-video');
 
     // Songs Manager Panel (Left)
     DOM.songsManagerPanel = document.getElementById('songs-manager-panel');
@@ -39,6 +41,8 @@ export function initDOM() {
     // -- Configuration Controls --
     // Display Settings
     DOM.presenterMonitorTabs = document.getElementById('presenter-monitor-tabs');
+    // ADDED: Global Latency Input
+    DOM.globalLatencyInput = document.getElementById('global-latency-input');
 
     // Audio Settings
     DOM.audioOutputDeviceSelect = document.getElementById('audio-output-device');
@@ -58,15 +62,15 @@ export function initDOM() {
     DOM.loadingDialog = document.getElementById('loading-dialog');
     DOM.loadingDialogMessage = document.getElementById('loading-dialog-message');
 
-    // --- MODIFIED: Device Controller Elements ---
+    // Device Controller Elements
     DOM.openDeviceListBtn = document.getElementById('open-device-list-btn');
-    DOM.openTempoSyncBtn = document.getElementById('open-tempo-sync-btn'); // ADDED
+    DOM.openTempoSyncBtn = document.getElementById('open-tempo-sync-btn');
     DOM.disconnectDeviceBtn = document.getElementById('disconnect-device-btn');
     DOM.deviceListDialog = document.getElementById('device-list-dialog');
     DOM.closeDeviceListBtn = document.getElementById('close-device-list-btn');
     DOM.deviceList = document.getElementById('device-list');
     
-    // ADDED: Auto-Accept Toggle
+    // Auto-Accept Toggle
     DOM.autoAcceptToggle = document.getElementById('auto-accept-connections');
 
     // Pairing Dialog
@@ -80,8 +84,6 @@ export function initDOM() {
     DOM.deviceStatusIndicator = document.getElementById('device-status-indicator');
     DOM.deviceStatusText = document.getElementById('device-status-text');
     DOM.deviceNameValue = document.getElementById('device-name-value');
-    DOM.deviceRttList = document.getElementById('device-rtt-list'); // MODIFIED
+    DOM.deviceRttList = document.getElementById('device-rtt-list');
 }
-
-
 

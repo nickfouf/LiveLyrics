@@ -3,15 +3,16 @@ import { DomManager } from '../renderer/domManager.js';
 import { TimelineManager } from '../renderer/timeline/TimelineManager.js';
 import { state, updateState } from '../editor/state.js';
 import { initSongsManager, addSongFromPath, songPlaylist } from './songsManager.js';
-import { initPlayerPlayback, handlePlaybackUpdate, localPlaybackState } from './playback.js';
+import { initPlayerPlayback, handlePlaybackUpdate, localPlaybackState, updatePlayerControlsUI, setRenderingActive, forceRefresh, switchVisiblePages } from './playback.js';
 import { initAlertDialog, showAlertDialog, hideAlertDialog } from '../editor/alertDialog.js';
 import { initConfirmationDialog, showConfirmationDialog } from './confirmationDialog.js';
 import { initLoadingDialog } from '../editor/loadingDialog.js';
 import { applyViewportScaling } from '../editor/rendering.js';
 import { makeDraggable } from '../editor/draggable.js';
-import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
+import { fontLoader } from '../renderer/fontLoader.js';
+import { MirrorManager } from '../mirror.js';
 
-// --- REWRITTEN: Device Controller Logic ---
+// --- Device Controller Logic ---
 
 // State
 let discoverableDevices = new Map();
@@ -161,33 +162,27 @@ function initDeviceController() {
 
     DOM.openDeviceListBtn.addEventListener('click', showDeviceListDialog);
     
-    // ADDED: Listener for Tempo Sync button
+    // Listener for Tempo Sync button
     if (DOM.openTempoSyncBtn) {
         DOM.openTempoSyncBtn.addEventListener('click', () => {
             window.playerAPI.openTempoSync();
         });
     }
 
-    // --- ADDED: Auto-Accept Persistence Logic ---
+    // Auto-Accept Persistence Logic
     if (DOM.autoAcceptToggle) {
-        // 1. Load preference from localStorage (default to 'true' if not set)
         const savedAutoAccept = localStorage.getItem('autoAcceptConnections');
         const shouldAutoAccept = savedAutoAccept === null ? true : (savedAutoAccept === 'true');
 
-        // 2. Set initial UI state
         DOM.autoAcceptToggle.checked = shouldAutoAccept;
-
-        // 3. Sync initial state to Main process
         window.playerAPI.setAutoAccept(shouldAutoAccept);
 
-        // 4. Handle user toggling
         DOM.autoAcceptToggle.addEventListener('change', (e) => {
             const isChecked = e.target.checked;
             localStorage.setItem('autoAcceptConnections', isChecked);
             window.playerAPI.setAutoAccept(isChecked);
         });
     }
-    // ---------------------------------------------
 
     DOM.disconnectDeviceBtn.addEventListener('click', async () => {
         if (!connectedDevice) return;
@@ -272,7 +267,7 @@ function initDeviceController() {
         connectingDeviceId = null;
         isManualDisconnect = false; 
         hideDeviceListDialog();
-        hideAlertDialog(); // --- ADDED: Hide any pending alerts on success
+        hideAlertDialog();
         updateDeviceStatusUI('connected', device);
     });
 
@@ -333,11 +328,11 @@ function setupPanels() {
     });
 }
 
-// --- REVISED: Display Settings Logic ---
+// --- Display Settings Logic ---
 
 let lastDisplayInfo = null; 
 let viewedDisplayId = null; 
-let monitorLatencies = new Map(); 
+// Removed: monitorLatencies map
 
 function renderDisplayTabs({ allDisplays, presenterDisplay }) {
     const tabsContainer = DOM.presenterMonitorTabs;
@@ -383,21 +378,12 @@ function renderDisplayTabs({ allDisplays, presenterDisplay }) {
             makePresenterBtnHtml = `<button class="action-btn secondary-btn make-presenter-btn" data-display-id="${display.id}">Make Presenter</button>`;
         }
 
-        const currentLatency = monitorLatencies.get(display.id) || 0;
-        const latencyControlHtml = `
-            <div class="latency-control">
-                <label for="latency-input-${display.id}">Latency:</label>
-                <input type="number" id="latency-input-${display.id}" class="form-input" value="${currentLatency}" min="0" step="1" data-display-id="${display.id}">
-                <span class="unit-label">ms</span>
-            </div>
-        `;
-
+        // Removed per-display latency input generation
         optionsPanel.innerHTML = `
             <div class="monitor-role-info">
                 <span class="monitor-role-label">Role:</span>
                 <span>${role}</span>
             </div>
-            ${latencyControlHtml}
             ${makePresenterBtnHtml}
         `;
         optionsContainer.appendChild(optionsPanel);
@@ -413,6 +399,11 @@ function initDisplaySettings() {
         console.log('Displays changed, updating UI.', displayInfo);
         lastDisplayInfo = displayInfo; 
         renderDisplayTabs(displayInfo);
+        
+        // Sync global latency input from main process state if present
+        if (DOM.globalLatencyInput && displayInfo.globalLatency !== undefined) {
+             DOM.globalLatencyInput.value = displayInfo.globalLatency;
+        }
     });
 
     tabsContainer.addEventListener('click', (e) => {
@@ -436,20 +427,18 @@ function initDisplaySettings() {
             window.playerAPI.setPresenterDisplay(displayId);
         }
     });
-
-    optionsContainer.addEventListener('input', (e) => {
-        const latencyInput = e.target;
-        if (latencyInput.type === 'number' && latencyInput.id.startsWith('latency-input-')) {
-            const displayId = Number(latencyInput.dataset.displayId);
-            const latency = Math.max(0, parseInt(latencyInput.value, 10) || 0);
-            monitorLatencies.set(displayId, latency);
-            window.playerAPI.setLatency(displayId, latency);
-        }
-    });
 }
 
 function initConfigurationPanel() {
     initDisplaySettings();
+
+    // Global Latency Handler
+    if (DOM.globalLatencyInput) {
+        DOM.globalLatencyInput.addEventListener('input', (e) => {
+            const latency = Math.max(0, parseInt(e.target.value, 10) || 0);
+            window.playerAPI.setGlobalLatency(latency);
+        });
+    }
 
     DOM.audioOutputDeviceSelect.addEventListener('change', (e) => {
         console.log(`Audio output device changed to: ${e.target.value}`);
@@ -515,6 +504,45 @@ function setupPlayerBPMControls() {
     });
 }
 
+// --- Role Handling ---
+function handleRoleUpdate({ role, sourceId }) {
+    console.log(`[Player] Role changed to: ${role}`, sourceId ? `Source: ${sourceId}` : '');
+    
+    if (role === 'mirror') {
+        // 1. Stop local DOM rendering (Visuals)
+        setRenderingActive(false);
+
+        // 2. Clear DOM to free resources
+        if (state.song) {
+            switchVisiblePages(new Set());
+        } else if (state.domManager) {
+            state.domManager.clear();
+        }
+
+        // 3. Hide DOM Container, Show Video
+        if (DOM.pageContainer) DOM.pageContainer.style.visibility = 'hidden';
+        if (sourceId) {
+            MirrorManager.startStream(sourceId, 'mirror-video');
+        }
+
+    } else {
+        // 1. Stop Video Stream
+        MirrorManager.stopStream('mirror-video');
+
+        // 2. Enable local DOM rendering
+        if (DOM.pageContainer) DOM.pageContainer.style.visibility = 'visible';
+        
+        // 3. Re-enable Rendering and Force Refresh
+        setRenderingActive(true);
+        forceRefresh();
+        
+        // Force a resize/render to ensure DOM is correct
+        if (state.timelineManager) {
+            state.timelineManager.resize(true);
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     initDOM();
     setupTitleBar();
@@ -544,7 +572,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.playerAPI.onPlaybackUpdate((newState) => {
         console.log('Player received playback update:', newState);
-        // ADDED: Load fonts via JS-only loader
+        // Load fonts via JS-only loader
         if (newState.song && newState.song.fonts) {
              fontLoader.loadFonts(newState.song.fonts);
         } else if (newState.status === 'unloaded') {
@@ -559,6 +587,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         await addSongFromPath(filePath);
     });
 
+    // Handle Role Updates
+    window.playerAPI.onSetRole((data) => handleRoleUpdate(data));
+
     const domManager = new DomManager(DOM.pageContainer);
     const timelineManager = new TimelineManager();
     timelineManager.setDomManager(domManager);
@@ -570,7 +601,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         presenter: { isOpen: false },
     });
 
-    // --- ADDED: Listen for font load completion to trigger re-render ---
+    // Listen for font load completion to trigger re-render
     fontLoader.onFontsLoaded(() => {
         console.log('[Player] Fonts loaded. Triggering re-render to update metrics.');
         // Force a resize on the timeline manager to recalculate layout
@@ -613,6 +644,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log("Player UI Initialized");
 });
-
-
 

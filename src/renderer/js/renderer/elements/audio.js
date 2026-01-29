@@ -4,7 +4,7 @@ import { VirtualElement } from "./element.js";
 import { AudioSrcProperty } from "../properties/audioSrc.js";
 import { AudioPlaybackProperty } from "../properties/audioPlayback.js";
 import { state } from "../../editor/state.js";
-import { OrchestraContentProperty } from "../properties/orchestraContent.js";
+import { OrchestraContentProperty } from "../properties/orchestraContent.js"; // ADDED BACK
 
 function findLastIndex(array, predicate) {
     for (let i = array.length - 1; i >= 0; i--) {
@@ -18,6 +18,7 @@ function findLastIndex(array, predicate) {
 export class VirtualAudio extends VirtualElement {
     #isPlaybackPlaying = false;
     audioElement = null;
+    #lastActiveStateId = null; // Stores the ID of the last "play" event processed
 
     get isPlaybackPlaying() {
         return this.#isPlaybackPlaying;
@@ -42,6 +43,9 @@ export class VirtualAudio extends VirtualElement {
         // Set properties
         this.setProperty('src', new AudioSrcProperty(options.src));
         this.setProperty('playback', new AudioPlaybackProperty(options.playback || { loop: false }));
+        
+        // ADDED BACK: The property exists for data/timeline logic, 
+        // but will be hidden in the UI via propertiesPanel.js
         this.setProperty('orchestraContent', new OrchestraContentProperty(options.orchestraContent));
     }
 
@@ -67,9 +71,8 @@ export class VirtualAudio extends VirtualElement {
             if (!this.audioElement.paused) {
                 this.audioElement.pause();
             }
-            this.audioElement.currentTime = 0;
+            // We don't reset currentTime here to allow resuming
         }
-        // The 'else if (isPlaying)' block that was resetting the time has been removed.
     }
 
     applyEvents(measureIndex, measureProgress, timingData) {
@@ -148,27 +151,40 @@ export class VirtualAudio extends VirtualElement {
             loopValue.markAsRendered();
         }
 
-        // Always check and enforce the playback state against the DOM element's actual state.
+        // Check and enforce the playback state
         const intendedState = stateValue.getValue();
+        const currentEventId = stateValue.getId(); // Get unique ID of current state event
+
         if (intendedState === 'playing') {
-            if (this.audioElement.ended) {
+            // Logic:
+            // 1. If ID is different from last time -> Reset to 0 and Play (Trigger).
+            // 2. If ID is same -> Only play if paused AND NOT ENDED (Resume).
+            // This prevents auto-looping when the audio finishes but the state event is still active.
+
+            if (currentEventId !== this.#lastActiveStateId) {
+                // New Event Trigger
+                this.#lastActiveStateId = currentEventId;
                 this.audioElement.currentTime = 0;
+                this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
+            } else {
+                // Same Event Maintenance
+                if (this.audioElement.paused && !this.audioElement.ended) {
+                    this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
+                }
             }
-            if (this.audioElement.paused) {
+        } 
+        else if (intendedState === 'resume') {
+            // 'resume' behavior: Just play, don't reset time.
+            if (this.audioElement.paused && !this.audioElement.ended) {
                 this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
             }
-        } else if (intendedState === 'resume') {
-            if (this.audioElement.paused) {
-                this.audioElement.play().catch(e => console.warn("Audio play failed.", e));
-            }
-        } else if (intendedState === 'paused') {
+        } 
+        else if (intendedState === 'paused') {
             if (!this.audioElement.paused) {
                 this.audioElement.pause();
             }
         }
+        
         stateValue.markAsRendered();
     }
 }
-
-
-

@@ -7,6 +7,9 @@ import { handleSongActivated, handleSongUnloaded, songPlaylist } from './songsMa
 
 // --- State-based Synchronization ---
 let animationFrameId = null;
+// NEW: Rendering Control Flag
+let isRenderingActive = true;
+
 export let localPlaybackState = {
     status: 'unloaded',
     timeAtReference: 0,
@@ -20,6 +23,33 @@ let activeInterpolation = null;
 
 function easeInOutQuad(t) {
     return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+}
+
+/**
+ * NEW: Controls whether the DOM rendering loop is active.
+ * Used to disable DOM updates when this window is acting as a Mirror (displaying video).
+ */
+export function setRenderingActive(active) {
+    isRenderingActive = active;
+    if (active) {
+        // If resuming rendering, determine if we should start the loop or just render a frame
+        if (localPlaybackState.status === 'playing' || activeInterpolation) {
+            startRenderLoop();
+        } else {
+            forceRefresh();
+        }
+    } else {
+        stopRenderLoop();
+    }
+}
+
+/**
+ * NEW: Forces an immediate render of the current state.
+ */
+export function forceRefresh() {
+    if (!state.song) return;
+    const time = getAuthoritativeTime();
+    renderFrameAtTime(time);
 }
 
 /**
@@ -41,7 +71,9 @@ function getAuthoritativeTime() {
 
 function startRenderLoop() {
     stopRenderLoop();
-    animationFrameId = requestAnimationFrame(renderLoop);
+    if (isRenderingActive) {
+        animationFrameId = requestAnimationFrame(renderLoop);
+    }
 }
 
 function stopRenderLoop() {
@@ -52,6 +84,11 @@ function stopRenderLoop() {
 }
 
 function renderLoop() {
+    if (!isRenderingActive) {
+        stopRenderLoop();
+        return;
+    }
+
     let currentTime;
     const now = performance.now();
 
@@ -131,6 +168,7 @@ function renderLoop() {
 }
 
 function renderFrameAtTime(timeInMs) {
+    if (!isRenderingActive) return; // Optimization: Skip calculation if rendering is disabled
     if (!state.song || !state.song.thumbnailPage) return;
     const beatDurationMs = getQuarterNoteDurationMs();
     const rawBeats = beatDurationMs > 0 ? timeInMs / beatDurationMs : 0;
@@ -165,14 +203,18 @@ function renderFrameAtTime(timeInMs) {
     updateTimelineUI({ measureIndex, totalDurationBeats, currentBeats });
 }
 
-function switchVisiblePages(activePagesSet) {
+export function switchVisiblePages(activePagesSet) {
     const allPossiblePages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
     let shouldResize = false;
     for (const page of allPossiblePages) {
         if (activePagesSet.has(page)) {
             const wasAlreadyAdded = page.addedInDom;
             state.domManager.addToDom(page);
-            if (!wasAlreadyAdded) shouldResize = true;
+            if (!wasAlreadyAdded) {
+                // ADDED: Sync playback state for the newly added page so A/V triggers correctly
+                page.handlePlaybackStateChange(state.playback.isPlaying);
+                shouldResize = true;
+            }
         } else {
             state.domManager.removeFromDom(page);
         }
@@ -498,7 +540,4 @@ export function jumpToPage_Player(newPage) {
     const timestamp = performance.timeOrigin + performance.now();
     window.playerAPI.jumpToTime(newTimeAtPause, timestamp);
 }
-
-
-
 

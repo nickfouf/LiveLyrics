@@ -1109,9 +1109,16 @@ export function initEventsEditor() {
 
             editorDataCache.set(eventsState.elementId, structuredClone(eventsToSave.content));
 
-            const element = document.getElementById(eventsState.elementId);
-            if (element) {
-                element.dataset.selectedEventProperties = JSON.stringify(eventsState.selectedProperties);
+            // CHANGED: Use the virtual element's DOM reference directly to ensure we set the property
+            // on the object that will be serialized, even if document.getElementById() might fail or return a stale node.
+            if (eventsState.virtualElement && eventsState.virtualElement.domElement) {
+                eventsState.virtualElement.domElement.dataset.selectedEventProperties = JSON.stringify(eventsState.selectedProperties);
+            } else {
+                // Fallback to standard ID lookup (unlikely to be needed but safe)
+                const element = document.getElementById(eventsState.elementId);
+                if (element) {
+                    element.dataset.selectedEventProperties = JSON.stringify(eventsState.selectedProperties);
+                }
             }
 
             state.eventsEditorCallback(eventsToSave);
@@ -1273,6 +1280,7 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
 
     let selectedProperties = [];
     try {
+        // Read directly from the virtual element's DOM property, not necessarily the live document
         selectedProperties = JSON.parse(element.domElement.dataset.selectedEventProperties || '[]');
     } catch (e) { /* use default empty array */ }
 
@@ -1369,4 +1377,3 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
         renderEventConnectors();
     }, { once: true });
 }
-

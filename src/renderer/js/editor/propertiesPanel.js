@@ -2454,7 +2454,10 @@ export function renderPropertiesPanel(element = state.selectedElement) {
 
     if (element.getProperty('textContent')) buildContentProperty(element, isCollapsed('prop-group-content'));
     if (element.getProperty('lyricsContent')) buildLyricsProperties(element, isCollapsed('prop-group-lyrics'));
-    if (element.getProperty('orchestraContent')) buildOrchestraProperties(element, isCollapsed('prop-group-orchestra'));
+
+    if (element.getProperty('orchestraContent') && element.type !== 'audio') {
+        buildOrchestraProperties(element, isCollapsed('prop-group-orchestra'));
+    }
 
     if (element.getProperty('textStyle')) buildTextStyleProperties(element, isCollapsed('prop-group-textstyle'));
     if (element.getProperty('textShadow')) buildTextShadowProperties(element, isCollapsed('prop-group-textshadow'));

@@ -105,6 +105,8 @@
                     <div id="page-container">
                         <!-- The selected song will be rendered here by the DomManager -->
                     </div>
+                    <!-- NEW: Mirror Video Layer -->
+                    <video id="mirror-video" class="mirror-video-layer" autoplay muted></video>
                 </div>
             </div>
         </div>
@@ -117,7 +119,7 @@
         </div>
     </div>
 
-    <!-- NEW Right Panel: Configuration -->
+    <!-- Right Panel: Configuration -->
     <div id="configuration-panel" class="configuration-panel">
         <div id="configuration-panel-header" class="drawer-header clickable">
             <span class="drawer-collapse-icon">»</span>
@@ -136,6 +138,15 @@
                     <div id="monitor-options-container">
                         <!-- Monitor-specific options will be generated here -->
                     </div>
+                </div>
+                <!-- NEW: Global Latency Control -->
+                <div class="form-group" style="margin-top: 1rem;">
+                    <div class="latency-control">
+                        <label for="global-latency-input">Global Latency:</label>
+                        <input type="number" id="global-latency-input" class="form-input" value="0" min="0" step="1">
+                        <span class="unit-label">ms</span>
+                    </div>
+                    <small style="color: #888; font-size: 0.8rem; display: block; margin-top: 0.25rem;">Delays rendering on the master screen (source).</small>
                 </div>
             </div>
 
@@ -159,11 +170,11 @@
                 </div>
             </div>
 
-            <!-- MODIFIED: Group 3: Device Controller -->
+            <!-- Group 3: Device Controller -->
             <div class="drawer-group">
                 <h4>Device Controller</h4>
                 
-                <!-- ADDED: Auto-Accept Toggle -->
+                <!-- Auto-Accept Toggle -->
                 <div class="form-group" style="margin-bottom: 0.5rem;">
                     <div class="toggle-switch-container">
                         <label for="auto-accept-connections" style="font-size: 0.9rem; color: #aaa;">Auto-Accept Connections</label>
@@ -188,13 +199,11 @@
                     </div>
                     <div class="info-item">
                         <span class="info-label">Latency (RTT):</span>
-                        <!-- MODIFIED: This is now a container for the dynamic list -->
                         <div id="device-rtt-list" class="info-value">---</div>
                     </div>
                 </div>
                 <button id="disconnect-device-btn" class="action-btn danger-btn noneDisplay" style="width: 100%; margin-bottom: 0.5rem;">Disconnect</button>
                 <button id="open-device-list-btn" class="action-btn secondary-btn" style="width: 100%;">Open Device List</button>
-                <!-- ADDED: Tempo Sync Button -->
                 <button id="open-tempo-sync-btn" class="action-btn secondary-btn" style="width: 100%; margin-top: 0.5rem;">Open Tempo Sync</button>
             </div>
         </div>
@@ -223,7 +232,7 @@
     </div>
 </div>
 
-<!-- ADDED: Confirmation Dialog -->
+<!-- Confirmation Dialog -->
 <div id="confirmation-dialog" class="dialog-overlay">
     <div class="dialog-content" style="min-width: 400px; max-width: 500px;">
         <div id="confirmation-dialog-header" class="dialog-header">Confirmation</div>
@@ -237,7 +246,7 @@
     </div>
 </div>
 
-<!-- NEW Dialog for Device List -->
+<!-- Device List Dialog -->
 <div id="device-list-dialog" class="dialog-overlay">
     <div class="dialog-content" style="width: 500px;">
         <div class="dialog-header">Available Devices</div>
@@ -252,7 +261,7 @@
     </div>
 </div>
 
-<!-- ADDED: Dialog for Pairing Request -->
+<!-- Pairing Request Dialog -->
 <div id="pairing-dialog" class="dialog-overlay">
     <div class="dialog-content" style="width: 450px;">
         <div class="dialog-header">Pairing Request</div>
@@ -270,6 +279,4 @@
 <script src="../js/player/main.js" type="module"></script>
 </body>
 </html>
-
-
 

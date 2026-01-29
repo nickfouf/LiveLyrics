@@ -16,6 +16,7 @@ import { TransformProperty } from "../properties/transform.js";
 export class VirtualVideo extends VirtualElement {
     #isPlaybackPlaying = false;
     videoElement = null;
+    #lastActiveStateId = null; // Stores the ID of the last "play" event processed
 
     get isPlaybackPlaying() {
         return this.#isPlaybackPlaying;
@@ -88,26 +89,39 @@ export class VirtualVideo extends VirtualElement {
         const speedValue = playbackProp.getSpeed();
         const loopValue = playbackProp.getLoop();
 
-        // Always check and enforce the playback state against the DOM element's actual state.
         const intendedState = stateValue.getValue();
+        const currentEventId = stateValue.getId(); // Get unique ID of current state event
+
         if (intendedState === 'playing') {
-            // Only reset time if the video has ended.
-            if (this.videoElement.ended) {
+            // Logic:
+            // 1. If ID is different from last time -> Reset to 0 and Play (Trigger).
+            // 2. If ID is same -> Only play if paused AND NOT ENDED (Resume).
+            // This prevents auto-looping when the video finishes but the state event is still active.
+
+            if (currentEventId !== this.#lastActiveStateId) {
+                // New Event Trigger
+                this.#lastActiveStateId = currentEventId;
                 this.videoElement.currentTime = 0;
+                this.videoElement.play().catch(e => console.warn("Video play failed. User interaction might be required.", e));
+            } else {
+                // Same Event Maintenance
+                if (this.videoElement.paused && !this.videoElement.ended) {
+                    this.videoElement.play().catch(e => console.warn("Video play failed. User interaction might be required.", e));
+                }
             }
-            // Only play if it's currently paused (or has just ended).
-            if (this.videoElement.paused) {
+        } 
+        else if (intendedState === 'resume') {
+            // 'resume' behavior: Just play, don't reset time.
+            if (this.videoElement.paused && !this.videoElement.ended) {
                 this.videoElement.play().catch(e => console.warn("Video play failed. User interaction might be required.", e));
             }
-        } else if (intendedState === 'resume') {
-            if (this.videoElement.paused) {
-                this.videoElement.play().catch(e => console.warn("Video play failed. User interaction might be required.", e));
-            }
-        } else if (intendedState === 'paused') {
+        } 
+        else if (intendedState === 'paused') {
             if (!this.videoElement.paused) {
                 this.videoElement.pause();
             }
         }
+        
         stateValue.markAsRendered();
 
 
@@ -124,6 +138,3 @@ export class VirtualVideo extends VirtualElement {
         }
     }
 }
-
-
-

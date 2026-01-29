@@ -421,7 +421,7 @@ export function openOrchestraEditor(initialData, globalMeasureOffset, callback) 
     state.song.pages.forEach((page, pageIndex) => {
         const musicElements = findMusicElementsRecursively(page);
         musicElements.forEach(el => {
-            if (el.type === 'orchestra' || el.type === 'audio') {
+            if ((el.type === 'orchestra' || el.type === 'audio') && el.hasProperty('orchestraContent')) {
                 const content = el.getProperty('orchestraContent').getMeasures();
                 content.forEach(measure => {
                     allMeasures.push({
@@ -503,6 +503,3 @@ export function openOrchestraEditor(initialData, globalMeasureOffset, callback) 
         }, 0);
     });
 }
-
-
-
