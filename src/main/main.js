@@ -17,6 +17,7 @@ const os = require('os');
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+//
 // --- Logger Setup ---
 log.transports.file.resolvePath = () => path.join(app.getPath('userData'), 'logs', 'main.log');
 log.transports.file.level = 'info';
