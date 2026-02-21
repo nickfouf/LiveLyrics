@@ -16,8 +16,8 @@ import {VirtualLyrics} from '../renderer/elements/lyrics.js';
 import {VirtualOrchestra} from '../renderer/elements/orchestra.js';
 import {triggerActivePageRender, renderPageManager} from './pageManager.js';
 import {updateEmptyPageHintVisibility} from './rendering.js';
-import { buildMeasureMap, calculateGlobalMeasureOffsetForElement } from './utils.js';
-import { showLoadingDialog } from './loadingDialog.js';
+import {buildMeasureMap, calculateGlobalMeasureOffsetForElement} from './utils.js';
+import {showLoadingDialog} from './loadingDialog.js';
 import {UnitValue} from "../renderer/values/unit.js";
 import {internalClipboard} from "./internalClipboard.js";
 import {copyStyle, pasteStyle, canPasteStyle} from "./styleClipboard.js";
@@ -25,8 +25,8 @@ import {copyStyle, pasteStyle, canPasteStyle} from "./styleClipboard.js";
 let scrollTimeout = null;
 
 const BLEND_MODES = [
-    'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 
-    'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 
+    'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten',
+    'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference',
     'exclusion', 'hue', 'saturation', 'color', 'luminosity'
 ];
 
@@ -148,14 +148,18 @@ function buildUnitValueUI(propGroupBody, propKey, label, valueObject) {
     const input = formGroup.querySelector('input');
     const select = formGroup.querySelector('select');
     const update = () => {
-        const newValue = { value: parseFloat(input.value) || 0, unit: select.value };
+        const newValue = {value: parseFloat(input.value) || 0, unit: select.value};
         setPropertyAsDefaultValue(state.selectedElement, propKey, newValue);
     };
     input.addEventListener('input', update);
     select.addEventListener('input', update);
 }
 
-function buildNumberInputUI(propGroupBody, propKey, label, valueObject, { min = -Infinity, max = Infinity, step = 1 } = {}) {
+function buildNumberInputUI(propGroupBody, propKey, label, valueObject, {
+    min = -Infinity,
+    max = Infinity,
+    step = 1
+} = {}) {
     const defaultValue = valueObject.getDefaultValue();
     const formGroup = document.createElement('div');
     formGroup.className = 'form-group';
@@ -219,7 +223,7 @@ function buildNumberWithStaticUnitUI(propGroupBody, propKey, label, valueObject,
 }
 
 function buildSelectUI(propGroupBody, propKey, label, valueObject, options) {
-    if(!Array.isArray(options) || options.length === 0) return;
+    if (!Array.isArray(options) || options.length === 0) return;
 
     const defaultValue = valueObject.getDefaultValue();
     const optionsHTML = options.map(opt => `<option value="${opt.value}" ${defaultValue === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('');
@@ -271,6 +275,43 @@ function buildNameProperty(element, isCollapsed) {
     });
 }
 
+function buildBeatPointsProperty(element, isCollapsed) {
+    const propGroup = document.createElement('div');
+    propGroup.id = 'prop-group-beat-points';
+    propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
+
+    const beatPointsProp = element.getProperty('beatPoints');
+    const currentValue = beatPointsProp.getBeatPoints().getValue();
+
+    propGroup.innerHTML = `
+        ${createPropHeader('Playback')}
+        <div class="prop-group-body">
+            <div class="form-group">
+                <label for="prop-beat-points">Beat Points</label>
+                <input type="text" id="prop-beat-points" class="form-input" 
+                       value="${currentValue}" 
+                       placeholder="e.g. 0, 0.5, 0.75">
+                <small style="color: #888; display: block; margin-top: 4px; font-size: 0.8em;">
+                    Comma separated values (0.0 - 0.99)
+                </small>
+            </div>
+        </div>`;
+
+    DOM.propertiesPanelBody.appendChild(propGroup);
+
+    const input = propGroup.querySelector('#prop-beat-points');
+
+    // Add visual indicator if the property is controlled by timeline events
+    checkAndSetEventControl(propGroup.querySelector('.form-group'), beatPointsProp.getBeatPoints());
+
+    input.addEventListener('input', (e) => {
+        // Use the standard helper to update value and handle undo/redo history if you implement it later
+        // or simply update the property directly.
+        // We use setPropertyAsDefaultValue to allow timeline overrides if needed.
+        setPropertyAsDefaultValue(state.selectedElement, 'beatPoints', e.target.value);
+    });
+}
+
 function buildParentPerspectiveProperties(element, isCollapsed) {
     const propGroup = document.createElement('div');
     propGroup.id = 'prop-group-parent-perspective';
@@ -299,10 +340,10 @@ function buildParentPerspectiveProperties(element, isCollapsed) {
     buildNumberWithStaticUnitUI(body, 'parent-rotateX', 'Rotate X', perspectiveProp.getRotateX(), 'deg');
     buildNumberWithStaticUnitUI(body, 'parent-rotateY', 'Rotate Y', perspectiveProp.getRotateY(), 'deg');
     buildNumberWithStaticUnitUI(body, 'parent-rotateZ', 'Rotate Z', perspectiveProp.getRotateZ(), 'deg');
-    buildNumberInputUI(body, 'parent-scale', 'Scale', perspectiveProp.getScale(), { step: 0.01 });
+    buildNumberInputUI(body, 'parent-scale', 'Scale', perspectiveProp.getScale(), {step: 0.01});
     buildSelectUI(body, 'parent-transform-style', 'Transform Style', perspectiveProp.getTransformStyle(), [
-        { value: 'flat', label: 'Flat' },
-        { value: 'preserve-3d', label: 'Preserve 3D' }
+        {value: 'flat', label: 'Flat'},
+        {value: 'preserve-3d', label: 'Preserve 3D'}
     ]);
 
     body.querySelector('#prop-parent-perspective-enabled').addEventListener('change', (e) => {
@@ -359,12 +400,12 @@ function buildSmartEffectSrcProperty(element, isCollapsed) {
         // CHANGED FILTER TO .lyfx
         const originalPath = await window.editorAPI.showOpenDialog({
             properties: ['openFile'],
-            filters: [{ name: 'Smart Effects', extensions: ['lyfx'] }]
+            filters: [{name: 'Smart Effects', extensions: ['lyfx']}]
         });
         if (!originalPath) return;
 
         // Uses standard loading dialog
-        const { showLoadingDialog, hideLoadingDialog } = await import('./loadingDialog.js');
+        const {showLoadingDialog, hideLoadingDialog} = await import('./loadingDialog.js');
         const hideLoading = showLoadingDialog('Importing effect...');
         try {
             // Main process extracts zip and returns path to index.html
@@ -418,7 +459,7 @@ function buildImageSrcProperty(element, isCollapsed) {
 
         const originalPath = await window.editorAPI.showOpenDialog({
             properties: ['openFile'],
-            filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }]
+            filters: [{name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']}]
         });
         if (!originalPath) return;
 
@@ -469,7 +510,7 @@ function buildVideoSrcProperty(element, isCollapsed) {
 
         const originalPath = await window.editorAPI.showOpenDialog({
             properties: ['openFile'],
-            filters: [{ name: 'Videos', extensions: ['mp4', 'webm', 'mov'] }]
+            filters: [{name: 'Videos', extensions: ['mp4', 'webm', 'mov']}]
         });
         if (!originalPath) return;
 
@@ -520,7 +561,7 @@ function buildAudioSrcProperty(element, isCollapsed) {
 
         const originalPath = await window.editorAPI.showOpenDialog({
             properties: ['openFile'],
-            filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'aac', 'flac'] }]
+            filters: [{name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'aac', 'flac']}]
         });
         if (!originalPath) return;
 
@@ -871,7 +912,7 @@ function buildOrchestraProperties(element, isCollapsed) {
     DOM.propertiesPanelBody.appendChild(propGroup);
     propGroup.querySelector('#edit-orchestra-btn').addEventListener('click', () => {
         const orchestraProp = element.getProperty('orchestraContent');
-        const currentData = { measures: orchestraProp.getMeasures() };
+        const currentData = {measures: orchestraProp.getMeasures()};
 
         const measureMap = buildMeasureMap();
         const offset = calculateGlobalMeasureOffsetForElement(element.id, measureMap);
@@ -951,8 +992,14 @@ function buildDimensionProperties(element, isCollapsed) {
     const heightUnitSelect = heightGroup.querySelector('select');
 
     const update = () => {
-        setPropertyAsDefaultValue(state.selectedElement, 'width', { value: parseFloat(widthInput.value) || 0, unit: widthUnitSelect.value });
-        setPropertyAsDefaultValue(state.selectedElement, 'height', { value: parseFloat(heightInput.value) || 0, unit: heightUnitSelect.value });
+        setPropertyAsDefaultValue(state.selectedElement, 'width', {
+            value: parseFloat(widthInput.value) || 0,
+            unit: widthUnitSelect.value
+        });
+        setPropertyAsDefaultValue(state.selectedElement, 'height', {
+            value: parseFloat(heightInput.value) || 0,
+            unit: heightUnitSelect.value
+        });
     };
 
     widthInput.addEventListener('input', update);
@@ -1212,7 +1259,7 @@ function buildBackgroundColorProperty(element, isCollapsed) {
         const picker = isPage ? openOpaqueColorPicker : openColorPicker;
         picker(currentCSS, (newColor) => {
             const p = parseColorString(newColor);
-            setPropertyAsDefaultValue(state.selectedElement, 'bgColor', { mode: 'color', ...p });
+            setPropertyAsDefaultValue(state.selectedElement, 'bgColor', {mode: 'color', ...p});
             renderPropertiesPanel();
         });
     });
@@ -1277,8 +1324,16 @@ function buildBackgroundColorProperty(element, isCollapsed) {
             const switchToColor = btn.dataset.tab === 'color';
             if (switchToColor !== isColor) {
                 const newObj = switchToColor
-                    ? { mode: 'color', r: 0, g: 0, b: 0, a: 1 }
-                    : { mode: 'gradient', type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 255, a: 1 } }, { position: 100, color: { r: 0, g: 255, b: 224, a: 1 } }] };
+                    ? {mode: 'color', r: 0, g: 0, b: 0, a: 1}
+                    : {
+                        mode: 'gradient',
+                        type: 'linear',
+                        angle: 90,
+                        colorStops: [{position: 0, color: {r: 255, g: 0, b: 255, a: 1}}, {
+                            position: 100,
+                            color: {r: 0, g: 255, b: 224, a: 1}
+                        }]
+                    };
                 setPropertyAsDefaultValue(state.selectedElement, 'bgColor', newObj);
                 renderPropertiesPanel();
             }
@@ -1366,8 +1421,17 @@ function buildBoxShadowProperties(element, isCollapsed) {
     }
     body.appendChild(controlsContainer);
 
-    buildSliderWithInputUI(controlsContainer, 'shadowAngle', 'Angle', values.shadowAngle, { min: 0, max: 360, step: 1, unit: '°' });
-    buildSliderWithInputUI(controlsContainer, 'shadowDistance', 'Distance', values.shadowDistance, { min: 0, max: 200, step: 1 });
+    buildSliderWithInputUI(controlsContainer, 'shadowAngle', 'Angle', values.shadowAngle, {
+        min: 0,
+        max: 360,
+        step: 1,
+        unit: '°'
+    });
+    buildSliderWithInputUI(controlsContainer, 'shadowDistance', 'Distance', values.shadowDistance, {
+        min: 0,
+        max: 200,
+        step: 1
+    });
 
     // --- FIX START: Use 'blur' and 'spread' instead of 'shadowBlur' and 'shadowSpread' ---
     buildUnitValueUI(controlsContainer, 'shadowBlur', 'Blur', values.blur);
@@ -1502,7 +1566,7 @@ function buildProgressProperties(element, isCollapsed) {
 
     bgColorSwatch.addEventListener('click', () => {
         openColorPicker(bgColorValue.getCSSValue(), newColor => {
-            progressProp.setBackgroundColor({ mode: 'color', ...parseColorString(newColor) }, true);
+            progressProp.setBackgroundColor({mode: 'color', ...parseColorString(newColor)}, true);
             markAsDirty();
             triggerActivePageRender(false);
             renderPropertiesPanel();
@@ -1541,8 +1605,16 @@ function buildProgressProperties(element, isCollapsed) {
             const switchToColor = btn.dataset.tab === 'color';
             if (switchToColor !== isBgColor) {
                 const newObj = switchToColor
-                    ? { mode: 'color', r: 220, g: 220, b: 220, a: 1 }
-                    : { mode: 'gradient', type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 255, a: 1 } }, { position: 100, color: { r: 0, g: 255, b: 224, a: 1 } }] };
+                    ? {mode: 'color', r: 220, g: 220, b: 220, a: 1}
+                    : {
+                        mode: 'gradient',
+                        type: 'linear',
+                        angle: 90,
+                        colorStops: [{position: 0, color: {r: 255, g: 0, b: 255, a: 1}}, {
+                            position: 100,
+                            color: {r: 0, g: 255, b: 224, a: 1}
+                        }]
+                    };
                 progressProp.setBackgroundColor(newObj, true);
                 markAsDirty();
                 triggerActivePageRender(false);
@@ -1583,7 +1655,7 @@ function buildProgressProperties(element, isCollapsed) {
 
     fillColorSwatch.addEventListener('click', () => {
         openColorPicker(fillColorValue.getCSSValue(), newColor => {
-            progressProp.setFillColor({ mode: 'color', ...parseColorString(newColor) }, true);
+            progressProp.setFillColor({mode: 'color', ...parseColorString(newColor)}, true);
             markAsDirty();
             triggerActivePageRender(false);
             renderPropertiesPanel();
@@ -1622,8 +1694,16 @@ function buildProgressProperties(element, isCollapsed) {
             const switchToColor = btn.dataset.tab === 'color';
             if (switchToColor !== isFillColor) {
                 const newObj = switchToColor
-                    ? { mode: 'color', r: 0, g: 120, b: 215, a: 1 }
-                    : { mode: 'gradient', type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 0, a: 1 } }, { position: 100, color: { r: 255, g: 255, b: 0, a: 1 } }] }
+                    ? {mode: 'color', r: 0, g: 120, b: 215, a: 1}
+                    : {
+                        mode: 'gradient',
+                        type: 'linear',
+                        angle: 90,
+                        colorStops: [{position: 0, color: {r: 255, g: 0, b: 0, a: 1}}, {
+                            position: 100,
+                            color: {r: 255, g: 255, b: 0, a: 1}
+                        }]
+                    }
                 progressProp.setFillColor(newObj, true);
                 markAsDirty();
                 triggerActivePageRender(false);
@@ -1874,19 +1954,48 @@ function buildTextStyleProperties(element, isCollapsed) {
     });
 
     // Non-animatable properties update directly
-    fontWeightSelect.addEventListener('input', (e) => { textStyleProp.setFontWeight(e.target.value, true); markAsDirty(); triggerActivePageRender(true); });
-    fontStyleSelect.addEventListener('input', (e) => { textStyleProp.setFontStyle(e.target.value, true); markAsDirty(); triggerActivePageRender(true); });
-    alignButtons.forEach(btn => btn.addEventListener('click', () => { textStyleProp.setTextAlign(btn.dataset.align, true); markAsDirty(); triggerActivePageRender(true); renderPropertiesPanel(); }));
-    justifyToggle.addEventListener('change', (e) => { textStyleProp.setJustifyText(e.target.checked, true); markAsDirty(); triggerActivePageRender(true); });
+    fontWeightSelect.addEventListener('input', (e) => {
+        textStyleProp.setFontWeight(e.target.value, true);
+        markAsDirty();
+        triggerActivePageRender(true);
+    });
+    fontStyleSelect.addEventListener('input', (e) => {
+        textStyleProp.setFontStyle(e.target.value, true);
+        markAsDirty();
+        triggerActivePageRender(true);
+    });
+    alignButtons.forEach(btn => btn.addEventListener('click', () => {
+        textStyleProp.setTextAlign(btn.dataset.align, true);
+        markAsDirty();
+        triggerActivePageRender(true);
+        renderPropertiesPanel();
+    }));
+    justifyToggle.addEventListener('change', (e) => {
+        textStyleProp.setJustifyText(e.target.checked, true);
+        markAsDirty();
+        triggerActivePageRender(true);
+    });
 
     // Animatable properties use setPropertyAsDefaultValue
-    const updateFontSize = () => setPropertyAsDefaultValue(state.selectedElement, 'fontSize', { value: parseFloat(fontSizeInput.value) || 0, unit: fontSizeUnitSelect.value });
+    const updateFontSize = () => setPropertyAsDefaultValue(state.selectedElement, 'fontSize', {
+        value: parseFloat(fontSizeInput.value) || 0,
+        unit: fontSizeUnitSelect.value
+    });
     fontSizeInput.addEventListener('input', updateFontSize);
     fontSizeUnitSelect.addEventListener('input', updateFontSize);
 
-    lineHeightInput.addEventListener('input', (e) => setPropertyAsDefaultValue(state.selectedElement, 'lineHeight', (isLyrics ? { value: parseFloat(e.target.value) || 0, unit: 'px' } : parseFloat(e.target.value) || 0)));
-    letterSpacingInput.addEventListener('input', (e) => setPropertyAsDefaultValue(state.selectedElement, 'letterSpacing', { value: parseFloat(e.target.value) || 0, unit: 'px' }));
-    wordSpacingInput.addEventListener('input', (e) => setPropertyAsDefaultValue(state.selectedElement, 'wordSpacing', { value: parseFloat(e.target.value) || 0, unit: 'px' }));
+    lineHeightInput.addEventListener('input', (e) => setPropertyAsDefaultValue(state.selectedElement, 'lineHeight', (isLyrics ? {
+        value: parseFloat(e.target.value) || 0,
+        unit: 'px'
+    } : parseFloat(e.target.value) || 0)));
+    letterSpacingInput.addEventListener('input', (e) => setPropertyAsDefaultValue(state.selectedElement, 'letterSpacing', {
+        value: parseFloat(e.target.value) || 0,
+        unit: 'px'
+    }));
+    wordSpacingInput.addEventListener('input', (e) => setPropertyAsDefaultValue(state.selectedElement, 'wordSpacing', {
+        value: parseFloat(e.target.value) || 0,
+        unit: 'px'
+    }));
 
     // Text Color Listeners
     const textColorSwatch = propGroup.querySelector('#prop-text-color');
@@ -1897,12 +2006,19 @@ function buildTextStyleProperties(element, isCollapsed) {
 
     textColorSwatch.addEventListener('click', () => {
         openColorPicker(textColorCSS, (newColor) => {
-            setPropertyAsDefaultValue(state.selectedElement, 'textColor', { mode: 'color', ...parseColorString(newColor) });
+            setPropertyAsDefaultValue(state.selectedElement, 'textColor', {mode: 'color', ...parseColorString(newColor)});
             renderPropertiesPanel();
         });
     });
     textGradientPreview.addEventListener('click', () => {
-        const currentGradient = textColorObject.mode === 'gradient' ? textColorObject : { type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 255, a: 1 } }, { position: 100, color: { r: 0, g: 255, b: 224, a: 1 } }] };
+        const currentGradient = textColorObject.mode === 'gradient' ? textColorObject : {
+            type: 'linear',
+            angle: 90,
+            colorStops: [{position: 0, color: {r: 255, g: 0, b: 255, a: 1}}, {
+                position: 100,
+                color: {r: 0, g: 255, b: 224, a: 1}
+            }]
+        };
         const gradientForEditor = {
             type: currentGradient.type || 'linear',
             angle: currentGradient.angle,
@@ -1931,8 +2047,16 @@ function buildTextStyleProperties(element, isCollapsed) {
             const switchToColor = btn.dataset.tab === 'color';
             if (switchToColor !== isTextColor) {
                 const newObj = switchToColor
-                    ? { mode: 'color', r: 255, g: 255, b: 255, a: 1 }
-                    : { mode: 'gradient', type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 255, a: 1 } }, { position: 100, color: { r: 0, g: 255, b: 224, a: 1 } }] };
+                    ? {mode: 'color', r: 255, g: 255, b: 255, a: 1}
+                    : {
+                        mode: 'gradient',
+                        type: 'linear',
+                        angle: 90,
+                        colorStops: [{position: 0, color: {r: 255, g: 0, b: 255, a: 1}}, {
+                            position: 100,
+                            color: {r: 0, g: 255, b: 224, a: 1}
+                        }]
+                    };
                 setPropertyAsDefaultValue(state.selectedElement, 'textColor', newObj);
                 renderPropertiesPanel();
             }
@@ -1971,12 +2095,19 @@ function buildTextStyleProperties(element, isCollapsed) {
 
         karaokeColorSwatch.addEventListener('click', () => {
             openColorPicker(karaokeColorCSS, (newColor) => {
-                setPropertyAsDefaultValue(state.selectedElement, 'karaokeColor', { mode: 'color', ...parseColorString(newColor) });
+                setPropertyAsDefaultValue(state.selectedElement, 'karaokeColor', {mode: 'color', ...parseColorString(newColor)});
                 renderPropertiesPanel();
             });
         });
         karaokeGradientPreview.addEventListener('click', () => {
-            const currentGradient = karaokeColorObject.mode === 'gradient' ? karaokeColorObject : { type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 0, a: 1 } }, { position: 100, color: { r: 255, g: 255, b: 0, a: 1 } }] };
+            const currentGradient = karaokeColorObject.mode === 'gradient' ? karaokeColorObject : {
+                type: 'linear',
+                angle: 90,
+                colorStops: [{position: 0, color: {r: 255, g: 0, b: 0, a: 1}}, {
+                    position: 100,
+                    color: {r: 255, g: 255, b: 0, a: 1}
+                }]
+            };
             const gradientForEditor = {
                 type: currentGradient.type || 'linear',
                 angle: currentGradient.angle,
@@ -2005,8 +2136,16 @@ function buildTextStyleProperties(element, isCollapsed) {
                 const switchToColor = btn.dataset.tab === 'color';
                 if (switchToColor !== isKaraokeColor) {
                     const newObj = switchToColor
-                        ? { mode: 'color', r: 255, g: 0, b: 0, a: 1 }
-                        : { mode: 'gradient', type: 'linear', angle: 90, colorStops: [{ position: 0, color: { r: 255, g: 0, b: 0, a: 1 } }, { position: 100, color: { r: 255, g: 255, b: 0, a: 1 } }] };
+                        ? {mode: 'color', r: 255, g: 0, b: 0, a: 1}
+                        : {
+                            mode: 'gradient',
+                            type: 'linear',
+                            angle: 90,
+                            colorStops: [{position: 0, color: {r: 255, g: 0, b: 0, a: 1}}, {
+                                position: 100,
+                                color: {r: 255, g: 255, b: 0, a: 1}
+                            }]
+                        };
                     setPropertyAsDefaultValue(state.selectedElement, 'karaokeColor', newObj);
                     renderPropertiesPanel();
                 }
@@ -2031,6 +2170,63 @@ function buildTextStyleProperties(element, isCollapsed) {
             });
         }
     }
+}
+
+function buildTextStrokeProperties(element, isCollapsed) {
+    const propGroup = document.createElement('div');
+    propGroup.id = 'prop-group-textstroke';
+    propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
+    const strokeProp = element.getProperty('textStroke');
+    if (!strokeProp) return;
+
+    propGroup.innerHTML = `
+        ${createPropHeader('Text Stroke')}
+        <div class="prop-group-body">
+            <div class="form-group">
+                <div class="toggle-switch-container">
+                    <label for="prop-textstroke-enabled">Enabled</label>
+                    <label class="toggle-switch"><input type="checkbox" id="prop-textstroke-enabled" ${strokeProp.getEnabled().getDefaultValue() ? 'checked' : ''}><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+        </div>`;
+    DOM.propertiesPanelBody.appendChild(propGroup);
+
+    const body = propGroup.querySelector('.prop-group-body');
+    const controlsContainer = document.createElement('div');
+    if (!strokeProp.getEnabled().getDefaultValue()) {
+        controlsContainer.classList.add('controls-disabled');
+    }
+    body.appendChild(controlsContainer);
+
+    checkAndSetEventControl(propGroup.querySelector('.toggle-switch-container'), strokeProp.getEnabled());
+
+    // Width Input
+    buildUnitValueUI(controlsContainer, 'textStrokeWidth', 'Width', strokeProp.getWidth());
+
+    // Color Input
+    const colorGroup = document.createElement('div');
+    colorGroup.className = 'form-group';
+    colorGroup.dataset.propKey = 'textStrokeColor';
+    const defaultColor = strokeProp.getColor().getDefaultValue();
+    colorGroup.innerHTML = `
+        <label>Color</label>
+        <div class="color-swatch" id="prop-textstroke-color"><div class="color-swatch-inner" style="background: ${generateCSSColor(defaultColor)};"></div></div>
+    `;
+    controlsContainer.appendChild(colorGroup);
+    checkAndSetEventControl(colorGroup, strokeProp.getColor());
+
+    // Listeners
+    propGroup.querySelector('#prop-textstroke-enabled').addEventListener('change', (e) => {
+        setPropertyAsDefaultValue(state.selectedElement, 'textStrokeEnabled', e.target.checked);
+        renderPropertiesPanel();
+    });
+
+    colorGroup.querySelector('#prop-textstroke-color').addEventListener('click', () => {
+        openOpaqueColorPicker(generateCSSColor(strokeProp.getColor().getDefaultValue()), (newColor) => {
+            setPropertyAsDefaultValue(state.selectedElement, 'textStrokeColor', parseColorString(newColor));
+            renderPropertiesPanel();
+        });
+    });
 }
 
 function buildTextShadowProperties(element, isCollapsed) {
@@ -2063,8 +2259,17 @@ function buildTextShadowProperties(element, isCollapsed) {
     checkAndSetEventControl(propGroup.querySelector('.toggle-switch-container'), values.enabled);
 
     // New Angle and Distance Seekbars
-    buildSliderWithInputUI(controlsContainer, 'textShadowAngle', 'Angle', values.textShadowAngle, { min: 0, max: 360, step: 1, unit: '°' });
-    buildSliderWithInputUI(controlsContainer, 'textShadowDistance', 'Distance', values.textShadowDistance, { min: 0, max: 200, step: 1 });
+    buildSliderWithInputUI(controlsContainer, 'textShadowAngle', 'Angle', values.textShadowAngle, {
+        min: 0,
+        max: 360,
+        step: 1,
+        unit: '°'
+    });
+    buildSliderWithInputUI(controlsContainer, 'textShadowDistance', 'Distance', values.textShadowDistance, {
+        min: 0,
+        max: 200,
+        step: 1
+    });
 
     buildUnitValueUI(controlsContainer, 'textShadowBlur', 'Blur', values.blur);
 
@@ -2095,7 +2300,7 @@ function buildTextShadowProperties(element, isCollapsed) {
 /**
  * Helper to build a property row with a seekbar (range) and a numeric input.
  */
-function buildSliderWithInputUI(container, propKey, label, valueObject, { min, max, step, unit = '' }) {
+function buildSliderWithInputUI(container, propKey, label, valueObject, {min, max, step, unit = ''}) {
     const isUnitValue = valueObject instanceof UnitValue;
     const defaultValue = isUnitValue ? valueObject.getDefaultValue().value : valueObject.getDefaultValue();
     const defaultUnit = isUnitValue ? valueObject.getDefaultValue().unit : unit;
@@ -2117,7 +2322,7 @@ function buildSliderWithInputUI(container, propKey, label, valueObject, { min, m
     const num = formGroup.querySelector('.number-input');
 
     const update = (val) => {
-        const finalValue = isUnitValue ? { value: val, unit: 'px' } : val;
+        const finalValue = isUnitValue ? {value: val, unit: 'px'} : val;
         setPropertyAsDefaultValue(state.selectedElement, propKey, finalValue);
     };
 
@@ -2137,7 +2342,7 @@ function buildEffectsProperties(element, isCollapsed) {
     propGroup.id = 'prop-group-effects';
     propGroup.className = `prop-group ${isCollapsed ? 'collapsed' : ''}`;
     const effectsProp = element.getProperty('effects');
-    
+
     const opacityVal = effectsProp.getOpacity();
     const defaultOpacity = opacityVal.getDefaultValue();
 
@@ -2146,7 +2351,7 @@ function buildEffectsProperties(element, isCollapsed) {
     const defaultBlendMode = blendModeVal.getDefaultValue();
 
     // Generate options HTML
-    const blendOptions = BLEND_MODES.map(mode => 
+    const blendOptions = BLEND_MODES.map(mode =>
         `<option value="${mode}" ${defaultBlendMode === mode ? 'selected' : ''}>${mode.charAt(0).toUpperCase() + mode.slice(1)}</option>`
     ).join('');
 
@@ -2232,8 +2437,8 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
 
     buildUnitValueUI(body2D, 'translateX', 'Translate X', transformProp.getTranslateX());
     buildUnitValueUI(body2D, 'translateY', 'Translate Y', transformProp.getTranslateY());
-    buildNumberInputUI(body2D, 'scaleX', 'Scale X', transformProp.getScaleX(), { step: 0.01 });
-    buildNumberInputUI(body2D, 'scaleY', 'Scale Y', transformProp.getScaleY(), { step: 0.01 });
+    buildNumberInputUI(body2D, 'scaleX', 'Scale X', transformProp.getScaleX(), {step: 0.01});
+    buildNumberInputUI(body2D, 'scaleY', 'Scale Y', transformProp.getScaleY(), {step: 0.01});
     buildNumberWithStaticUnitUI(body2D, 'rotate', 'Rotate', transformProp.getRotate(), 'deg');
     buildNumberWithStaticUnitUI(body2D, 'skewX', 'Skew X', transformProp.getSkewX(), 'deg');
     buildNumberWithStaticUnitUI(body2D, 'skewY', 'Skew Y', transformProp.getSkewY(), 'deg');
@@ -2251,7 +2456,7 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
     DOM.propertiesPanelBody.appendChild(propGroup3D);
 
     buildUnitValueUI(body3D, 'translateZ', 'Translate Z', transformProp.getTranslateZ());
-    buildNumberInputUI(body3D, 'scaleZ', 'Scale Z', transformProp.getScaleZ(), { step: 0.01 });
+    buildNumberInputUI(body3D, 'scaleZ', 'Scale Z', transformProp.getScaleZ(), {step: 0.01});
     buildNumberWithStaticUnitUI(body3D, 'rotateX', 'Rotate X', transformProp.getRotateX(), 'deg');
     buildNumberWithStaticUnitUI(body3D, 'rotateY', 'Rotate Y', transformProp.getRotateY(), 'deg');
     buildNumberWithStaticUnitUI(body3D, 'rotateZ', 'Rotate Z', transformProp.getRotateZ(), 'deg');
@@ -2259,12 +2464,12 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
     buildUnitValueUI(body3D, 'selfPerspective', 'Self-perspective', transformProp.getSelfPerspective());
     buildUnitValueUI(body3D, 'childrenPerspective', 'Children Perspective', transformProp.getChildrenPerspective());
     buildSelectUI(body3D, 'transform-style', 'Transform Style', transformProp.getTransformStyle(), [
-        { value: 'flat', label: 'Flat' },
-        { value: 'preserve-3d', label: 'Preserve 3D' }
+        {value: 'flat', label: 'Flat'},
+        {value: 'preserve-3d', label: 'Preserve 3D'}
     ]);
     buildSelectUI(body3D, 'backface-visibility', 'Backface Visibility', [
-        { value: 'visible', label: 'Visible' },
-        { value: 'hidden', label: 'Hidden' }
+        {value: 'visible', label: 'Visible'},
+        {value: 'hidden', label: 'Hidden'}
     ]);
 
     propGroup2D.querySelector('#prop-transform-enabled').addEventListener('change', (e) => {
@@ -2413,6 +2618,7 @@ export function renderPropertiesPanel(element = state.selectedElement) {
                 break;
             case 'smart-effect':
                 if (groupId === 'prop-group-smart-effect-src') return false;
+                if (groupId === 'prop-group-beat-points') return false;
                 break;
         }
 
@@ -2427,6 +2633,9 @@ export function renderPropertiesPanel(element = state.selectedElement) {
 
     if (element.getProperty('src')) {
         if (elementType === 'smart-effect') {
+            if (element.getProperty('beatPoints')) {
+                buildBeatPointsProperty(element, isCollapsed('prop-group-beat-points'));
+            }
             buildSmartEffectSrcProperty(element, isCollapsed('prop-group-smart-effect-src'));
         } else if (elementType === 'image') {
             buildImageSrcProperty(element, isCollapsed('prop-group-imagesrc'));
@@ -2461,6 +2670,7 @@ export function renderPropertiesPanel(element = state.selectedElement) {
 
     if (element.getProperty('textStyle')) buildTextStyleProperties(element, isCollapsed('prop-group-textstyle'));
     if (element.getProperty('textShadow')) buildTextShadowProperties(element, isCollapsed('prop-group-textshadow'));
+    if (element.getProperty('textStroke')) buildTextStrokeProperties(element, isCollapsed('prop-group-textstroke'));
     if (element.getProperty('progress')) buildProgressProperties(element, isCollapsed('prop-group-progress'));
 
     if (!isPage && element.getProperty('dimensions')) buildDimensionProperties(element, isCollapsed('prop-group-dimensions'));

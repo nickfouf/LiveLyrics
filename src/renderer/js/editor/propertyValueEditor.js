@@ -18,7 +18,7 @@ let localState = {
 
 // --- Helper Constants ---
 const COLOR_ONLY_PROPERTIES = new Set([
-    'borderColor', 'shadowColor', 'textStrokeColor', 'textShadowColor', 'textShadowColor'
+    'borderColor', 'shadowColor', 'textStrokeColor', 'textShadowColor', 'textShadowColor', 'textStrokeColor'
 ]);
 
 const BLEND_MODES = [

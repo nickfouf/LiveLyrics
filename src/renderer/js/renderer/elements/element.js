@@ -265,6 +265,9 @@ export class VirtualElement {
             right: { prop: 'margin', value: 'right' },
             bottom: { prop: 'margin', value: 'bottom' },
 
+            // --- Smart Effect ---
+            beatPoints: { prop: 'beatPoints', value: 'beatPoints' },
+
             // --- Background ---
             bgEnabled: { prop: 'background', value: 'enabled' },
             bgColor: { prop: 'background', value: 'background' },
@@ -309,6 +312,9 @@ export class VirtualElement {
             textShadowDistance: { prop: 'textShadow', value: 'textShadowDistance' },
             textShadowBlur: { prop: 'textShadow', value: 'blur' },  // Internal key is 'blur'
             textShadowColor: { prop: 'textShadow', value: 'color' }, // Internal key is 'color'
+            textStrokeEnabled: { prop: 'textStroke', value: 'enabled' },
+            textStrokeWidth: { prop: 'textStroke', value: 'width' },
+            textStrokeColor: { prop: 'textStroke', value: 'color' },
 
             // --- Layout ---
             gap: { prop: 'gap', value: 'gap' },

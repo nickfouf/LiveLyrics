@@ -112,6 +112,7 @@ export function getPropertyType(propKey) {
 
         // String (text content)
         case 'content':
+        case 'beatPoints':
         case 'fontFamily':
         case 'fontWeight':
         case 'fontStyle':
@@ -642,6 +643,7 @@ export function getAvailablePropertiesForElement(element) {
         case 'smart-effect':
             props = {
                 ...props,
+                "Playback": { "beatPoints": "Beat Points" },
                 ...commonDimensions,
                 ...commonMargin,
                 ...commonEffects,

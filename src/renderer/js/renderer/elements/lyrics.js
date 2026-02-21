@@ -18,6 +18,7 @@ import { getTextMetrics } from '../textMetrics.js';
 import { TransformProperty } from '../properties/transform.js';
 import { resolveFontFamily } from '../utils.js';
 import { TextShadowProperty } from "../properties/textShadow.js";
+import { TextStrokeProperty } from "../properties/textStroke.js";
 
 
 export class VirtualLyrics extends VirtualElement {
@@ -38,6 +39,19 @@ export class VirtualLyrics extends VirtualElement {
             .text-color { fill: var(--text-color, #ffffff); }
             .karaoke-color { fill: var(--karaoke-color, blue); }
             .stroke-color { stroke: var(--stroke-color, black); stroke-width: 3px; }
+            
+            /* Background Stroke Layer */
+            .stroke-layer {
+                fill: none;
+                stroke: var(--text-stroke-color, black);
+                stroke-width: var(--text-stroke-width, 0px);
+                stroke-linejoin: round;
+                stroke-linecap: round;
+                display: none; 
+            }
+            svg.has-stroke .stroke-layer {
+                display: block; 
+            }
         `;
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
 
@@ -55,6 +69,7 @@ export class VirtualLyrics extends VirtualElement {
         this.setProperty('textStyle', new TextStyleLyricsProperty(finalTextStyle));
         this.setProperty('highlightedPercentage', new HighlightedPercentage(options.highlightedPercentage));
         this.setProperty('textShadow', new TextShadowProperty(options.textShadow));
+        this.setProperty('textStroke', new TextStrokeProperty(options.textStroke));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {
             width: { value: 100, unit: 'auto' },

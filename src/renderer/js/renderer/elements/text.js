@@ -13,6 +13,7 @@ import { BoxShadowProperty } from "../properties/boxShadow.js";
 import { BackgroundProperty } from "../properties/backgroundCG.js";
 import { TransformProperty } from '../properties/transform.js';
 import { TextShadowProperty } from "../properties/textShadow.js";
+import { TextStrokeProperty } from "../properties/textStroke.js";
 
 /**
  * Escapes HTML special characters to prevent HTML injection.
@@ -67,6 +68,7 @@ export class VirtualText extends VirtualElement {
         this.setProperty('textContent', new TextContentProperty(initialText));
         this.setProperty('textStyle', new TextStyleProperty(finalTextStyle));
         this.setProperty('textShadow', new TextShadowProperty(options.textShadow));
+        this.setProperty('textStroke', new TextStrokeProperty(options.textStroke));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions || {width: {value:100, unit:'auto'}, height: {value:100, unit:'auto'}}));
         this.setProperty('margin', new MarginProperty(options.margin));

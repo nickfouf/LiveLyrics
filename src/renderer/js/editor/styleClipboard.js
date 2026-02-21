@@ -13,7 +13,8 @@ const STYLE_GROUPS = [
     'boxShadow', 
     'effects', 
     'textStyle', 
-    'textShadow', 
+    'textShadow',
+    'textStroke',
     'margin', 
     'inner_padding', 
     'gap', 
@@ -182,6 +183,11 @@ function applyRecursive(element, propGroupKey, valueObj) {
             { json: 'textShadowDistance', ui: 'textShadowDistance' },
             { json: 'blur', ui: 'textShadowBlur' },
             { json: 'color', ui: 'textShadowColor' }
+        ],
+        'textStroke': [
+            { json: 'enabled', ui: 'textStrokeEnabled' },
+            { json: 'width', ui: 'textStrokeWidth' },
+            { json: 'color', ui: 'textStrokeColor' }
         ],
         'effects': [
             { json: 'opacity', ui: 'opacity' },

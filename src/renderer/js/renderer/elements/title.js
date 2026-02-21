@@ -1,3 +1,5 @@
+// renderer/js/renderer/elements/title.js
+
 import { VirtualText } from "./text.js";
 import { NameProperty } from "../properties/name.js";
 
@@ -9,6 +11,8 @@ export class VirtualTitle extends VirtualText {
             textAlign: 'center'
         };
         const finalTextStyle = { ...defaultTitleStyle, ...(options.textStyle || {}) };
+        
+        // ADDED: Ensure we pass the options down properly so TextStroke is picked up by VirtualText
         const finalOptions = {
             ...options,
             textContent: options.textContent || 'Title Content',
@@ -20,6 +24,3 @@ export class VirtualTitle extends VirtualText {
         this.setProperty('name', new NameProperty(name));
     }
 }
-
-
-

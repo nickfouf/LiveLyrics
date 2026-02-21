@@ -6,8 +6,9 @@ import { MarginProperty } from "../properties/margin.js";
 import { EffectsProperty } from "../properties/effects.js";
 import { SmartEffectSrcProperty } from "../properties/smartEffectSrcProperty.js";
 import { TransformProperty } from "../properties/transform.js";
-import { BorderProperty } from "../properties/border.js"; // Added common props
-import { BoxShadowProperty } from "../properties/boxShadow.js"; // Added common props
+import { BorderProperty } from "../properties/border.js"; 
+import { BoxShadowProperty } from "../properties/boxShadow.js"; 
+import { BeatPointsProperty } from "../properties/beatPoints.js"; // <--- IMPORTED
 
 export class VirtualSmartEffect extends VirtualElement {
     #addedInDom = false;
@@ -18,7 +19,6 @@ export class VirtualSmartEffect extends VirtualElement {
     
     set addedInDom(value) {
         this.#addedInDom = value;
-        // The iframe will automatically load/unload when attached/detached from DOM.
     }
 
     constructor(options = {}) {
@@ -39,28 +39,56 @@ export class VirtualSmartEffect extends VirtualElement {
         this.iframe.style.height = '100%';
         this.iframe.style.border = 'none';
         this.iframe.style.display = 'block';
-        
-        // Important: In the editor, iframes capture mouse events, making drag/drop impossible.
-        // We set pointer-events to none on the iframe so the container div receives the clicks.
         this.iframe.style.pointerEvents = 'none'; 
 
         this.domElement.appendChild(this.iframe);
 
         // Add properties
-        this.setProperty('src', new SmartEffectSrcProperty(options.src)); // This now holds URL
+        this.setProperty('src', new SmartEffectSrcProperty(options.src));
+        
+        // --- ADDED: Initialize BeatPointsProperty ---
+        // Defaults to '0' (beat at the start of measure)
+        this.setProperty('beatPoints', new BeatPointsProperty(options.beatPoints || '0')); 
+        
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions));
         this.setProperty('margin', new MarginProperty(options.margin));
         this.setProperty('effects', new EffectsProperty(options.effects));
         this.setProperty('transform', new TransformProperty(options.transform));
-        
-        // Add visual styling properties that wrapper can handle
         this.setProperty('border', new BorderProperty(options.border));
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
     }
 
+    /**
+     * Intercept the timeline loop to pass the current frame data to the iframe.
+     */
+    applyEvents(measureIndex, measureProgress, timingData) {
+        super.applyEvents(measureIndex, measureProgress, timingData);
+
+        // Push data to the iframe if it's rendered in the DOM
+        if (this.addedInDom && this.iframe && this.iframe.contentWindow) {
+            const beatPointsProp = this.getProperty('beatPoints');
+            if (beatPointsProp) {
+                const beatPointsStr = beatPointsProp.getBeatPoints().getValue() || '';
+                
+                // Safely parse the comma separated string "0, 0.5, 0.75" into [0.0, 0.5, 0.75]
+                const beatPoints = beatPointsStr
+                    .split(',')
+                    .map(s => parseFloat(s.trim()))
+                    .filter(n => !isNaN(n));
+
+                this.iframe.contentWindow.postMessage({
+                    type: 'timeline-progress',
+                    measure: {
+                        index: measureIndex,
+                        progress: measureProgress,
+                        beatPoints: beatPoints
+                    }
+                }, '*');
+            }
+        }
+    }
+
     render() {
         super.render();
-        // Specific render logic if needed, e.g. passing messages to iframe
     }
 }
-

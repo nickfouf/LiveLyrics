@@ -354,6 +354,7 @@ export function getPropertyType(propKey) {
         case 'shadowBlur':
         case 'shadowSpread':
         case 'textShadowBlur':
+        case 'textStrokeWidth':
         case 'paddingTop':
         case 'paddingLeft':
         case 'paddingBottom':
@@ -381,6 +382,7 @@ export function getPropertyType(propKey) {
         case 'textColor':
         case 'karaokeColor':
         case 'textShadowColor':
+        case 'textStrokeColor':
         case 'progressBgColor':
         case 'progressFillColor':
             return 'color/gradient';
@@ -391,6 +393,7 @@ export function getPropertyType(propKey) {
         case 'shadowEnabled':
         case 'shadowInset':
         case 'textShadowEnabled':
+        case 'textStrokeEnabled':
         case 'justifyText':
         case 'audioLoop':
         case 'videoLoop':
@@ -479,6 +482,12 @@ export function getAvailablePropertiesForElement(element) {
             "textShadowBlur": "Blur"
         }};
 
+    const commonTextStroke = { "Text Stroke": {
+            "textStrokeEnabled": "Enabled",
+            "textStrokeColor": "Color",
+            "textStrokeWidth": "Width"
+        }};
+
     const commonTransform2D = { "Transform 2D": {
             "translateX": "Translate X",
             "translateY": "Translate Y",
@@ -525,6 +534,7 @@ export function getAvailablePropertiesForElement(element) {
                 ...commonBackground,
                 ...commonBorder,
                 ...commonBoxShadow,
+                ...commonTextStroke,
                 ...commonEffects,
                 ...commonTransform2D,
                 ...commonTransform3D
@@ -562,6 +572,7 @@ export function getAvailablePropertiesForElement(element) {
                 ...commonBackground,
                 ...commonBorder,
                 ...commonBoxShadow,
+                ...commonTextStroke,
                 ...commonEffects,
                 ...commonTransform2D,
                 ...commonTransform3D

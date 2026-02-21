@@ -17,7 +17,6 @@ export class LyricsValue {
     }
 
     constructor(lyricsObject) {
-        window.lyricsValue = this; // TODO: Remove this line
         if (lyricsObject) {
             this.setLyricsObject(lyricsObject);
         }
@@ -595,7 +594,6 @@ export class LyricsLayout {
     applyDifferences(svg) {
         if(!this.#shouldRender) return;
 
-        // alert(2)
         const isFontSizeChanged = this.#lyricsLayout.fontSize !== this.#pendingLyricsLayout.fontSize;
         if(isFontSizeChanged) {
             svg.setAttribute('font-size', this.#pendingLyricsLayout.fontSize);
@@ -648,14 +646,31 @@ export class LyricsLayout {
             svg.prepend(defs);
         }
 
+        // --- Handle Stroke Group ---
+        // Ensure a group exists for the stroke layer. It should be behind the fill groups.
+        let strokeGroup = svg.querySelector('#lyrics-stroke-group');
+        if (!strokeGroup) {
+            strokeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            strokeGroup.id = 'lyrics-stroke-group';
+            // Insert before the first lyrics-line-group to ensure it renders behind
+            const firstGroup = svg.querySelector('[data-type="lyrics-line-group"]');
+            if (firstGroup) {
+                svg.insertBefore(strokeGroup, firstGroup);
+            } else {
+                svg.appendChild(strokeGroup);
+            }
+        }
+
         const oldLinesLength = this.#lyricsLayout.lines.length;
         const newLinesLength = this.#pendingLyricsLayout.lines.length;
 
-        // Get all the line groups, which are the main render element for each line.
+        // Get fill groups
         let lineGroups = Array.from(svg.querySelectorAll('[data-type="lyrics-line-group"]'));
-        lineGroups.sort((a, b) => {
-            return parseInt(a.getAttribute('data-line-index')) - parseInt(b.getAttribute('data-line-index'));
-        });
+        lineGroups.sort((a, b) => parseInt(a.getAttribute('data-line-index')) - parseInt(b.getAttribute('data-line-index')));
+
+        // Get stroke texts
+        let strokeTexts = Array.from(strokeGroup.querySelectorAll('text'));
+        strokeTexts.sort((a, b) => parseInt(a.getAttribute('data-line-index')) - parseInt(b.getAttribute('data-line-index')));
 
         let layoutChanged = false;
 
@@ -673,7 +688,12 @@ export class LyricsLayout {
                     if (groupToRemove) svg.removeChild(groupToRemove);
                     if (clipPathToRemove) defs.removeChild(clipPathToRemove);
 
+                    // Remove stroke text
+                    const strokeTextToRemove = strokeTexts[i];
+                    if (strokeTextToRemove) strokeGroup.removeChild(strokeTextToRemove);
+
                     lineGroups.splice(i, 1);
+                    strokeTexts.splice(i, 1);
                     this.#lyricsLayout.lines.splice(i, 1);
                 }
             } else {
@@ -716,6 +736,18 @@ export class LyricsLayout {
 
                     svg.appendChild(newGroup);
                     lineGroups.push(newGroup);
+
+                    // 3. Create Stroke Text (Visible text behind fill)
+                    const newStrokeText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    newStrokeText.setAttribute('data-line-index', i.toString());
+                    newStrokeText.setAttribute('dominant-baseline', 'text-before-edge');
+                    newStrokeText.setAttribute('text-anchor', 'start');
+                    newStrokeText.setAttribute('x', '0');
+                    newStrokeText.setAttribute('y', '0');
+                    newStrokeText.classList.add('stroke-layer'); 
+                    strokeGroup.appendChild(newStrokeText);
+                    strokeTexts.push(newStrokeText);
+
                     this.#lyricsLayout.lines.push({tspans: [], x:0});
                 }
             }
@@ -723,11 +755,13 @@ export class LyricsLayout {
 
         let totalHeight = 0;
         let anyHeightChanged = false;
+        const isLineHeightConfigChanged = this.#lyricsLayout.lineHeight !== this.#pendingLyricsLayout.lineHeight;
 
         for(let i=0; i<newLinesLength; i++) {
             const oldLine = this.#lyricsLayout.lines[i];
             const newLineData = this.#pendingLyricsLayout.lines[i];
             const group = lineGroups[i];
+            const strokeText = strokeTexts[i];
 
             // Store width and height data on the group for reference.
             if(oldLine.width !== newLineData.width) {
@@ -745,14 +779,17 @@ export class LyricsLayout {
                 layoutChanged = true;
             }
 
-            if(anyHeightChanged || isLineHeightChanged) {
+            if(anyHeightChanged || isLineHeightConfigChanged) {
                 // Update vertical position using transform on the group.
-                group.setAttribute('transform', `translate(0, ${totalHeight})`);
+                const transform = `translate(0, ${totalHeight})`;
+                group.setAttribute('transform', transform);
+                strokeText.setAttribute('transform', transform);
             }
 
             if(oldLine.x !== newLineData.x) {
                 const textShape = defs.querySelector(`#line-clip-${i} text`);
                 textShape.setAttribute('x', newLineData.x.toString());
+                strokeText.setAttribute('x', newLineData.x.toString());
                 group.querySelectorAll('rect').forEach(rect => rect.setAttribute('x', newLineData.x.toString()));
                 oldLine.x = newLineData.x;
                 layoutChanged = true;
@@ -763,75 +800,8 @@ export class LyricsLayout {
             // Update the tspans inside the corresponding clipPath's text element.
             const clipPathId = `line-clip-${i}`;
             const textShape = defs.querySelector(`#${clipPathId} text`);
-            let tspans = Array.from(textShape.querySelectorAll('tspan'));
-            tspans.sort((a, b) => parseInt(a.getAttribute('data-tspan-index')) - parseInt(b.getAttribute('data-tspan-index')));
-
-            const oldTspansLength = oldLine.tspans.length;
-            const newTspansLength = newLineData.tspans.length;
-
-            if(oldTspansLength !== newTspansLength) {
-                layoutChanged = true;
-                if(oldTspansLength > newTspansLength) {
-                    for (let j = oldTspansLength - 1; j >= newTspansLength; j--) {
-                        if (tspans[j]) textShape.removeChild(tspans[j]);
-                        tspans.splice(j, 1);
-                        oldLine.tspans.splice(j, 1);
-                    }
-                } else {
-                    for(let j = oldTspansLength; j < newTspansLength; j++) {
-                        const tspanData = newLineData.tspans[j];
-                        const newTspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-                        newTspan.setAttribute('data-tspan-index', j.toString());
-                        if(tspanData.dx !== 0) {
-                            newTspan.setAttribute('textLength', (tspanData.width + tspanData.dx).toString());
-                            newTspan.setAttribute('lengthAdjust', 'spacingAndGlyphs');
-                        }
-                        newTspan.textContent = tspanData.text;
-                        textShape.appendChild(newTspan);
-                        tspans.push(newTspan);
-                        oldLine.tspans.push(tspanData);
-                    }
-                }
-            }
-
-            // Update text content for existing tspans.
-            for(let j=0; j<newTspansLength; j++) {
-                const oldTspan = oldLine.tspans[j];
-                const newTspanData = newLineData.tspans[j];
-
-                if(oldTspan.text !== newTspanData.text) {
-                    tspans[j].textContent = newTspanData.text;
-                    oldTspan.text = newTspanData.text;
-                }
-
-                if(oldTspan.type !== newTspanData.type) {
-                    oldTspan.type = newTspanData.type;
-                }
-
-                if(oldTspan.isConnectedToNext !== newTspanData.isConnectedToNext) {
-                    oldTspan.isConnectedToNext = newTspanData.isConnectedToNext;
-                }
-
-                if(oldTspan.id !== newTspanData.id) {
-                    oldTspan.id = newTspanData.id;
-                }
-
-                if(oldTspan.dx !== newTspanData.dx || oldTspan.width !== newTspanData.width) {
-                    if(newTspanData.dx !== 0) {
-                        tspans[j].setAttribute('textLength', (newTspanData.width + newTspanData.dx).toString());
-                        tspans[j].setAttribute('lengthAdjust', 'spacingAndGlyphs');
-                    } else {
-                        tspans[j].removeAttribute('textLength');
-                        tspans[j].removeAttribute('lengthAdjust');
-                    }
-                    oldTspan.dx = newTspanData.dx;
-                    oldTspan.width = newTspanData.width;
-                }
-
-                if(oldTspan.lineWidth !== newTspanData.lineWidth) {
-                    oldTspan.lineWidth = newTspanData.lineWidth;
-                }
-            }
+            
+            this.syncTSpans(textShape, strokeText, oldLine, newLineData);
         }
 
         const isHighlightChanged = this.#lyricsLayout.highlightedPercentage !== this.#pendingLyricsLayout.highlightedPercentage;
@@ -876,10 +846,93 @@ export class LyricsLayout {
         this.#shouldRender = false; // Reset render flag after applying changes.
     }
 
+    syncTSpans(clipParent, strokeParent, oldLine, newLineData) {
+        let clipTspans = Array.from(clipParent.querySelectorAll('tspan'));
+        let strokeTspans = Array.from(strokeParent.querySelectorAll('tspan'));
+        
+        const sortFn = (a, b) => parseInt(a.getAttribute('data-tspan-index')) - parseInt(b.getAttribute('data-tspan-index'));
+        clipTspans.sort(sortFn);
+        strokeTspans.sort(sortFn);
+
+        const oldLen = oldLine.tspans.length;
+        const newLen = newLineData.tspans.length;
+
+        // Remove extra
+        if (oldLen > newLen) {
+            for (let j = oldLen - 1; j >= newLen; j--) {
+                if(clipTspans[j]) clipParent.removeChild(clipTspans[j]);
+                if(strokeTspans[j]) strokeParent.removeChild(strokeTspans[j]);
+                oldLine.tspans.splice(j, 1);
+            }
+        } 
+        // Add new
+        else {
+            for(let j = oldLen; j < newLen; j++) {
+                const tspanData = newLineData.tspans[j];
+                
+                const newClipTspan = this.createTspanElement(tspanData, j);
+                clipParent.appendChild(newClipTspan);
+                
+                const newStrokeTspan = this.createTspanElement(tspanData, j);
+                strokeParent.appendChild(newStrokeTspan);
+
+                oldLine.tspans.push(tspanData);
+            }
+        }
+
+        // Update existing (query again to include new ones)
+        clipTspans = Array.from(clipParent.querySelectorAll('tspan')).sort(sortFn);
+        strokeTspans = Array.from(strokeParent.querySelectorAll('tspan')).sort(sortFn);
+
+        for(let j = 0; j < newLen; j++) {
+            const oldTspan = oldLine.tspans[j];
+            const newTspanData = newLineData.tspans[j];
+            const cTspan = clipTspans[j];
+            const sTspan = strokeTspans[j];
+
+            if (oldTspan.text !== newTspanData.text) {
+                cTspan.textContent = newTspanData.text;
+                sTspan.textContent = newTspanData.text;
+                oldTspan.text = newTspanData.text;
+            }
+            
+            oldTspan.type = newTspanData.type;
+            oldTspan.isConnectedToNext = newTspanData.isConnectedToNext;
+            oldTspan.id = newTspanData.id;
+            oldTspan.lineWidth = newTspanData.lineWidth;
+
+            if (oldTspan.dx !== newTspanData.dx || oldTspan.width !== newTspanData.width) {
+                const updateAttr = (el) => {
+                    if (newTspanData.dx !== 0) {
+                        el.setAttribute('textLength', (newTspanData.width + newTspanData.dx).toString());
+                        el.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+                    } else {
+                        el.removeAttribute('textLength');
+                        el.removeAttribute('lengthAdjust');
+                    }
+                };
+                updateAttr(cTspan);
+                updateAttr(sTspan);
+                
+                oldTspan.dx = newTspanData.dx;
+                oldTspan.width = newTspanData.width;
+            }
+        }
+    }
+
+    createTspanElement(data, index) {
+        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        tspan.setAttribute('data-tspan-index', index.toString());
+        if(data.dx !== 0) {
+            tspan.setAttribute('textLength', (data.width + data.dx).toString());
+            tspan.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+        }
+        tspan.textContent = data.text;
+        return tspan;
+    }
+
     markAsDirty() {
         this.#shouldRender = true;
     }
 }
-
-
 
