@@ -1,6 +1,6 @@
 const EventEmitter = require('events');
 const net = require("./SmartSocket.js");
-const dgram = require('dgram'); // Added
+const dgram = require('dgram'); 
 const os =require('os');
 const { Bonjour } = require('bonjour-service');
 const crypto = require('crypto');
@@ -8,11 +8,11 @@ const { SocketDevice } = require("./SocketDevice.js");
 const { performance } = require('perf_hooks');
 
 const PAIRING_REQUEST_TIMEOUT = 35000;
-const DISCOVERY_PORT = 54321; // Added: Fixed port for UDP discovery
+const DISCOVERY_PORT = 54321; 
 
 class RTTStats {
     static MAX_SAMPLES = 20;
-    samples = [];
+    samples =[];
     average = 0;
 
     addSample(rtt) {
@@ -30,20 +30,22 @@ class ConnectionManager extends EventEmitter {
     #server = null;
     #browser = null;
     #publishedService = null;
-    #lastPublishedIPs = [];
-    #devices = new Map();
-    #networkMonitor; 
+    #bonjourPublishInterval = null; 
+    #lastPublishedIPs =[];
+    #devices = new Map(); 
     #deviceId = 'unknown';
     #deviceName = 'Unknown Device';
     #clientType = 'unknown';
     #serviceVersion = 0;
     #connectionMaintainerInterval = null;
     #syncInterval = null;
-    #pairedDevice = null; 
+    
+    #pairedConnector = null; 
+    #midiDevices = new Map(); 
+    
     #rttStats = new Map();
     #pendingUiPairingRequests = new Set();
     
-    // Added: Discovery socket reference
     #discoverySocket = null;
 
     get deviceId() { return this.#deviceId; }
@@ -54,7 +56,10 @@ class ConnectionManager extends EventEmitter {
     }
 
     canPairWith(type) {
-        return (this.#clientType === 'main' && type === 'connector') || (this.#clientType === 'connector' && type === 'main');
+        if (this.#clientType === 'main') {
+            return type === 'connector' || type === 'midi-controller';
+        }
+        return (this.#clientType === 'connector' && type === 'main');
     }
 
     constructor(options = {}) {
@@ -74,7 +79,6 @@ class ConnectionManager extends EventEmitter {
         }
         console.log('[ConnectionManager] Starting network services...');
         
-        // Added: Start UDP discovery listener
         this.#startDiscoverySocket();
 
         this.#bonjour = new Bonjour();
@@ -93,7 +97,6 @@ class ConnectionManager extends EventEmitter {
         }
         console.log('[ConnectionManager] Stopping network services...');
 
-        // Added: Close UDP discovery socket
         if (this.#discoverySocket) {
             try {
                 this.#discoverySocket.close();
@@ -111,15 +114,24 @@ class ConnectionManager extends EventEmitter {
             clearInterval(this.#syncInterval);
             this.#syncInterval = null;
         }
+        if (this.#bonjourPublishInterval) {
+            clearInterval(this.#bonjourPublishInterval);
+            this.#bonjourPublishInterval = null;
+        }
 
         if (this.#browser) {
             this.#browser.stop();
             this.#browser = null;
         }
 
-        if (this.#pairedDevice) {
-            this.disconnectFromPairedDevice();
+        if (this.#pairedConnector) {
+            this.disconnectDevice(this.#pairedConnector.deviceId);
         }
+        
+        for (const midiDev of this.#midiDevices.values()) {
+            midiDev.destroyAllSockets();
+        }
+        this.#midiDevices.clear();
         this.#devices.clear();
 
         if (this.#publishedService) {
@@ -140,7 +152,6 @@ class ConnectionManager extends EventEmitter {
         this.#bonjour = null;
     }
 
-    // Added: Initialize and bind UDP discovery socket
     #startDiscoverySocket() {
         try {
             this.#discoverySocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
@@ -162,40 +173,47 @@ class ConnectionManager extends EventEmitter {
         }
     }
 
-    // Added: Process incoming UDP identity packets
     #handleDiscoveryMessage(msg, rinfo) {
         try {
             const data = JSON.parse(msg.toString());
             
-            // Ignore own packets or invalid types
             if (!data.deviceId || data.deviceId === this.#deviceId || data.type !== 'identity') return;
-            
-            // Ensure we only process compatible device types
             if (!this.canPairWith(data.deviceType)) return;
 
-            // console.log(`[DiscoverySocket] Received identity from ${data.deviceName} (${rinfo.address})`);
-
-            this.emit('discoverableDeviceFound', {
-                deviceId: data.deviceId,
-                deviceType: data.deviceType,
-                deviceName: data.deviceName,
-            });
-
             let device = this.#devices.get(data.deviceId);
+            let isNewOrChanged = false;
+
             if (!device) {
                 device = new SocketDevice(data.deviceId, data.deviceType, data.deviceName);
                 this.#devices.set(data.deviceId, device);
+                
+                device.on('infoUpdated', (updatedDevice) => {
+                    this.emit('deviceInfoUpdated', {
+                        deviceId: updatedDevice.deviceId,
+                        deviceType: updatedDevice.deviceType,
+                        deviceName: updatedDevice.deviceName,
+                        ips: updatedDevice.getRemoteAdvertisedIps()
+                    });
+                });
+                
+                isNewOrChanged = true;
+            } else {
+                if (device.getRemotePort() !== parseInt(data.tcpPort, 10)) isNewOrChanged = true;
+                if (!device.getRemoteAdvertisedIps().includes(rinfo.address)) isNewOrChanged = true;
             }
-            
-            // Construct address list, prioritizing the sender's IP
+
             const addressesToTry = [rinfo.address];
             if (data.addresses && Array.isArray(data.addresses)) {
                 data.addresses.forEach(ip => {
                     if (ip !== rinfo.address) addressesToTry.push(ip);
                 });
             }
-            
-            // Update device info similar to Bonjour resolution
+
+            if (isNewOrChanged) {
+                console.log(`[DiscoverySocket] Replying to UDP discovery from ${data.deviceName} (${data.deviceId})`);
+                addressesToTry.forEach(ip => this.#sendIdentitySignal(ip));
+            }
+
             device.updateRemoteInfo(
                 addressesToTry, 
                 parseInt(data.tcpPort, 10), 
@@ -203,8 +221,14 @@ class ConnectionManager extends EventEmitter {
                 data.deviceName
             );
 
-            // If we are currently paired with this device, trigger maintenance to use new IPs if needed
-            if (this.#pairedDevice && this.#pairedDevice.deviceId === data.deviceId) {
+            this.emit('discoverableDeviceFound', {
+                deviceId: data.deviceId,
+                deviceType: data.deviceType,
+                deviceName: data.deviceName,
+            });
+
+            if ((this.#pairedConnector && this.#pairedConnector.deviceId === data.deviceId) || 
+                this.#midiDevices.has(data.deviceId)) {
                 this.#triggerConnectionMaintenance();
             }
 
@@ -213,7 +237,6 @@ class ConnectionManager extends EventEmitter {
         }
     }
 
-    // Added: Send UDP identity packet to a target IP
     #sendIdentitySignal(targetIp) {
         if (!this.#discoverySocket || !this.#server || !this.#server.address()) return;
         
@@ -239,7 +262,8 @@ class ConnectionManager extends EventEmitter {
             deviceType: this.#clientType,
             host: address,
             port: port,
-            enableStream: true
+            enableStream: true,
+            servicePort: this.#server && this.#server.address() ? this.#server.address().port : 0
         });
     }
 
@@ -258,7 +282,6 @@ class ConnectionManager extends EventEmitter {
         const addressesToTry = (txt.addresses || '').split(',').filter(Boolean);
         if (addressesToTry.length === 0) return;
 
-        // Added: REACTIVE Signal - Send UDP identity signal to discovered IPs
         addressesToTry.forEach(ip => {
             this.#sendIdentitySignal(ip);
         });
@@ -268,11 +291,21 @@ class ConnectionManager extends EventEmitter {
         if (!device) {
             device = new SocketDevice(remoteId, deviceType, deviceName);
             this.#devices.set(remoteId, device);
+            
+            device.on('infoUpdated', (updatedDevice) => {
+                this.emit('deviceInfoUpdated', {
+                    deviceId: updatedDevice.deviceId,
+                    deviceType: updatedDevice.deviceType,
+                    deviceName: updatedDevice.deviceName,
+                    ips: updatedDevice.getRemoteAdvertisedIps()
+                });
+            });
         }
 
         device.updateRemoteInfo(addressesToTry, parseInt(txt.port, 10), parseInt(txt.version, 10), deviceName);
 
-        if (this.#pairedDevice && this.#pairedDevice.deviceId === remoteId) {
+        if ((this.#pairedConnector && this.#pairedConnector.deviceId === remoteId) || 
+            this.#midiDevices.has(remoteId)) {
             this.#triggerConnectionMaintenance();
         }
     }
@@ -295,84 +328,137 @@ class ConnectionManager extends EventEmitter {
             console.log(`Server listening on port ${this.#server.address().port}`);
             
             setInterval(() => this.#handleNetworkChange(), 5000);
-            this.#handleNetworkChange(); // Initial publication
+            this.#handleNetworkChange(); 
 
             if (this.#connectionMaintainerInterval) clearInterval(this.#connectionMaintainerInterval);
             this.#connectionMaintainerInterval = setInterval(this.#maintainConnections.bind(this), 5000);
+
+            if (this.#bonjourPublishInterval) clearInterval(this.#bonjourPublishInterval);
+            this.#bonjourPublishInterval = setInterval(() => {
+                console.log('[ConnectionManager] Smart publisher re-announcing service to network...');
+                this.#publishService();
+            }, 120000);
         });
     }
 
     #handleNewConnection(socket) {
         console.log("New incoming connection established.");
         socket.on('error', (err) => this.emit('error', err));
+        
         socket.on('pairingRequest', (handshakeData, accept, reject) => {
-            const { deviceId: remoteId, deviceType, deviceName } = handshakeData;
-            console.log(`Received pairing request from ${deviceName} (${remoteId})`);
+            const { deviceId: remoteId, deviceType, deviceName, servicePort } = handshakeData;
+            console.log(`Received pairing request from ${deviceName} (${remoteId}) Type: ${deviceType}`);
 
-            if (this.#pairedDevice) {
-                if (this.#pairedDevice.deviceId === remoteId) {
-                    console.log("Request is from our already-paired device. Accepting automatically.");
-                    accept();
-                    if (!this.#pairedDevice.hasIncomingSocket(socket)) {
-                        this.#pairedDevice.addIncomingSocket(socket);
+            if (deviceType === 'connector') {
+                if (this.#pairedConnector) {
+                    if (this.#pairedConnector.deviceId === remoteId) {
+                        console.log("Request is from our already-paired connector. Accepting automatically.");
+                        
+                        if (servicePort) {
+                            this.#pairedConnector.updateRemoteInfo([socket.remoteAddress], servicePort, -1, deviceName);
+                        }
+
+                        accept();
+                        if (!this.#pairedConnector.hasIncomingSocket(socket)) {
+                            this.#pairedConnector.addIncomingSocket(socket);
+                        }
+                        return;
+                    } else {
+                        console.log(`Already paired with connector ${this.#pairedConnector.deviceId}. Rejecting request from ${remoteId}.`);
+                        reject();
+                        return;
                     }
-                } else {
-                    console.log(`Already paired with ${this.#pairedDevice.deviceId}. Rejecting request from ${remoteId}.`);
-                    reject();
                 }
-            } else {
-                if (this.#pendingUiPairingRequests.has(remoteId)) {
-                    console.log(`[ConnectionManager] Ignoring duplicate pairing UI request for ${remoteId}`);
+            } 
+            else if (deviceType === 'midi-controller') {
+                if (this.#midiDevices.has(remoteId)) {
+                    console.log("Request is from a known active MIDI device. Accepting automatically.");
+                    const activeMidi = this.#midiDevices.get(remoteId);
+                    
+                    if (servicePort) {
+                        activeMidi.updateRemoteInfo([socket.remoteAddress], servicePort, -1, deviceName);
+                    }
+                    
+                    accept();
+                    if (!activeMidi.hasIncomingSocket(socket)) {
+                        activeMidi.addIncomingSocket(socket);
+                    }
                     return;
                 }
-
-                console.log("Forwarding pairing request to application.");
-                this.#pendingUiPairingRequests.add(remoteId);
-
-                let potentialDevice = this.#devices.get(remoteId);
-                if (!potentialDevice) {
-                    potentialDevice = new SocketDevice(remoteId, deviceType, deviceName);
-                    this.#devices.set(remoteId, potentialDevice);
-                } else {
-                    potentialDevice.updateRemoteInfo([], -1, -1, deviceName);
-                }
-
-                let decided = false;
-                const timeoutHandle = setTimeout(() => {
-                    if (!decided) {
-                        decided = true;
-                        console.log("Pairing request timed out. Rejecting.");
-                        this.#pendingUiPairingRequests.delete(remoteId);
-                        reject();
-                    }
-                }, PAIRING_REQUEST_TIMEOUT);
-
-                const acceptWrapper = () => {
-                    if (!decided) {
-                        decided = true;
-                        clearTimeout(timeoutHandle);
-                        this.#pendingUiPairingRequests.delete(remoteId);
-                        console.log(`Application ACCEPTED pairing with ${remoteId}`);
-                        if (this.#pairedDevice) this.#pairedDevice.destroyAllSockets();
-                        this.#pairedDevice = potentialDevice;
-                        this.#attachDeviceListeners(this.#pairedDevice);
-                        this.#pairedDevice.addIncomingSocket(socket);
-                        accept();
-                    }
-                };
-
-                const rejectWrapper = () => {
-                    if (!decided) {
-                        decided = true;
-                        clearTimeout(timeoutHandle);
-                        this.#pendingUiPairingRequests.delete(remoteId);
-                        console.log(`Application REJECTED pairing with ${remoteId}`);
-                        reject();
-                    }
-                };
-
-                this.emit('pairingRequest', potentialDevice, acceptWrapper, rejectWrapper);
             }
+
+            if (this.#pendingUiPairingRequests.has(remoteId)) {
+                console.log(`[ConnectionManager] Ignoring duplicate pairing UI request for ${remoteId}`);
+                return;
+            }
+
+            console.log("Forwarding pairing request to application.");
+            this.#pendingUiPairingRequests.add(remoteId);
+
+            let potentialDevice = this.#devices.get(remoteId);
+            if (!potentialDevice) {
+                potentialDevice = new SocketDevice(remoteId, deviceType, deviceName);
+                this.#devices.set(remoteId, potentialDevice);
+                
+                potentialDevice.on('infoUpdated', (updatedDevice) => {
+                    this.emit('deviceInfoUpdated', {
+                        deviceId: updatedDevice.deviceId,
+                        deviceType: updatedDevice.deviceType,
+                        deviceName: updatedDevice.deviceName,
+                        ips: updatedDevice.getRemoteAdvertisedIps()
+                    });
+                });
+            } 
+            
+            if (servicePort) {
+                potentialDevice.updateRemoteInfo([socket.remoteAddress], servicePort, -1, deviceName);
+            } else {
+                potentialDevice.updateRemoteInfo([], -1, -1, deviceName);
+            }
+
+            let decided = false;
+            const timeoutHandle = setTimeout(() => {
+                if (!decided) {
+                    decided = true;
+                    console.log("Pairing request timed out. Rejecting.");
+                    this.#pendingUiPairingRequests.delete(remoteId);
+                    reject();
+                }
+            }, PAIRING_REQUEST_TIMEOUT);
+
+            const acceptWrapper = () => {
+                if (!decided) {
+                    decided = true;
+                    clearTimeout(timeoutHandle);
+                    this.#pendingUiPairingRequests.delete(remoteId);
+                    console.log(`Application ACCEPTED pairing with ${remoteId}`);
+                    
+                    if (deviceType === 'connector') {
+                        if (this.#pairedConnector) this.#pairedConnector.destroyAllSockets();
+                        this.#pairedConnector = potentialDevice;
+                        this.#attachDeviceListeners(this.#pairedConnector);
+                        this.#pairedConnector.addIncomingSocket(socket);
+                    } else if (deviceType === 'midi-controller') {
+                        this.#midiDevices.set(remoteId, potentialDevice);
+                        this.#attachDeviceListeners(potentialDevice);
+                        potentialDevice.addIncomingSocket(socket);
+                    }
+
+                    accept();
+                }
+            };
+
+            const rejectWrapper = () => {
+                if (!decided) {
+                    decided = true;
+                    clearTimeout(timeoutHandle);
+                    this.#pendingUiPairingRequests.delete(remoteId);
+                    console.log(`Application REJECTED pairing with ${remoteId}`);
+                    reject();
+                }
+            };
+
+            this.emit('pairingRequest', potentialDevice, acceptWrapper, rejectWrapper);
         });
     }
 
@@ -384,49 +470,68 @@ class ConnectionManager extends EventEmitter {
         device.on('deviceConnected', (dev) => {
             this.emit('deviceConnected', dev);
 
-            if (this.#syncInterval) clearInterval(this.#syncInterval);
-
-            this.#syncInterval = setInterval(() => {
-                if (this.#pairedDevice && this.#pairedDevice.deviceId === dev.deviceId) {
-                    this.#pairedDevice.sendStreamData({
-                        type: 'clock_sync_ping_electron',
-                        t1: performance.now()
-                    });
-                }
-            }, 500);
+            if (dev.deviceType === 'connector') {
+                if (this.#syncInterval) clearInterval(this.#syncInterval);
+                this.#syncInterval = setInterval(() => {
+                    if (this.#pairedConnector && this.#pairedConnector.deviceId === dev.deviceId) {
+                        this.#pairedConnector.sendStreamData({
+                            type: 'clock_sync_ping_electron',
+                            t1: performance.now()
+                        });
+                    }
+                }, 500);
+            }
         });
         device.on('deviceDisconnected', (dev, payload) => {
-            if (this.#pairedDevice && this.#pairedDevice.deviceId === dev.deviceId) {
-                console.log(`Paired device ${dev.deviceId} disconnected. Unpairing from ConnectionManager.`);
-                this.#pairedDevice = null;
-                this.#rttStats.clear();
-                if (this.#syncInterval) {
-                    clearInterval(this.#syncInterval);
-                    this.#syncInterval = null;
+            const richPayload = { ...payload, deviceId: dev.deviceId, deviceType: dev.deviceType };
+
+            if (dev.deviceType === 'connector') {
+                if (this.#pairedConnector && this.#pairedConnector.deviceId === dev.deviceId) {
+                    console.log(`Paired Connector ${dev.deviceId} disconnected.`);
+                    this.#pairedConnector = null;
+                    this.#rttStats.clear();
+                    if (this.#syncInterval) {
+                        clearInterval(this.#syncInterval);
+                        this.#syncInterval = null;
+                    }
+                    this.getPlayerWindow()?.webContents.send('device-controller:rtt-update',[]);
                 }
-                this.getPlayerWindow()?.webContents.send('device-controller:rtt-update', []);
+            } else if (dev.deviceType === 'midi-controller') {
+                if (this.#midiDevices.has(dev.deviceId)) {
+                    console.log(`MIDI Device ${dev.deviceId} disconnected.`);
+                    this.#midiDevices.delete(dev.deviceId);
+                }
             }
-            this.emit('deviceDisconnected', dev, payload);
+
+            this.emit('deviceDisconnected', dev, richPayload);
         });
         device.on('outgoingConnect', (socket) => this.#sendCurrentServiceData(device, socket));
         device.on('pairingRejected', (dev, reason) => {
             console.log(`Pairing rejected for ${dev.deviceId}: ${reason}`);
-            if (this.#pairedDevice && this.#pairedDevice.deviceId === dev.deviceId) {
-                this.#pairedDevice = null;
-                this.emit('pairingFailed', { deviceId: dev.deviceId, reason });
+            
+            if (dev.deviceType === 'connector' && this.#pairedConnector && this.#pairedConnector.deviceId === dev.deviceId) {
+                this.#pairedConnector = null;
+            } else if (dev.deviceType === 'midi-controller') {
+                this.#midiDevices.delete(dev.deviceId);
             }
+
+            this.emit('pairingFailed', { deviceId: dev.deviceId, reason });
         });
         device.on('manualDisconnect', (dev, reason) => {
             console.log(`[ConnectionManager] Manual disconnect from ${dev.deviceId}: ${reason}`);
-            if (this.#pairedDevice && this.#pairedDevice.deviceId === dev.deviceId) {
-                this.#pairedDevice = null;
+            
+            if (dev.deviceType === 'connector' && this.#pairedConnector && this.#pairedConnector.deviceId === dev.deviceId) {
+                this.#pairedConnector = null;
+                dev.destroyAllSockets('remote');
+            } else if (dev.deviceType === 'midi-controller' && this.#midiDevices.has(dev.deviceId)) {
+                this.#midiDevices.delete(dev.deviceId);
                 dev.destroyAllSockets('remote');
             }
         });
 
         device.on('message', (message, dev, remoteIp) => {
             if (!message || !message.type) return;
-            const playbackCommands = ['play', 'play-synced', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start', 'jump'];
+            const playbackCommands =['play', 'play-synced', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start', 'jump'];
         
             if (message.type === 'selectSong') {
                 const songId = message.payload?.songId;
@@ -451,39 +556,41 @@ class ConnectionManager extends EventEmitter {
 
         device.on('streamData', (data, dev, remoteIp) => {
             const payload = data.data;
-            if (!payload || !this.#pairedDevice) return;
+            if (!payload) return;
 
-            switch (payload.type) {
-                case 'clock_sync_pong_android': {
-                    const rttKey = remoteIp; 
-                    
-                    const t4 = performance.now();
-                    const { t1, t2, t3 } = payload;
-                    const rtt = (t4 - t1) - (t3 - t2);
+            if (dev.deviceType === 'connector' && this.#pairedConnector) {
+                switch (payload.type) {
+                    case 'clock_sync_pong_android': {
+                        const rttKey = remoteIp; 
+                        
+                        const t4 = performance.now();
+                        const { t1, t2, t3 } = payload;
+                        const rtt = (t4 - t1) - (t3 - t2);
 
-                    if (!this.#rttStats.has(rttKey)) {
-                        this.#rttStats.set(rttKey, new RTTStats());
+                        if (!this.#rttStats.has(rttKey)) {
+                            this.#rttStats.set(rttKey, new RTTStats());
+                        }
+                        const stats = this.#rttStats.get(rttKey);
+                        stats.addSample(rtt);
+
+                        const rttDataForUI = Array.from(this.#rttStats.entries()).map(([ip, stat]) => ({
+                            ip: ip,
+                            avg: stat.average,
+                            samples: stat.samples.length
+                        }));
+                        this.getPlayerWindow()?.webContents.send('device-controller:rtt-update', rttDataForUI);
+                        break;
                     }
-                    const stats = this.#rttStats.get(rttKey);
-                    stats.addSample(rtt);
-
-                    const rttDataForUI = Array.from(this.#rttStats.entries()).map(([ip, stat]) => ({
-                        ip: ip,
-                        avg: stat.average,
-                        samples: stat.samples.length
-                    }));
-                    this.getPlayerWindow()?.webContents.send('device-controller:rtt-update', rttDataForUI);
-                    break;
-                }
-                case 'clock_sync_ping_android': {
-                    this.#pairedDevice.sendStreamData({
-                        type: 'clock_sync_pong_electron',
-                        t1: payload.t1,
-                        t2: performance.now(),
-                        t3: performance.now(),
-                        sourceIp: remoteIp
-                    });
-                    break;
+                    case 'clock_sync_ping_android': {
+                        this.#pairedConnector.sendStreamData({
+                            type: 'clock_sync_pong_electron',
+                            t1: payload.t1,
+                            t2: performance.now(),
+                            t3: performance.now(),
+                            sourceIp: remoteIp
+                        });
+                        break;
+                    }
                 }
             }
         });
@@ -503,7 +610,7 @@ class ConnectionManager extends EventEmitter {
             return;
         }
 
-        console.log(`IPs changed. Old: [${this.#lastPublishedIPs.join(', ')}], New: [${currentIPs.join(', ')}]`);
+        console.log(`IPs changed. Old: [${this.#lastPublishedIPs.join(', ')}], New:[${currentIPs.join(', ')}]`);
         this.#publishService();
     }
 
@@ -520,7 +627,7 @@ class ConnectionManager extends EventEmitter {
         const allIPs = getAllRoutableIPv4Addresses();
         if (allIPs.length === 0) {
             console.warn("No suitable network interface found to advertise.");
-            this.#lastPublishedIPs = [];
+            this.#lastPublishedIPs =[];
             return;
         }
 
@@ -537,8 +644,12 @@ class ConnectionManager extends EventEmitter {
         };
 
         const serviceData = { addresses: allIPs, port: serverPort, version: this.#serviceVersion };
-        if (this.#pairedDevice) {
-            this.#pairedDevice.sendServiceData(serviceData);
+        
+        if (this.#pairedConnector) {
+            this.#pairedConnector.sendServiceData(serviceData);
+        }
+        for (const midiDev of this.#midiDevices.values()) {
+            midiDev.sendServiceData(serviceData);
         }
 
         console.log(`Publishing service v${this.#serviceVersion} with IPs: ${txtData.addresses}`);
@@ -549,7 +660,6 @@ class ConnectionManager extends EventEmitter {
             txt: txtData
         });
 
-        // Added: PROACTIVE Signal - Broadcast identity to all known devices because our info changed
         console.log('[DiscoverySocket] Broadcasting new identity to known devices...');
         for (const device of this.#devices.values()) {
             const remoteIps = device.getRemoteAdvertisedIps();
@@ -558,16 +668,24 @@ class ConnectionManager extends EventEmitter {
     }
 
     #maintainConnections() {
-        if (!this.#pairedDevice) return;
+        if (this.#pairedConnector) {
+            this.#ensureConnection(this.#pairedConnector);
+        }
 
-        const remotePort = this.#pairedDevice.getRemotePort();
+        for (const midiDev of this.#midiDevices.values()) {
+            this.#ensureConnection(midiDev);
+        }
+    }
+
+    #ensureConnection(device) {
+        const remotePort = device.getRemotePort();
         if (remotePort === -1) return;
 
-        for (const targetIp of this.#pairedDevice.getRemoteAdvertisedIps()) {
-            if (!this.#pairedDevice.hasConnectionTo(targetIp, remotePort)) {
-                console.log(`[Maintainer] No connection to ${this.#pairedDevice.deviceId} at ${targetIp}:${remotePort}. Initiating.`);
+        for (const targetIp of device.getRemoteAdvertisedIps()) {
+            if (!device.hasConnectionTo(targetIp, remotePort)) {
+                console.log(`[Maintainer] No connection to ${device.deviceId} at ${targetIp}:${remotePort}. Initiating.`);
                 const newSocket = this.#createConnection(targetIp, remotePort);
-                this.#pairedDevice.addOutgoingSocket(newSocket);
+                device.addOutgoingSocket(newSocket);
             }
         }
     }
@@ -601,71 +719,104 @@ class ConnectionManager extends EventEmitter {
             return false;
         }
 
-        console.log(`Application is initiating pairing with ${deviceId}`);
+        console.log(`Application is initiating pairing with ${deviceId} (${deviceToPair.deviceType})`);
 
-        if (this.#pairedDevice && this.#pairedDevice.deviceId !== deviceId) {
-            console.log(`Unpairing from previous device: ${this.#pairedDevice.deviceId}`);
-            this.#pairedDevice.destroyAllSockets();
+        if (deviceToPair.deviceType === 'midi-controller') {
+            if (!this.#midiDevices.has(deviceId)) {
+                this.#midiDevices.set(deviceId, deviceToPair);
+                this.#attachDeviceListeners(deviceToPair);
+                this.#triggerConnectionMaintenance();
+                return true;
+            }
+        } else {
+            if (this.#pairedConnector && this.#pairedConnector.deviceId !== deviceId) {
+                console.log(`Unpairing from previous connector: ${this.#pairedConnector.deviceId}`);
+                this.#pairedConnector.destroyAllSockets();
+            }
+            this.#pairedConnector = deviceToPair;
+            this.#attachDeviceListeners(this.#pairedConnector);
+            this.#triggerConnectionMaintenance();
+            return true;
         }
-
-        this.#pairedDevice = deviceToPair;
-        this.#attachDeviceListeners(this.#pairedDevice);
-
-        this.#triggerConnectionMaintenance();
-        return true;
+        return false;
     }
 
     cancelPairing(deviceId) {
-        if (this.#pairedDevice && this.#pairedDevice.deviceId === deviceId) {
-            console.log(`Application is cancelling pairing with ${deviceId}`);
-            const deviceToCancel = this.#pairedDevice;
-            this.#pairedDevice = null;
-    
-            deviceToCancel.sendPairingRejection('Pairing canceled by user.');
-    
-            setTimeout(() => {
-                deviceToCancel.destroyAllSockets('local');
-            }, 100);
-    
-            this.emit('pairingFailed', { deviceId: deviceId, reason: 'Pairing canceled by user.' });
-    
+        if (this.#pairedConnector && this.#pairedConnector.deviceId === deviceId) {
+            this.#cancelPairingForDevice(this.#pairedConnector);
+            this.#pairedConnector = null;
             return true;
         }
-        console.warn(`Tried to cancel pairing with ${deviceId}, but it was not the actively pairing device.`);
+        if (this.#midiDevices.has(deviceId)) {
+            const dev = this.#midiDevices.get(deviceId);
+            this.#cancelPairingForDevice(dev);
+            this.#midiDevices.delete(deviceId);
+            return true;
+        }
+        
+        const device = this.#devices.get(deviceId);
+        if (device) {
+            console.log(`[ConnectionManager] Force cancelling pairing for non-active device: ${deviceId}`);
+            this.#cancelPairingForDevice(device);
+            return true;
+        }
+        
+        console.warn(`Tried to cancel pairing with ${deviceId}, but it was not found.`);
         return false;
+    }
+
+    #cancelPairingForDevice(device) {
+        console.log(`Application is cancelling pairing with ${device.deviceId}`);
+        device.sendPairingRejection('Pairing canceled by user.');
+        setTimeout(() => {
+            device.destroyAllSockets('local');
+        }, 100);
+        this.emit('pairingFailed', { deviceId: device.deviceId, reason: 'Pairing canceled by user.' });
+    }
+
+    disconnectDevice(deviceId) {
+        let disconnectedAny = false;
+
+        if (this.#pairedConnector && (!deviceId || this.#pairedConnector.deviceId === deviceId)) {
+            const devId = this.#pairedConnector.deviceId;
+            console.log(`Application is manually disconnecting from connector ${devId}`);
+            const deviceToDestroy = this.#pairedConnector;
+            deviceToDestroy.sendDisconnectMessage('User disconnected.');
+            this.#pairedConnector = null;
+            setTimeout(() => deviceToDestroy.destroyAllSockets('local'), 250);
+            disconnectedAny = true;
+        }
+
+        if (deviceId && this.#midiDevices.has(deviceId)) {
+            console.log(`Application is manually disconnecting from MIDI device ${deviceId}`);
+            const deviceToDestroy = this.#midiDevices.get(deviceId);
+            deviceToDestroy.sendDisconnectMessage('User disconnected.');
+            this.#midiDevices.delete(deviceId);
+            setTimeout(() => deviceToDestroy.destroyAllSockets('local'), 250);
+            disconnectedAny = true;
+        }
+
+        return disconnectedAny;
     }
 
     disconnectFromPairedDevice() {
-        if (this.#pairedDevice) {
-            const deviceId = this.#pairedDevice.deviceId;
-            console.log(`Application is manually disconnecting from ${deviceId}`);
-            const deviceToDestroy = this.#pairedDevice;
-
-            deviceToDestroy.sendDisconnectMessage('User disconnected from presenter.');
-            this.#pairedDevice = null;
-
-            setTimeout(() => {
-                console.log(`Destroying sockets for ${deviceId} after sending disconnect message.`);
-                deviceToDestroy.destroyAllSockets('local');
-            }, 250);
-
-            return true;
-        }
-        return false;
+        return this.disconnectDevice(null);
     }
 
     sendMessageToPairedDevice(data) {
-        if (this.#pairedDevice && this.#pairedDevice.getReadySocketsCount() > 0) {
-            console.log(`[ConnectionManager] Sending message to paired device ${this.#pairedDevice.deviceId}`);
-            this.#pairedDevice.sendMessage(data);
-        } else {
-            console.log(`[ConnectionManager] Could not send message, no paired device connected.`);
+        if (this.#pairedConnector && this.#pairedConnector.getReadySocketsCount() > 0) {
+            this.#pairedConnector.sendMessage(data);
+        }
+        for (const midiDev of this.#midiDevices.values()) {
+            if (midiDev.getReadySocketsCount() > 0) {
+                midiDev.sendMessage(data);
+            }
         }
     }
 }
 
 function getAllRoutableIPv4Addresses() {
-    const addresses = [];
+    const addresses =[];
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
@@ -675,10 +826,13 @@ function getAllRoutableIPv4Addresses() {
             }
         }
     }
+
+    if (addresses.length === 0) {
+        addresses.push('127.0.0.1');
+    }
+
     return addresses;
 }
 
 module.exports = { ConnectionManager };
-
-
 

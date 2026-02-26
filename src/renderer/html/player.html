@@ -127,84 +127,137 @@
         </div>
         <div class="drawer-body">
 
-            <!-- Group 1: Display Settings -->
             <div class="drawer-group">
-                <h4>Display Settings</h4>
-                <div class="form-group">
-                    <label>Monitors</label>
-                    <div class="segmented-tabs" id="presenter-monitor-tabs">
-                        <!-- Buttons will be dynamically generated here -->
-                    </div>
-                    <div id="monitor-options-container">
-                        <!-- Monitor-specific options will be generated here -->
-                    </div>
+                <div class="drawer-group-header">
+                    <h4>Display Settings</h4>
+                    <img src="../../icons/chevron-down.svg" alt="Toggle" class="group-toggle-icon">
                 </div>
-                <!-- NEW: Global Latency Control -->
-                <div class="form-group" style="margin-top: 1rem;">
-                    <div class="latency-control">
-                        <label for="global-latency-input">Global Latency:</label>
-                        <input type="number" id="global-latency-input" class="form-input" value="0" min="0" step="1">
-                        <span class="unit-label">ms</span>
-                    </div>
-                    <small style="color: #888; font-size: 0.8rem; display: block; margin-top: 0.25rem;">Delays rendering on the master screen (source).</small>
-                </div>
-            </div>
-
-            <!-- Group 2: Audio Settings -->
-            <div class="drawer-group">
-                <h4>Audio Settings</h4>
-                <div class="form-group">
-                    <label for="audio-output-device">Output Device</label>
-                    <select id="audio-output-device" class="form-select">
-                        <option>Default System Device</option>
-                        <option>Headphones (Realtek)</option>
-                        <option>Speakers (NVIDIA)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="audio-volume-slider">Volume</label>
-                    <div class="volume-slider-container">
-                        <input type="range" min="0" max="100" value="75" class="volume-slider" id="audio-volume-slider">
-                        <span id="volume-level-display">75%</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Group 3: Device Controller -->
-            <div class="drawer-group">
-                <h4>Device Controller</h4>
-                
-                <!-- Auto-Accept Toggle -->
-                <div class="form-group" style="margin-bottom: 0.5rem;">
-                    <div class="toggle-switch-container">
-                        <label for="auto-accept-connections" style="font-size: 0.9rem; color: #aaa;">Auto-Accept Connections</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="auto-accept-connections" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <div id="device-info-container" class="device-info-container">
-                    <div class="info-item">
-                        <span class="info-label">Status:</span>
-                        <div id="device-status-value" class="info-value status-value">
-                            <span id="device-status-indicator" class="status-indicator offline"></span>
-                            <span id="device-status-text">Offline</span>
+                <div class="drawer-group-content">
+                    <div class="form-group">
+                        <label>Monitors</label>
+                        <div class="segmented-tabs" id="presenter-monitor-tabs">
+                        </div>
+                        <div id="monitor-options-container">
                         </div>
                     </div>
-                    <div class="info-item">
-                        <span class="info-label">Device Name:</span>
-                        <span id="device-name-value" class="info-value">Not Connected</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Latency (RTT):</span>
-                        <div id="device-rtt-list" class="info-value">---</div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <div class="latency-control">
+                            <label for="global-latency-input">Global Latency:</label>
+                            <input type="number" id="global-latency-input" class="form-input" value="0" min="0" step="1">
+                            <span class="unit-label">ms</span>
+                        </div>
+                        <small style="color: #888; font-size: 0.8rem; display: block; margin-top: 0.25rem;">Delays rendering on the master screen (source).</small>
                     </div>
                 </div>
-                <button id="disconnect-device-btn" class="action-btn danger-btn noneDisplay" style="width: 100%; margin-bottom: 0.5rem;">Disconnect</button>
-                <button id="open-device-list-btn" class="action-btn secondary-btn" style="width: 100%;">Open Device List</button>
-                <button id="open-tempo-sync-btn" class="action-btn secondary-btn" style="width: 100%; margin-top: 0.5rem;">Open Tempo Sync</button>
+            </div>
+
+            <div class="drawer-group">
+                <div class="drawer-group-header">
+                    <h4>Audio Settings</h4>
+                    <img src="../../icons/chevron-down.svg" alt="Toggle" class="group-toggle-icon">
+                </div>
+                <div class="drawer-group-content">
+                    <div class="form-group">
+                        <label for="audio-output-device">Output Device</label>
+                        <select id="audio-output-device" class="form-select">
+                            <option>Default System Device</option>
+                            <option>Headphones (Realtek)</option>
+                            <option>Speakers (NVIDIA)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="audio-volume-slider">Volume</label>
+                        <div class="volume-slider-container">
+                            <input type="range" min="0" max="100" value="75" class="volume-slider" id="audio-volume-slider">
+                            <span id="volume-level-display">75%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="drawer-group">
+                <div class="drawer-group-header">
+                    <h4>Device Controller</h4>
+                    <img src="../../icons/chevron-down.svg" alt="Toggle" class="group-toggle-icon">
+                </div>
+                <div class="drawer-group-content">
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <div class="toggle-switch-container">
+                            <label for="auto-accept-connections" style="font-size: 0.9rem; color: #aaa;">Auto-Accept Connections</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-accept-connections" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <div class="toggle-switch-container">
+                            <label for="auto-send-pair-connector" style="font-size: 0.9rem; color: #aaa;">Auto-Send Pair Requests</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-send-pair-connector" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="device-info-container" class="device-info-container">
+                        <div class="info-item">
+                            <span class="info-label">Status:</span>
+                            <div id="device-status-value" class="info-value status-value">
+                                <span id="device-status-indicator" class="status-indicator offline"></span>
+                                <span id="device-status-text">Offline</span>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Device Name:</span>
+                            <span id="device-name-value" class="info-value">Not Connected</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Latency (RTT):</span>
+                            <div id="device-rtt-list" class="info-value">---</div>
+                        </div>
+                    </div>
+                    <button id="disconnect-device-btn" class="action-btn danger-btn noneDisplay" style="width: 100%; margin-bottom: 0.5rem;">Disconnect</button>
+                    <button id="open-device-list-btn" class="action-btn secondary-btn" style="width: 100%;">Open Device List</button>
+                    <button id="open-tempo-sync-btn" class="action-btn secondary-btn" style="width: 100%; margin-top: 0.5rem;">Open Tempo Sync</button>
+                </div>
+            </div>
+
+            <div class="drawer-group">
+                <div class="drawer-group-header">
+                    <h4>MIDI Controller</h4>
+                    <img src="../../icons/chevron-down.svg" alt="Toggle" class="group-toggle-icon">
+                </div>
+                <div class="drawer-group-content">
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <div class="toggle-switch-container">
+                            <label for="auto-accept-midi" style="font-size: 0.9rem; color: #aaa;">Auto-Accept Connections</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-accept-midi" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <div class="toggle-switch-container">
+                            <label for="auto-send-pair-midi" style="font-size: 0.9rem; color: #aaa;">Auto-Send Pair Requests</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-send-pair-midi" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="midi-info-container" class="device-info-container">
+                        <div class="info-item" id="no-midi-msg">
+                            <span class="info-value" style="width: 100%; text-align: left; color: #666; font-style: italic;">No MIDI devices connected.</span>
+                        </div>
+                    </div>
+
+                    <button id="open-midi-list-btn" class="action-btn secondary-btn" style="width: 100%;">Open MIDI Device List</button>
+                </div>
             </div>
         </div>
     </div>

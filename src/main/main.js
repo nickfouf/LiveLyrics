@@ -39,10 +39,12 @@ let audienceWindows = new Map();
 
 // --- Global Settings ---
 let globalLatency = 0;
-let autoAcceptConnections = true;
+let autoAcceptConnections = true; // For 'connector' type (Android)
+let autoAcceptMidi = true;        // For 'midi-controller' type (Live MIDI App)
 
 let playbackManager;
 let connectionManager = null;
+let pendingPairingCallbacks = new Map();
 
 /**
  * Attempts to remove a directory or file. If EBUSY/EPERM/EACCES/ENOTEMPTY errors occur,
@@ -72,7 +74,7 @@ async function safeRm(targetPath, retries = 5, delay = 200) {
  * Safely and recursively find a font file by family name
  */
 async function findFontFile(fontFamily) {
-    const fontDirs = [];
+    const fontDirs =[];
 
     if (process.platform === 'win32') {
         if (process.env.WINDIR) {
@@ -105,7 +107,7 @@ async function findFontFile(fontFamily) {
     const extensions = new Set(['.ttf', '.otf', '.ttc', '.woff', '.woff2']);
     const target = normalize(fontFamily);
 
-    const matches = [];
+    const matches =[];
     const visited = new Set();
 
     for (const dir of fontDirs) {
@@ -608,19 +610,32 @@ app.whenReady().then(() => {
         });
 
         connectionManager.on('pairingRequest', (device, accept, reject) => {
-            console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId}).`);
-            if (autoAcceptConnections) {
-                console.log(`[Main] Auto-accept enabled. Automatically accepting request from ${device.deviceId}.`);
+            console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId})[Type: ${device.deviceType}].`);
+            
+            // Logic for Android Connectors
+            if (device.deviceType === 'connector' && autoAcceptConnections) {
+                console.log(`[Main] Auto-accept (Connector) enabled. Automatically accepting request from ${device.deviceId}.`);
                 accept();
-            } else {
-                if (playerWindow && !playerWindow.isDestroyed()) {
-                    playerWindow.webContents.send('device-controller:pairing-request', { deviceId: device.deviceId, deviceName: device.deviceName });
-                }
-                // We don't have a direct callback mechanism here like in the simplified version, 
-                // typically this would store the callbacks in a map. 
-                // For full correctness with the previous logic, we'd need the `pairingRequests` map.
-                // Assuming standard event flow based on `device-controller:respond-to-pairing`.
+                return;
             }
+
+            // Logic for Live MIDI Apps
+            if (device.deviceType === 'midi-controller' && autoAcceptMidi) {
+                console.log(`[Main] Auto-accept (MIDI) enabled. Automatically accepting request from ${device.deviceId}.`);
+                accept();
+                return;
+            }
+
+            pendingPairingCallbacks.set(device.deviceId, { accept, reject });
+
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('device-controller:pairing-request', { 
+                    deviceId: device.deviceId, 
+                    deviceName: device.deviceName,
+                    deviceType: device.deviceType
+                });
+            }
+            // Logic to handle response via stored callbacks handled via socket events in ConnectionManager
         });
 
         connectionManager.on('songSelectionRequest', (songId) => {
@@ -672,6 +687,35 @@ app.whenReady().then(() => {
                 const remoteInfo = { id: device.deviceId, name: device.deviceName, type: device.deviceType, ips: device.getRemoteAdvertisedIps() };
                 playerWindow.webContents.send('device-controller:connection-success', remoteInfo);
             }
+
+            // --- FIX: Immediately sync state with the newly connected device ---
+            if (playbackManager) {
+                const currentSyncState = playbackManager.getCurrentSyncState();
+                
+                // 1. Send Playback State (BPM, Status)
+                connectionManager.sendMessageToPairedDevice({
+                    type: 'playbackUpdate',
+                    payload: currentSyncState
+                });
+
+                // 2. Send Song Data (Title) if loaded
+                if (currentSyncState.song) {
+                    connectionManager.sendMessageToPairedDevice({
+                        type: 'songUpdateHint',
+                        payload: { title: currentSyncState.song.title }
+                    });
+                    
+                    const currentSongData = playbackManager.getCurrentSongData();
+                    if (currentSongData) {
+                        connectionManager.sendMessageToPairedDevice({
+                            type: 'songUpdate',
+                            payload: currentSongData
+                        });
+                    }
+                }
+            }
+            // ------------------------------------------------------------------
+
             device.on('infoUpdated', (updatedDevice) => {
                 if (playerWindow && !playerWindow.isDestroyed()) {
                     const updatedInfo = { id: updatedDevice.deviceId, name: updatedDevice.deviceName, type: updatedDevice.deviceType, ips: updatedDevice.getRemoteAdvertisedIps() };
@@ -691,6 +735,20 @@ app.whenReady().then(() => {
             console.log(`[Main] Pairing failed with ${deviceId}: ${reason}`);
             if (playerWindow && !playerWindow.isDestroyed()) {
                 playerWindow.webContents.send('device-controller:error', `Pairing with ${deviceId} failed: ${reason}`);
+                // [NEW] Emit dedicated payload to renderer
+                playerWindow.webContents.send('device-controller:pairing-failed', { deviceId, reason });
+            }
+        });
+
+        // [NEW] Forward Dynamic Device Information
+        connectionManager.on('deviceInfoUpdated', (info) => {
+            const existing = discoverableDevices.get(info.deviceId);
+            if (existing) {
+                existing.deviceName = info.deviceName;
+                existing.deviceType = info.deviceType;
+            }
+            if (playerWindow && !playerWindow.isDestroyed()) {
+                playerWindow.webContents.send('device-controller:discoverable-info-update', info);
             }
         });
 
@@ -704,15 +762,32 @@ app.whenReady().then(() => {
         ipcMain.on('device-controller:initiate-pairing', (event, deviceId) => connectionManager.pairWithDevice(deviceId));
         ipcMain.on('device-controller:cancel-pairing', (event, deviceId) => connectionManager.cancelPairing(deviceId));
         ipcMain.on('device-controller:respond-to-pairing', (event, { deviceId, accepted }) => {
-            // Logic to handle response via stored callbacks would go here.
-        });
-        ipcMain.on('device-controller:disconnect-device', () => {
-            if (connectionManager) {
-                connectionManager.disconnectFromPairedDevice();
+            const callbacks = pendingPairingCallbacks.get(deviceId);
+            if (callbacks) {
+                console.log(`[Main] User responded to pairing request from ${deviceId}: ${accepted ? 'ACCEPT' : 'REJECT'}`);
+                if (accepted) {
+                    callbacks.accept();
+                } else {
+                    callbacks.reject();
+                }
+                pendingPairingCallbacks.delete(deviceId);
+            } else {
+                console.warn(`[Main] No pending callbacks found for ${deviceId}. The request might have timed out.`);
             }
         });
+        
+        ipcMain.on('device-controller:disconnect-device', (event, deviceId) => {
+            if (connectionManager) {
+                connectionManager.disconnectDevice(deviceId);
+            }
+        });
+        
         ipcMain.on('device-controller:set-auto-accept', (event, enabled) => {
             autoAcceptConnections = enabled;
+        });
+        // NEW: MIDI Auto Accept
+        ipcMain.on('device-controller:set-midi-auto-accept', (event, enabled) => {
+            autoAcceptMidi = enabled;
         });
         ipcMain.on('player:ready-for-devices', () => broadcastDeviceList());
 
@@ -936,7 +1011,7 @@ ipcMain.handle('get-system-fonts', async () => {
         return [...new Set(fonts)].sort();
     } catch (error) {
         console.error("Failed to get system fonts:", error);
-        return [];
+        return[];
     }
 });
 
@@ -959,7 +1034,7 @@ ipcMain.on('project:cancel-copy', () => {
 
 ipcMain.handle('dialog:openSong', async (event) => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
-    const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, { properties: ['openFile'], filters: [{ name: 'LiveLyrics Project', extensions: ['lyx'] }] });
+    const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, { properties:['openFile'], filters: [{ name: 'LiveLyrics Project', extensions: ['lyx'] }] });
     if (!canceled) return filePaths[0];
 });
 
@@ -1424,3 +1499,4 @@ if (!gotTheLock) {
         }
     });
 }
+

@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld('playerAPI', {
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
     
     setPresenterDisplay: (displayId) => ipcRenderer.send('player:set-presenter-display', displayId),
-    // MODIFIED: Global latency setter
     setGlobalLatency: (latency) => ipcRenderer.send('player:set-global-latency', latency),
     onDisplaysChanged: (callback) => ipcRenderer.on('displays-changed', (_event, data) => callback(data)),
     
@@ -40,15 +39,19 @@ contextBridge.exposeInMainWorld('playerAPI', {
     onDisconnect: (callback) => ipcRenderer.on('device-controller:disconnect', (_event, payload) => callback(payload)),
     onError: (callback) => ipcRenderer.on('device-controller:error', (_event, message) => callback(message)),
     onRttUpdate: (callback) => ipcRenderer.on('device-controller:rtt-update', (_event, stats) => callback(stats)),
+    
+    onPairingFailed: (callback) => ipcRenderer.on('device-controller:pairing-failed', (_event, payload) => callback(payload)),
+    onDiscoverableInfoUpdate: (callback) => ipcRenderer.on('device-controller:discoverable-info-update', (_event, info) => callback(info)),
+
     setAutoAccept: (enabled) => ipcRenderer.send('device-controller:set-auto-accept', enabled),
+    setMidiAutoAccept: (enabled) => ipcRenderer.send('device-controller:set-midi-auto-accept', enabled),
     
     initiatePairing: (deviceId) => ipcRenderer.send('device-controller:initiate-pairing', deviceId),
     cancelPairing: (deviceId) => ipcRenderer.send('device-controller:cancel-pairing', deviceId),
     respondToPairing: (deviceId, accepted) => ipcRenderer.send('device-controller:respond-to-pairing', { deviceId, accepted }),
-    disconnectDevice: () => ipcRenderer.send('device-controller:disconnect-device'),
+    disconnectDevice: (deviceId) => ipcRenderer.send('device-controller:disconnect-device', deviceId),
     readyForDevices: () => ipcRenderer.send('player:ready-for-devices'),
 
-    // --- NEW: Mirror/Role API ---
     onSetRole: (callback) => ipcRenderer.on('window:set-role', (_event, data) => callback(data)),
 });
 

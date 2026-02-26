@@ -15,6 +15,8 @@ class SmartSocket extends EventEmitter {
         this._ownDeviceId = ownDeviceId;
         this._ownDeviceType = ownDeviceType;
         this._ownDeviceName = options.ownDeviceName;
+        this._ownServicePort = options.servicePort; // Added: Store the service port
+        
         this._remoteDeviceId = null;
         this._remoteDeviceType = null;
         this._remoteDeviceName = null;
@@ -180,7 +182,13 @@ class SmartSocket extends EventEmitter {
     }
 
     _sendHandshake() {
-        const handshake = { deviceId: this._ownDeviceId, deviceType: this._ownDeviceType, deviceName: this._ownDeviceName, enableStream: this._enableStream };
+        const handshake = { 
+            deviceId: this._ownDeviceId, 
+            deviceType: this._ownDeviceType, 
+            deviceName: this._ownDeviceName, 
+            enableStream: this._enableStream,
+            servicePort: this._ownServicePort // Added: Send TCP Port
+        };
         if (this._enableStream) {
             if (!this._streamSocket || !this._streamSocket.socket.address()) {
                 this.destroy(new Error("Cannot send handshake: Stream socket not ready."));
@@ -285,15 +293,15 @@ function createConnection(...args) {
     if (typeof args[0] === 'object' && args[0] !== null) { options = { ...args[0] }; connectListener = args[1]; }
     else if (typeof args[0] === 'number') { options.port = args[0]; options.host = typeof args[1] === 'string' ? args[1] : 'localhost'; connectListener = typeof args[1] === 'function' ? args[1] : args[2]; }
     else { throw new Error('Invalid arguments for createConnection'); }
-    const { deviceId, deviceType, deviceName, enableStream, ...connectionOptions } = options;
+    // --- MODIFIED: Extract servicePort from options ---
+    const { deviceId, deviceType, deviceName, enableStream, servicePort, ...connectionOptions } = options;
     if (!deviceId || !deviceType || !deviceName) { throw new Error("createConnection requires 'deviceId', 'deviceName', and 'deviceType'."); }
-    const smartSocket = new SmartSocket(new net.Socket(), deviceId, deviceType, { ownDeviceName: deviceName, enableStream, isInitiator: true });
+    // --- MODIFIED: Pass servicePort to SmartSocket ---
+    const smartSocket = new SmartSocket(new net.Socket(), deviceId, deviceType, { ownDeviceName: deviceName, enableStream, isInitiator: true, servicePort });
     if (connectListener) smartSocket.once('connect', connectListener);
     smartSocket.connect(connectionOptions);
     return smartSocket;
 }
 
 module.exports = { createServer, createConnection, SmartSocket, SmartServer };
-
-
 

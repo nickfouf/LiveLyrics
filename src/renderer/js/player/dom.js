@@ -72,6 +72,14 @@ export function initDOM() {
     
     // Auto-Accept Toggle
     DOM.autoAcceptToggle = document.getElementById('auto-accept-connections');
+    DOM.autoSendPairConnectorToggle = document.getElementById('auto-send-pair-connector'); // NEW
+
+    // MIDI Controller Elements (NEW)
+    DOM.autoAcceptMidiToggle = document.getElementById('auto-accept-midi');
+    DOM.autoSendPairMidiToggle = document.getElementById('auto-send-pair-midi'); // NEW
+    DOM.midiInfoContainer = document.getElementById('midi-info-container');
+    DOM.openMidiListBtn = document.getElementById('open-midi-list-btn');
+    DOM.noMidiMsg = document.getElementById('no-midi-msg');
 
     // Pairing Dialog
     DOM.pairingDialog = document.getElementById('pairing-dialog');

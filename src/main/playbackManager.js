@@ -150,24 +150,13 @@ class PlaybackManager {
         const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
     
         if (type === 'synced') {
-            console.log(`[PlaybackManager] Starting synced play. Resetting BPM to default: ${this.#state.song.originalBpm}`);
+            // MODIFIED: Preserving the last BPM instead of resetting to default.
             
-            // When resuming synced playback, we must reset the BPM to the song's default
-            // and adjust the current time (`timeAtReference`) to match.
-            // We do this by converting the current time in milliseconds to a musical time (beats)
-            // using the old BPM, and then converting that musical time back to milliseconds
-            // using the new, default BPM. This keeps the playback position musically consistent.
-            const oldQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
-            const timeInBeats = oldQuarterNoteDuration > 0 ? this.#state.timeAtReference / oldQuarterNoteDuration : 0;
+            // Calculate the current musical time in beats using the CURRENT BPM.
+            const currentQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
+            const timeInBeats = currentQuarterNoteDuration > 0 ? this.#state.timeAtReference / currentQuarterNoteDuration : 0;
     
-            // Reset BPM to the song's default
-            this.#state.song.bpm = this.#state.song.originalBpm;
-            this.#state.song.bpmUnit = this.#state.song.originalBpmUnit;
-    
-            // Now, convert the musical time back to milliseconds using the NEW default BPM
-            const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
-            this.#state.timeAtReference = timeInBeats * newQuarterNoteDuration;
-    
+            // Find the correct measure index based on this beat position
             let startingMeasureIndex = this.#measureMap.findIndex(m => timeInBeats >= m.startTime && timeInBeats < m.startTime + m.duration);
             if (startingMeasureIndex === -1) {
                 const totalDurationBeats = this.#measureMap.length > 0 ? this.#measureMap.at(-1).startTime + this.#measureMap.at(-1).duration : 0;
@@ -206,24 +195,30 @@ class PlaybackManager {
         // Use a small tolerance (e.g., 1ms) to account for floating point inaccuracies.
         const isAtSongEnd = totalDurationMs > 0 && timeAtPause >= totalDurationMs - 1;
     
-        // Only snap to the nearest measure if in 'synced' mode AND not at the end of the song.
+        // Only snap to the next measure if in 'synced' mode AND not at the end of the song.
         if (this.#state.type === 'synced' && this.#measureMap.length > 0 && !isAtSongEnd) {
             const timeInBeats = quarterNoteDuration > 0 ? timeAtPause / quarterNoteDuration : 0;
     
-            let closestMeasure = null;
-            let minDiff = Infinity;
+            let targetMeasureTimeBeats = null;
     
             for (const measure of this.#measureMap) {
-                const diff = Math.abs(timeInBeats - measure.startTime);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestMeasure = measure;
+                // Find the first measure that starts strictly after the current timeline position.
+                // A small epsilon (0.0001) guarantees that if we are exactly on or incredibly close
+                // to a measure start, we still snap forward to the NEXT one.
+                if (measure.startTime > timeInBeats + 0.0001) {
+                    targetMeasureTimeBeats = measure.startTime;
+                    break;
                 }
             }
+            
+            // If there's no next measure, snap to the end of the very last measure
+            if (targetMeasureTimeBeats === null) {
+                const lastMeasure = this.#measureMap[this.#measureMap.length - 1];
+                targetMeasureTimeBeats = lastMeasure.startTime + lastMeasure.duration;
+            }
     
-            if (closestMeasure) {
-                const snappedTimeInBeats = closestMeasure.startTime;
-                const snappedTimeInMs = snappedTimeInBeats * quarterNoteDuration;
+            if (targetMeasureTimeBeats !== null) {
+                const snappedTimeInMs = targetMeasureTimeBeats * quarterNoteDuration;
     
                 this.#state.status = 'paused';
                 this.#state.timeAtReference = snappedTimeInMs;
@@ -417,6 +412,3 @@ class PlaybackManager {
 }
 
 module.exports = { PlaybackManager };
-
-
-

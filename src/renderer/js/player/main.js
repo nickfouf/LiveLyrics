@@ -14,12 +14,67 @@ import { MirrorManager } from '../mirror.js';
 
 // --- Device Controller Logic ---
 
-// State
 let discoverableDevices = new Map();
-let connectingDeviceId = null; 
+const connectingDeviceIds = new Set();
+const manualDisconnectIds = new Set();
+const manualPairIds = new Set();
+const autoPairRetries = new Map(); // deviceId -> timeoutId
 let pendingPairingDeviceId = null;
-let connectedDevice = null;
+let connectedConnector = null; 
+let connectedMidiDevices = new Map(); 
 let isManualDisconnect = false; 
+
+// NEW: Track which list is currently being viewed to filter the rendered list
+let currentDeviceListFilter = 'connector'; 
+
+function scheduleAutoPairRetry(deviceId, deviceType) {
+    if (autoPairRetries.has(deviceId)) {
+        clearTimeout(autoPairRetries.get(deviceId));
+    }
+    
+    const isConnector = deviceType === 'connector';
+    const isMidi = deviceType === 'midi-controller';
+    
+    if (isConnector && DOM.autoSendPairConnectorToggle && !DOM.autoSendPairConnectorToggle.checked) return;
+    if (isMidi && DOM.autoSendPairMidiToggle && !DOM.autoSendPairMidiToggle.checked) return;
+    
+    // 30 seconds countdown retry
+    const timeoutId = setTimeout(() => {
+        autoPairRetries.delete(deviceId);
+        checkAndAutoPairDevice(deviceId, deviceType);
+    }, 30000);
+    
+    autoPairRetries.set(deviceId, timeoutId);
+}
+
+function checkAndAutoPairDevice(deviceId, deviceType) {
+    const device = discoverableDevices.get(deviceId);
+    if (!device) return;
+
+    const isConnector = deviceType === 'connector';
+    const isMidi = deviceType === 'midi-controller';
+    
+    // Check preferences
+    if (isConnector && DOM.autoSendPairConnectorToggle && !DOM.autoSendPairConnectorToggle.checked) return;
+    if (isMidi && DOM.autoSendPairMidiToggle && !DOM.autoSendPairMidiToggle.checked) return;
+    
+    // Check if already fully connected
+    if (isConnector && connectedConnector && connectedConnector.id === deviceId) return;
+    if (isMidi && connectedMidiDevices.has(deviceId)) return;
+    
+    // Check if it's already attempting to connect
+    if (connectingDeviceIds.has(deviceId)) return;
+    
+    connectingDeviceIds.add(deviceId);
+    renderDeviceList();
+    sendMessageToMain('initiatePairing', { deviceId });
+}
+
+function handleAutoPairToggled() {
+    for (const[deviceId, device] of discoverableDevices.entries()) {
+        checkAndAutoPairDevice(deviceId, device.deviceType);
+    }
+}
 
 function sendMessageToMain(type, payload) {
     switch(type) {
@@ -33,7 +88,7 @@ function sendMessageToMain(type, payload) {
             window.playerAPI.respondToPairing(payload.deviceId, payload.accepted);
             break;
         case 'disconnectDevice':
-            window.playerAPI.disconnectDevice();
+            window.playerAPI.disconnectDevice(payload ? payload.deviceId : undefined);
             break;
     }
 }
@@ -43,14 +98,21 @@ function renderDeviceList() {
     const devices = Array.from(discoverableDevices.values());
     DOM.deviceList.innerHTML = '';
 
-    if (devices.length === 0) {
-        DOM.deviceList.innerHTML = '<li class="device-list-item-empty">No devices found on the network.</li>';
+    // MODIFIED: Filter devices based on the active context (connector vs midi)
+    const filteredDevices = devices.filter(d => d.deviceType === currentDeviceListFilter);
+
+    if (filteredDevices.length === 0) {
+        const typeLabel = currentDeviceListFilter === 'midi-controller' ? 'MIDI devices' : 'remote devices';
+        DOM.deviceList.innerHTML = `<li class="device-list-item-empty">No ${typeLabel} found on the network.</li>`;
         return;
     }
 
-    devices.forEach(device => {
-        const isConnected = connectedDevice && connectedDevice.id === device.deviceId;
-        const isConnecting = connectingDeviceId === device.deviceId;
+    filteredDevices.forEach(device => {
+        const isConnectorConnected = device.deviceType === 'connector' && connectedConnector && connectedConnector.id === device.deviceId;
+        const isMidiConnected = device.deviceType === 'midi-controller' && connectedMidiDevices.has(device.deviceId);
+        const isConnected = isConnectorConnected || isMidiConnected;
+        const isConnecting = connectingDeviceIds.has(device.deviceId);
+        
         const li = document.createElement('li');
         li.className = 'device-list-item';
         li.dataset.deviceId = device.deviceId;
@@ -59,8 +121,8 @@ function renderDeviceList() {
 
         if (isConnected) {
             buttonClass = 'danger-btn';
-            buttonText = 'Unpair';
-            buttonAction = 'unpair';
+            buttonText = 'Disconnect'; 
+            buttonAction = 'disconnect';
         } else if (isConnecting) {
             buttonClass = 'danger-btn';
             buttonText = 'Cancel';
@@ -74,7 +136,7 @@ function renderDeviceList() {
         li.innerHTML = `
             <div class="device-list-details">
                 <span class="device-name">${device.deviceName}</span>
-                <span class="device-id-secondary">${device.deviceId}</span>
+                <span class="device-id-secondary">${device.deviceId} [${device.deviceType}]</span>
             </div>
             <button class="action-btn pair-btn ${buttonClass}" data-action="${buttonAction}">${buttonText}</button>
         `;
@@ -82,7 +144,7 @@ function renderDeviceList() {
     });
 }
 
-function renderRttList(stats = []) {
+function renderRttList(stats =[]) {
     if (!DOM.deviceRttList) return;
     stats.sort((a, b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
 
@@ -100,9 +162,20 @@ function renderRttList(stats = []) {
     });
 }
 
-
-function showDeviceListDialog() {
+// MODIFIED: Accept filter type to show relevant devices only
+function showDeviceListDialog(filterType) {
     if (!DOM.deviceListDialog) return;
+    
+    currentDeviceListFilter = filterType || 'connector';
+    
+    // Update dialog title based on context
+    const header = DOM.deviceListDialog.querySelector('.dialog-header');
+    if (header) {
+        header.textContent = currentDeviceListFilter === 'midi-controller' 
+            ? 'Available MIDI Controllers' 
+            : 'Available Remote Devices';
+    }
+
     renderDeviceList();
     DOM.deviceListDialog.classList.add('visible');
 }
@@ -125,7 +198,7 @@ function hidePairingDialog() {
 
 function updateDeviceStatusUI(status, device = null) {
     if (status === 'connected' && device) {
-        connectedDevice = device;
+        connectedConnector = device;
         DOM.deviceStatusIndicator.classList.remove('offline');
         DOM.deviceStatusIndicator.classList.add('online');
         DOM.deviceStatusText.textContent = 'Connected';
@@ -133,7 +206,7 @@ function updateDeviceStatusUI(status, device = null) {
         DOM.disconnectDeviceBtn.classList.remove('noneDisplay');
         DOM.openDeviceListBtn.textContent = 'Open Device List';
     } else {
-        connectedDevice = null;
+        connectedConnector = null;
         DOM.deviceStatusIndicator.classList.remove('online');
         DOM.deviceStatusIndicator.classList.add('offline');
         DOM.deviceStatusText.textContent = status === 'searching' ? 'Searching...' : 'Offline';
@@ -145,7 +218,6 @@ function updateDeviceStatusUI(status, device = null) {
 }
 
 function handleDisconnectionUI() {
-    connectingDeviceId = null;
     isManualDisconnect = false; 
     updateDeviceStatusUI('offline');
     if (DOM.deviceListDialog.classList.contains('visible')) {
@@ -156,20 +228,86 @@ function handleDisconnectionUI() {
     }
 }
 
+function initMidiController() {
+    if (DOM.autoAcceptMidiToggle) {
+        const savedAutoMidi = localStorage.getItem('autoAcceptMidi');
+        const shouldAutoMidi = savedAutoMidi === null ? true : (savedAutoMidi === 'true');
+
+        DOM.autoAcceptMidiToggle.checked = shouldAutoMidi;
+        window.playerAPI.setMidiAutoAccept(shouldAutoMidi);
+
+        DOM.autoAcceptMidiToggle.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            localStorage.setItem('autoAcceptMidi', isChecked);
+            window.playerAPI.setMidiAutoAccept(isChecked);
+        });
+    }
+    
+    if (DOM.autoSendPairMidiToggle) {
+        const savedAutoSendMidi = localStorage.getItem('autoSendPairMidi');
+        const shouldAutoSendMidi = savedAutoSendMidi === null ? true : (savedAutoSendMidi === 'true');
+
+        DOM.autoSendPairMidiToggle.checked = shouldAutoSendMidi;
+
+        DOM.autoSendPairMidiToggle.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            localStorage.setItem('autoSendPairMidi', isChecked);
+            if (isChecked) handleAutoPairToggled();
+        });
+    }
+
+    if (DOM.openMidiListBtn) {
+        DOM.openMidiListBtn.addEventListener('click', () => {
+            // MODIFIED: Pass 'midi-controller' filter
+            showDeviceListDialog('midi-controller'); 
+        });
+    }
+}
+
+function updateMidiSidebar(device, isDisconnecting) {
+    if (!DOM.midiInfoContainer) return;
+
+    const safeId = device.id.replace(/[^a-zA-Z0-9-_]/g, '');
+    const itemId = `midi-dev-${safeId}`;
+    const existingItem = document.getElementById(itemId);
+
+    if (isDisconnecting) {
+        if (existingItem) existingItem.remove();
+    } else {
+        if (!existingItem) {
+            const item = document.createElement('div');
+            item.id = itemId;
+            item.className = 'info-item';
+            item.style.marginBottom = '5px';
+            item.innerHTML = `
+                <span class="info-label" style="max-width: 65%; font-weight: normal;">${device.name}</span>
+                <span class="status-indicator online"></span>
+            `;
+            DOM.midiInfoContainer.appendChild(item);
+        }
+    }
+
+    const activeItems = DOM.midiInfoContainer.querySelectorAll('div[id^="midi-dev-"]');
+    if (DOM.noMidiMsg) {
+        DOM.noMidiMsg.style.display = activeItems.length > 0 ? 'none' : 'block';
+    }
+}
+
 function initDeviceController() {
     updateDeviceStatusUI('searching');
     makeDraggable('device-list-dialog');
 
-    DOM.openDeviceListBtn.addEventListener('click', showDeviceListDialog);
+    initMidiController();
+
+    // MODIFIED: Pass 'connector' filter
+    DOM.openDeviceListBtn.addEventListener('click', () => showDeviceListDialog('connector'));
     
-    // Listener for Tempo Sync button
     if (DOM.openTempoSyncBtn) {
         DOM.openTempoSyncBtn.addEventListener('click', () => {
             window.playerAPI.openTempoSync();
         });
     }
 
-    // Auto-Accept Persistence Logic
     if (DOM.autoAcceptToggle) {
         const savedAutoAccept = localStorage.getItem('autoAcceptConnections');
         const shouldAutoAccept = savedAutoAccept === null ? true : (savedAutoAccept === 'true');
@@ -183,18 +321,32 @@ function initDeviceController() {
             window.playerAPI.setAutoAccept(isChecked);
         });
     }
+    
+    if (DOM.autoSendPairConnectorToggle) {
+        const savedAutoSendConnector = localStorage.getItem('autoSendPairConnector');
+        const shouldAutoSendConnector = savedAutoSendConnector === null ? true : (savedAutoSendConnector === 'true');
+
+        DOM.autoSendPairConnectorToggle.checked = shouldAutoSendConnector;
+
+        DOM.autoSendPairConnectorToggle.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            localStorage.setItem('autoSendPairConnector', isChecked);
+            if (isChecked) handleAutoPairToggled();
+        });
+    }
 
     DOM.disconnectDeviceBtn.addEventListener('click', async () => {
-        if (!connectedDevice) return;
+        if (!connectedConnector) return;
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to disconnect from ${connectedDevice.name}?`,
+            `Are you sure you want to disconnect from ${connectedConnector.name}?`,
             'Confirm Disconnect'
         );
         if (confirmed) {
-            isManualDisconnect = true; 
-            sendMessageToMain('disconnectDevice');
+            manualDisconnectIds.add(connectedConnector.id);
+            sendMessageToMain('disconnectDevice', { deviceId: connectedConnector.id });
         }
     });
+
     DOM.closeDeviceListBtn.addEventListener('click', hideDeviceListDialog);
     DOM.deviceListDialog.addEventListener('click', (e) => {
         if (e.target === DOM.deviceListDialog) hideDeviceListDialog();
@@ -209,20 +361,22 @@ function initDeviceController() {
         const action = actionButton.dataset.action;
 
         if (action === 'pair') {
-            if (connectingDeviceId) return; 
-            connectingDeviceId = deviceId;
+            if (connectingDeviceIds.has(deviceId)) return; 
+            connectingDeviceIds.add(deviceId);
+            manualPairIds.add(deviceId); // Mark as manually requested by the user
             renderDeviceList(); 
             sendMessageToMain('initiatePairing', { deviceId });
-        } else if (action === 'unpair') {
+        } else if (action === 'disconnect') {
             const confirmed = await showConfirmationDialog(
-                `Are you sure you want to disconnect from ${connectedDevice.name}?`,
+                `Are you sure you want to disconnect?`,
                 'Confirm Disconnect'
             );
             if (confirmed) {
-                isManualDisconnect = true; 
-                sendMessageToMain('disconnectDevice');
+                manualDisconnectIds.add(deviceId);
+                sendMessageToMain('disconnectDevice', { deviceId });
             }
         } else if (action === 'cancel') {
+            manualDisconnectIds.add(deviceId);
             sendMessageToMain('cancelPairing', { deviceId });
         }
     });
@@ -242,7 +396,10 @@ function initDeviceController() {
 
     window.playerAPI.onDeviceUpdate((devices) => {
         discoverableDevices.clear();
-        devices.forEach(d => discoverableDevices.set(d.deviceId, d));
+        devices.forEach(d => {
+            discoverableDevices.set(d.deviceId, d);
+            checkAndAutoPairDevice(d.deviceId, d.deviceType); // Attempt auto-pair initially
+        });
         if (DOM.deviceListDialog.classList.contains('visible')) {
             renderDeviceList();
         }
@@ -250,10 +407,48 @@ function initDeviceController() {
 
     window.playerAPI.onInfoUpdate((device) => {
         console.log('Received device info update:', device);
-        if (connectedDevice && connectedDevice.id === device.id) {
+        if (connectedConnector && connectedConnector.id === device.id) {
             updateDeviceStatusUI('connected', device);
         }
     });
+    
+    // [NEW] Triggered when dynamic info is updated bypassing the 30-sec timer
+    if (window.playerAPI.onDiscoverableInfoUpdate) {
+        window.playerAPI.onDiscoverableInfoUpdate((deviceInfo) => {
+            if (autoPairRetries.has(deviceInfo.deviceId)) {
+                clearTimeout(autoPairRetries.get(deviceInfo.deviceId));
+                autoPairRetries.delete(deviceInfo.deviceId);
+            }
+            checkAndAutoPairDevice(deviceInfo.deviceId, deviceInfo.deviceType);
+        });
+    }
+
+    // [NEW] Graceful silent handling of rejections
+    if (window.playerAPI.onPairingFailed) {
+        window.playerAPI.onPairingFailed((payload) => {
+            if (payload && payload.deviceId) {
+                const wasManualCancel = manualDisconnectIds.has(payload.deviceId);
+                manualDisconnectIds.delete(payload.deviceId);
+                
+                const wasManualPair = manualPairIds.has(payload.deviceId);
+                manualPairIds.delete(payload.deviceId);
+
+                connectingDeviceIds.delete(payload.deviceId);
+                if (DOM.deviceListDialog.classList.contains('visible')) renderDeviceList();
+                
+                if (!wasManualCancel) {
+                    const device = discoverableDevices.get(payload.deviceId);
+                    if (device) {
+                        scheduleAutoPairRetry(payload.deviceId, device.deviceType);
+                    }
+                    
+                    if (wasManualPair) {
+                        showAlertDialog('Pairing Failed', `Pairing with ${payload.deviceId} failed: ${payload.reason}`);
+                    }
+                }
+            }
+        });
+    }
 
     window.playerAPI.onRttUpdate((stats) => {
         renderRttList(stats);
@@ -264,26 +459,56 @@ function initDeviceController() {
     });
 
     window.playerAPI.onConnectionSuccess((device) => {
-        connectingDeviceId = null;
-        isManualDisconnect = false; 
-        hideDeviceListDialog();
-        hideAlertDialog();
-        updateDeviceStatusUI('connected', device);
+        // Strictly clear the connecting ID when successful
+        connectingDeviceIds.delete(device.id);
+
+        if (autoPairRetries.has(device.id)) {
+            clearTimeout(autoPairRetries.get(device.id));
+            autoPairRetries.delete(device.id);
+        }
+
+        if (device.type === 'midi-controller') {
+            connectedMidiDevices.set(device.id, device);
+            updateMidiSidebar(device, false);
+            if (DOM.deviceListDialog.classList.contains('visible')) renderDeviceList();
+        } else {
+            connectedConnector = device;
+            isManualDisconnect = false; 
+            hideDeviceListDialog();
+            hideAlertDialog();
+            updateDeviceStatusUI('connected', device);
+        }
     });
 
     window.playerAPI.onDisconnect((payload) => {
-        connectingDeviceId = null; 
-        if (isManualDisconnect) {
+        if (!payload) {
             handleDisconnectionUI();
             return;
         }
+        
+        const wasManual = manualDisconnectIds.has(payload.deviceId);
+        manualDisconnectIds.delete(payload.deviceId);
 
-        handleDisconnectionUI(); 
-        if (payload) {
-            if (payload.reason === 'remote') {
-                showAlertDialog('Device Disconnected', 'The other device has disconnected.');
-            } else if (payload.reason === 'network') {
-                showAlertDialog('Connection Lost', 'The connection was lost due to a network failure.');
+        if (connectingDeviceIds.has(payload.deviceId)) {
+            connectingDeviceIds.delete(payload.deviceId);
+        }
+
+        if (payload.deviceType === 'midi-controller') {
+            connectedMidiDevices.delete(payload.deviceId);
+            updateMidiSidebar({ id: payload.deviceId }, true);
+            if (DOM.deviceListDialog.classList.contains('visible')) renderDeviceList();
+            
+            if (!wasManual) scheduleAutoPairRetry(payload.deviceId, payload.deviceType);
+        } else {
+            connectedConnector = null;
+            if (payload.deviceType === 'connector') {
+                handleDisconnectionUI(); 
+                if (!wasManual) {
+                    if (payload.reason === 'remote') showAlertDialog('Device Disconnected', 'The other device has disconnected.');
+                    else if (payload.reason === 'network') showAlertDialog('Connection Lost', 'The connection was lost due to a network failure.');
+                    
+                    scheduleAutoPairRetry(payload.deviceId, payload.deviceType);
+                }
             }
         }
     });
@@ -295,13 +520,8 @@ function initDeviceController() {
             message.toLowerCase().includes('canceled by user')
         );
 
-        if (isPairingError) {
-            console.warn(`[Device Controller] Pairing process failed or was canceled: ${message}`);
-            connectingDeviceId = null;
-            handleDisconnectionUI();
-            showAlertDialog('Pairing Failed', message);
-            return;
-        }
+        // Failures are now handled gracefully by onPairingFailed without spamming the error dialogs
+        if (isPairingError) return;
         console.error(`[Device Controller] Received a non-fatal error from the main process: ${message}`);
     });
 
@@ -328,11 +548,8 @@ function setupPanels() {
     });
 }
 
-// --- Display Settings Logic ---
-
 let lastDisplayInfo = null; 
 let viewedDisplayId = null; 
-// Removed: monitorLatencies map
 
 function renderDisplayTabs({ allDisplays, presenterDisplay }) {
     const tabsContainer = DOM.presenterMonitorTabs;
@@ -378,7 +595,6 @@ function renderDisplayTabs({ allDisplays, presenterDisplay }) {
             makePresenterBtnHtml = `<button class="action-btn secondary-btn make-presenter-btn" data-display-id="${display.id}">Make Presenter</button>`;
         }
 
-        // Removed per-display latency input generation
         optionsPanel.innerHTML = `
             <div class="monitor-role-info">
                 <span class="monitor-role-label">Role:</span>
@@ -400,7 +616,6 @@ function initDisplaySettings() {
         lastDisplayInfo = displayInfo; 
         renderDisplayTabs(displayInfo);
         
-        // Sync global latency input from main process state if present
         if (DOM.globalLatencyInput && displayInfo.globalLatency !== undefined) {
              DOM.globalLatencyInput.value = displayInfo.globalLatency;
         }
@@ -432,7 +647,6 @@ function initDisplaySettings() {
 function initConfigurationPanel() {
     initDisplaySettings();
 
-    // Global Latency Handler
     if (DOM.globalLatencyInput) {
         DOM.globalLatencyInput.addEventListener('input', (e) => {
             const latency = Math.max(0, parseInt(e.target.value, 10) || 0);
@@ -447,6 +661,15 @@ function initConfigurationPanel() {
     DOM.audioVolumeSlider.addEventListener('input', (e) => {
         const volume = e.target.value;
         DOM.volumeLevelDisplay.textContent = `${volume}%`;
+    });
+
+    document.querySelectorAll('.drawer-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const group = header.closest('.drawer-group');
+            if (group) {
+                group.classList.toggle('collapsed');
+            }
+        });
     });
 }
 
@@ -504,39 +727,31 @@ function setupPlayerBPMControls() {
     });
 }
 
-// --- Role Handling ---
 function handleRoleUpdate({ role, sourceId }) {
     console.log(`[Player] Role changed to: ${role}`, sourceId ? `Source: ${sourceId}` : '');
     
     if (role === 'mirror') {
-        // 1. Stop local DOM rendering (Visuals)
         setRenderingActive(false);
 
-        // 2. Clear DOM to free resources
         if (state.song) {
             switchVisiblePages(new Set());
         } else if (state.domManager) {
             state.domManager.clear();
         }
 
-        // 3. Hide DOM Container, Show Video
         if (DOM.pageContainer) DOM.pageContainer.style.visibility = 'hidden';
         if (sourceId) {
             MirrorManager.startStream(sourceId, 'mirror-video');
         }
 
     } else {
-        // 1. Stop Video Stream
         MirrorManager.stopStream('mirror-video');
 
-        // 2. Enable local DOM rendering
         if (DOM.pageContainer) DOM.pageContainer.style.visibility = 'visible';
         
-        // 3. Re-enable Rendering and Force Refresh
         setRenderingActive(true);
         forceRefresh();
         
-        // Force a resize/render to ensure DOM is correct
         if (state.timelineManager) {
             state.timelineManager.resize(true);
         }
@@ -572,7 +787,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.playerAPI.onPlaybackUpdate((newState) => {
         console.log('Player received playback update:', newState);
-        // Load fonts via JS-only loader
         if (newState.song && newState.song.fonts) {
              fontLoader.loadFonts(newState.song.fonts);
         } else if (newState.status === 'unloaded') {
@@ -587,7 +801,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         await addSongFromPath(filePath);
     });
 
-    // Handle Role Updates
     window.playerAPI.onSetRole((data) => handleRoleUpdate(data));
 
     const domManager = new DomManager(DOM.pageContainer);
@@ -601,10 +814,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         presenter: { isOpen: false },
     });
 
-    // Listen for font load completion to trigger re-render
     fontLoader.onFontsLoaded(() => {
         console.log('[Player] Fonts loaded. Triggering re-render to update metrics.');
-        // Force a resize on the timeline manager to recalculate layout
         if (state.timelineManager) {
             state.timelineManager.resize(true);
         }
@@ -644,4 +855,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log("Player UI Initialized");
 });
-
