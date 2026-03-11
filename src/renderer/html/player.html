@@ -174,7 +174,25 @@
                     </div>
                 </div>
             </div>
-
+            
+            <div class="drawer-group">
+                <div class="drawer-group-header">
+                    <h4>Safety Options</h4>
+                    <img src="../../icons/chevron-down.svg" alt="Toggle" class="group-toggle-icon">
+                </div>
+                <div class="drawer-group-content">
+                    <div style="display: flex; gap: 1rem;">
+                        <div class="form-group" style="flex: 1; margin-top: 0;">
+                            <label for="min-bpm-input">Min BPM</label>
+                            <input type="number" id="min-bpm-input" class="form-input" value="10" min="1" max="999">
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-top: 0;">
+                            <label for="max-bpm-input">Max BPM</label>
+                            <input type="number" id="max-bpm-input" class="form-input" value="220" min="1" max="999">
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="drawer-group">
                 <div class="drawer-group-header">
                     <h4>Device Controller</h4>
@@ -332,4 +350,6 @@
 <script src="../js/player/main.js" type="module"></script>
 </body>
 </html>
+
+
 

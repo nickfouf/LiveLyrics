@@ -654,6 +654,42 @@ function initConfigurationPanel() {
         });
     }
 
+    // Safety Options Logic
+    if (DOM.minBpmInput && DOM.maxBpmInput) {
+        const savedMin = localStorage.getItem('minBpm');
+        const savedMax = localStorage.getItem('maxBpm');
+
+        if (savedMin !== null) DOM.minBpmInput.value = savedMin;
+        if (savedMax !== null) DOM.maxBpmInput.value = savedMax;
+
+        const updateBpmLimits = () => {
+            let min = parseInt(DOM.minBpmInput.value, 10);
+            let max = parseInt(DOM.maxBpmInput.value, 10);
+
+            // Fallbacks
+            if (isNaN(min)) min = 10;
+            if (isNaN(max)) max = 220;
+
+            // Sanity correction to prevent max from being lower than min
+            if (min > max) {
+                let temp = min;
+                min = max;
+                max = temp;
+            }
+
+            localStorage.setItem('minBpm', min);
+            localStorage.setItem('maxBpm', max);
+
+            window.playerAPI.setBpmLimits(min, max);
+        };
+
+        DOM.minBpmInput.addEventListener('change', updateBpmLimits);
+        DOM.maxBpmInput.addEventListener('change', updateBpmLimits);
+
+        // Set limits immediately on launch
+        updateBpmLimits();
+    }
+
     DOM.audioOutputDeviceSelect.addEventListener('change', (e) => {
         console.log(`Audio output device changed to: ${e.target.value}`);
     });
@@ -855,3 +891,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log("Player UI Initialized");
 });
+

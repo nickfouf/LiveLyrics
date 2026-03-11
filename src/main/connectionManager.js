@@ -1,18 +1,20 @@
+// LiveLyrics/live-lyrics-app/src/main/connectionManager.js
 const EventEmitter = require('events');
 const net = require("./SmartSocket.js");
 const dgram = require('dgram'); 
-const os =require('os');
+const os = require('os');
 const { Bonjour } = require('bonjour-service');
 const crypto = require('crypto');
 const { SocketDevice } = require("./SocketDevice.js");
 const { performance } = require('perf_hooks');
+const { DeviceStore } = require('./DeviceStore.js');
 
 const PAIRING_REQUEST_TIMEOUT = 35000;
 const DISCOVERY_PORT = 54321; 
 
 class RTTStats {
     static MAX_SAMPLES = 20;
-    samples =[];
+    samples = [];
     average = 0;
 
     addSample(rtt) {
@@ -31,7 +33,7 @@ class ConnectionManager extends EventEmitter {
     #browser = null;
     #publishedService = null;
     #bonjourPublishInterval = null; 
-    #lastPublishedIPs =[];
+    #lastPublishedIPs = [];
     #devices = new Map(); 
     #deviceId = 'unknown';
     #deviceName = 'Unknown Device';
@@ -47,6 +49,7 @@ class ConnectionManager extends EventEmitter {
     #pendingUiPairingRequests = new Set();
     
     #discoverySocket = null;
+    #deviceStore = null;
 
     get deviceId() { return this.#deviceId; }
     get deviceName() { return this.#deviceName; }
@@ -70,6 +73,7 @@ class ConnectionManager extends EventEmitter {
         this.#deviceId = options.deviceId;
         this.#deviceName = options.deviceName;
         this.#clientType = options.clientType;
+        this.#deviceStore = new DeviceStore('known_devices.json');
     }
 
     start() {
@@ -78,16 +82,48 @@ class ConnectionManager extends EventEmitter {
             return;
         }
         console.log('[ConnectionManager] Starting network services...');
+
+        // Load Persistent Devices
+        this.#deviceStore.getDevices().forEach(kd => {
+            let device = new SocketDevice(kd.deviceId, kd.deviceType, kd.deviceName);
+            this.#devices.set(kd.deviceId, device);
+            this.#setupSocketDevice(device);
+            device.updateRemoteInfo(kd.addresses, kd.tcpPort, -1, kd.deviceName);
+            
+            // Push to UI Immediately
+            this.emit('discoverableDeviceFound', {
+                deviceId: kd.deviceId,
+                deviceType: kd.deviceType,
+                deviceName: kd.deviceName,
+            });
+        });
         
         this.#startDiscoverySocket();
-
         this.#bonjour = new Bonjour();
-
         this.#startServerAndPublish();
 
         this.#browser = this.#bonjour.find({ type: 'livelyrics' });
         this.#browser.on('up', this.#handleServiceUp.bind(this));
         this.#browser.on('down', this.#handleServiceDown.bind(this));
+    }
+
+    #setupSocketDevice(device) {
+        device.on('infoUpdated', (updatedDevice) => {
+            this.#deviceStore.updateDevice({
+                deviceId: updatedDevice.deviceId,
+                deviceName: updatedDevice.deviceName,
+                deviceType: updatedDevice.deviceType,
+                tcpPort: updatedDevice.getRemotePort(),
+                addresses: updatedDevice.getRemoteAdvertisedIps()
+            });
+
+            this.emit('deviceInfoUpdated', {
+                deviceId: updatedDevice.deviceId,
+                deviceType: updatedDevice.deviceType,
+                deviceName: updatedDevice.deviceName,
+                ips: updatedDevice.getRemoteAdvertisedIps()
+            });
+        });
     }
 
     stop() {
@@ -98,11 +134,7 @@ class ConnectionManager extends EventEmitter {
         console.log('[ConnectionManager] Stopping network services...');
 
         if (this.#discoverySocket) {
-            try {
-                this.#discoverySocket.close();
-            } catch (e) {
-                console.error('[ConnectionManager] Error closing discovery socket:', e);
-            }
+            try { this.#discoverySocket.close(); } catch (e) {}
             this.#discoverySocket = null;
         }
 
@@ -186,20 +218,12 @@ class ConnectionManager extends EventEmitter {
             if (!device) {
                 device = new SocketDevice(data.deviceId, data.deviceType, data.deviceName);
                 this.#devices.set(data.deviceId, device);
-                
-                device.on('infoUpdated', (updatedDevice) => {
-                    this.emit('deviceInfoUpdated', {
-                        deviceId: updatedDevice.deviceId,
-                        deviceType: updatedDevice.deviceType,
-                        deviceName: updatedDevice.deviceName,
-                        ips: updatedDevice.getRemoteAdvertisedIps()
-                    });
-                });
-                
+                this.#setupSocketDevice(device);
                 isNewOrChanged = true;
             } else {
                 if (device.getRemotePort() !== parseInt(data.tcpPort, 10)) isNewOrChanged = true;
                 if (!device.getRemoteAdvertisedIps().includes(rinfo.address)) isNewOrChanged = true;
+                if (parseInt(data.version, 10) > device.lastSeenVersion) isNewOrChanged = true;
             }
 
             const addressesToTry = [rinfo.address];
@@ -214,6 +238,7 @@ class ConnectionManager extends EventEmitter {
                 addressesToTry.forEach(ip => this.#sendIdentitySignal(ip));
             }
 
+            // updateRemoteInfo emits infoUpdated if necessary
             device.updateRemoteInfo(
                 addressesToTry, 
                 parseInt(data.tcpPort, 10), 
@@ -269,8 +294,6 @@ class ConnectionManager extends EventEmitter {
 
     #handleServiceUp(service) {
         const txt = service.txt;
-        console.log(`Discovered service`, txt);
-
         if (!txt || !txt.deviceId || txt.deviceId === this.deviceId || !txt.deviceType || !this.canPairWith(txt.deviceType) || !txt.port || !txt.version || !txt.deviceName) return;
 
         this.emit('discoverableDeviceFound', {
@@ -291,17 +314,10 @@ class ConnectionManager extends EventEmitter {
         if (!device) {
             device = new SocketDevice(remoteId, deviceType, deviceName);
             this.#devices.set(remoteId, device);
-            
-            device.on('infoUpdated', (updatedDevice) => {
-                this.emit('deviceInfoUpdated', {
-                    deviceId: updatedDevice.deviceId,
-                    deviceType: updatedDevice.deviceType,
-                    deviceName: updatedDevice.deviceName,
-                    ips: updatedDevice.getRemoteAdvertisedIps()
-                });
-            });
+            this.#setupSocketDevice(device);
         }
 
+        // Emit 'infoUpdated' handling logic covers saving & communicating changes
         device.updateRemoteInfo(addressesToTry, parseInt(txt.port, 10), parseInt(txt.version, 10), deviceName);
 
         if ((this.#pairedConnector && this.#pairedConnector.deviceId === remoteId) || 
@@ -353,11 +369,9 @@ class ConnectionManager extends EventEmitter {
                 if (this.#pairedConnector) {
                     if (this.#pairedConnector.deviceId === remoteId) {
                         console.log("Request is from our already-paired connector. Accepting automatically.");
-                        
                         if (servicePort) {
                             this.#pairedConnector.updateRemoteInfo([socket.remoteAddress], servicePort, -1, deviceName);
                         }
-
                         accept();
                         if (!this.#pairedConnector.hasIncomingSocket(socket)) {
                             this.#pairedConnector.addIncomingSocket(socket);
@@ -399,15 +413,7 @@ class ConnectionManager extends EventEmitter {
             if (!potentialDevice) {
                 potentialDevice = new SocketDevice(remoteId, deviceType, deviceName);
                 this.#devices.set(remoteId, potentialDevice);
-                
-                potentialDevice.on('infoUpdated', (updatedDevice) => {
-                    this.emit('deviceInfoUpdated', {
-                        deviceId: updatedDevice.deviceId,
-                        deviceType: updatedDevice.deviceType,
-                        deviceName: updatedDevice.deviceName,
-                        ips: updatedDevice.getRemoteAdvertisedIps()
-                    });
-                });
+                this.#setupSocketDevice(potentialDevice);
             } 
             
             if (servicePort) {
@@ -627,12 +633,12 @@ class ConnectionManager extends EventEmitter {
         const allIPs = getAllRoutableIPv4Addresses();
         if (allIPs.length === 0) {
             console.warn("No suitable network interface found to advertise.");
-            this.#lastPublishedIPs =[];
+            this.#lastPublishedIPs = [];
             return;
         }
 
         this.#lastPublishedIPs = allIPs;
-        this.#serviceVersion = Date.now();
+        this.#serviceVersion = Date.now(); // Regenerate timestamp so everyone checks in
         const serverPort = this.#server.address().port;
         const txtData = {
             deviceId: this.deviceId,
@@ -816,7 +822,7 @@ class ConnectionManager extends EventEmitter {
 }
 
 function getAllRoutableIPv4Addresses() {
-    const addresses =[];
+    const addresses = [];
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {

@@ -31,4 +31,5 @@ class Framer {
     }
 }
 
-module.exports = Framer;
+module.exports = Framer;
+

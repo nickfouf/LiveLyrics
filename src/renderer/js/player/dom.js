@@ -49,6 +49,10 @@ export function initDOM() {
     DOM.audioVolumeSlider = document.getElementById('audio-volume-slider');
     DOM.volumeLevelDisplay = document.getElementById('volume-level-display');
 
+    // Safety Options
+    DOM.minBpmInput = document.getElementById('min-bpm-input');
+    DOM.maxBpmInput = document.getElementById('max-bpm-input');
+
     // Timeline & Playback
     DOM.playPauseBtn = document.getElementById('play-pause-btn');
     DOM.forwardBtn = document.getElementById('forward-btn');
@@ -94,4 +98,6 @@ export function initDOM() {
     DOM.deviceNameValue = document.getElementById('device-name-value');
     DOM.deviceRttList = document.getElementById('device-rtt-list');
 }
+
+
 

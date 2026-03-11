@@ -808,6 +808,13 @@ app.whenReady().then(() => {
         }
     });
 
+    // --- BPM Limits IPC ---
+    ipcMain.on('player:set-bpm-limits', (event, { min, max }) => {
+        if (playbackManager) {
+            playbackManager.setBpmLimits(min, max);
+        }
+    });
+
     ipcMain.on('player:song-load-error', (event, errorMessage) => {
         console.error(`[Main] Received song load error from player: ${errorMessage}`);
         if (connectionManager) {
@@ -1499,4 +1506,6 @@ if (!gotTheLock) {
         }
     });
 }
+
+
 

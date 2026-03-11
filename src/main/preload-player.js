@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('playerAPI', {
     
     setPresenterDisplay: (displayId) => ipcRenderer.send('player:set-presenter-display', displayId),
     setGlobalLatency: (latency) => ipcRenderer.send('player:set-global-latency', latency),
+    setBpmLimits: (min, max) => ipcRenderer.send('player:set-bpm-limits', { min, max }),
     onDisplaysChanged: (callback) => ipcRenderer.on('displays-changed', (_event, data) => callback(data)),
     
     loadSong: (data) => ipcRenderer.send('playback:load-song', data),
@@ -54,4 +55,6 @@ contextBridge.exposeInMainWorld('playerAPI', {
 
     onSetRole: (callback) => ipcRenderer.on('window:set-role', (_event, data) => callback(data)),
 });
+
+
 

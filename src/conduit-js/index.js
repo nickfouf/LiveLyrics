@@ -1,3 +1,4 @@
 const ConduitSocket = require('./ConduitSocket.js');
 
-module.exports = { ConduitSocket };
+module.exports = { ConduitSocket };
+

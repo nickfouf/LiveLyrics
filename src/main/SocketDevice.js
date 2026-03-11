@@ -1,3 +1,4 @@
+// LiveLyrics/live-lyrics-app/src/main/SocketDevice.js
 const { EventEmitter } = require('events');
 const crypto = require("crypto");
 
@@ -22,17 +23,10 @@ class SocketDevice extends EventEmitter {
         this.#deviceName = deviceName;
     }
 
-    get deviceId() {
-        return this.#deviceId;
-    }
-
-    get deviceName() {
-        return this.#deviceName;
-    }
-
-    get deviceType() {
-        return this.#deviceType;
-    }
+    get deviceId() { return this.#deviceId; }
+    get deviceName() { return this.#deviceName; }
+    get deviceType() { return this.#deviceType; }
+    get lastSeenVersion() { return this.#lastSeenVersion; }
 
     getRemoteAdvertisedIps() {
         return Array.from(this.#remoteAdvertisedIps);
@@ -66,33 +60,33 @@ class SocketDevice extends EventEmitter {
     }
 
     updateRemoteInfo(ips, port, version, name) {
-        if (version > -1 && version <= this.#lastSeenVersion) return;
+        let changed = false;
 
-        if (version > -1) {
+        if (version > -1 && version > this.#lastSeenVersion) {
             console.log(`Updating remote info for ${this.#deviceId} to v${version}.`);
             this.#lastSeenVersion = version;
+            changed = true;
         }
-        if (port > -1) this.#remotePort = port;
-        if (name) this.#deviceName = name;
+        if (port > -1 && port !== this.#remotePort) {
+            this.#remotePort = port;
+            changed = true;
+        }
+        if (name && name !== this.#deviceName) {
+            this.#deviceName = name;
+            changed = true;
+        }
         if (ips && ips.length > 0) {
+            const currentIps = Array.from(this.#remoteAdvertisedIps);
+            if (ips.length !== currentIps.length || !ips.every(ip => currentIps.includes(ip))) {
+                changed = true;
+            }
             this.#remoteAdvertisedIps.clear();
             ips.forEach(ip => this.#remoteAdvertisedIps.add(ip));
         }
 
-        this.emit('infoUpdated', this); // Emit event for dynamic IP updates
-
-        // REMOVED: This loop was too aggressive. The socket's own keep-alive
-        // mechanism is responsible for detecting if a specific path is truly dead.
-        // Pruning connections based on a Bonjour update can cause false disconnects
-        // if the update arrives before the keep-alive has a chance to fail on another,
-        // still-active connection.
-        /*
-        for (const socket of this.#outgoingSockets) {
-            if (socket.remoteAddress && !this.#remoteAdvertisedIps.has(socket.remoteAddress)) {
-                socket.destroy(new Error("Stale connection path pruned."));
-            }
+        if (changed) {
+            this.emit('infoUpdated', this); // Emit event to trigger disk save & UI update
         }
-        */
     }
 
     #checkIfShouldFireEvent(reason = 'network') {
@@ -124,7 +118,6 @@ class SocketDevice extends EventEmitter {
                 return;
             }
             this.queuedMessageIds.push(payload.messageId);
-            // MODIFICATION: Pass the remote address of the socket with the event.
             this.emit('message', payload.data, this, socket.remoteAddress);
         }
     }
@@ -159,9 +152,7 @@ class SocketDevice extends EventEmitter {
         console.log('Incoming Sockets: ', this.#incomingSockets.size, 'Outgoing Sockets: ', this.#outgoingSockets.size);
         socket.on('close', () => this.#handleSocketClose(socket, true));
         socket.on('error', (err) => {
-            if (err && err.message === 'Device is being unpaired.') {
-                return;
-            }
+            if (err && err.message === 'Device is being unpaired.') return;
             this.emit('error', err);
         });
         socket.on('message', (payload) => this.#handleIncomingSocketMessage(socket, payload));
@@ -178,19 +169,13 @@ class SocketDevice extends EventEmitter {
         socket.on('close', () => this.#handleSocketClose(socket, false));
         socket.on('error', (err) => {
             if (!err || !err.message) return;
-
-            // If the error is a rejection/cancellation, treat it as a disconnect.
             if (err.message.includes('Pairing rejected') || err.message.includes('Pairing canceled')) {
                 this.#found = false;
                 this.#connected = false;
                 this.emit('deviceDisconnected', this, { reason: 'remote' });
-                return; // Stop further processing of this error.
-            }
-
-            if (err.message === 'Device is being unpaired.') {
                 return;
             }
-
+            if (err.message === 'Device is being unpaired.') return;
             this.emit('error', err);
         });
         socket.on('connect', () => this.#handleOutgoingSocketConnect(socket));
@@ -243,6 +228,4 @@ class SocketDevice extends EventEmitter {
 }
 
 module.exports = { SocketDevice };
-
-
 

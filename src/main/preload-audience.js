@@ -18,3 +18,5 @@ contextBridge.exposeInMainWorld('audienceAPI', {
     onSetRole: (callback) => createSafeListener('window:set-role', callback),
 });
 
+
+

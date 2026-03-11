@@ -9,14 +9,35 @@ class PlaybackManager {
         referenceTime: 0,
     };
     #broadcast;
-    #measureMap = []; // ADDED: To store the song's measure structure
+    #measureMap = []; // To store the song's measure structure
     #lastBeatTimestamp = 0; // For 'synced' mode
     #syncedMeasureIndex = 0; // For tracking progress in 'synced' mode
-    #previousStateSnapshot = null; // ADDED: To store the state before the last beat for undo functionality.
-    #songData = null; // ADDED: To store the full song JSON
+    #previousStateSnapshot = null; // To store the state before the last beat for undo functionality.
+    #songData = null; // To store the full song JSON
+
+    // BPM Safety Limits
+    #minBpm = 10;
+    #maxBpm = 220;
 
     constructor(broadcastFunction) {
         this.#broadcast = broadcastFunction;
+    }
+
+    // Adjusts limits and evaluates existing play state
+    setBpmLimits(min, max) {
+        this.#minBpm = min;
+        this.#maxBpm = max;
+        
+        if (this.#state.song) {
+            const currentBpm = this.#state.song.bpm;
+            const clampedBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, currentBpm));
+            
+            if (clampedBpm !== currentBpm) {
+                this.updateBpm(clampedBpm, this.#state.song.bpmUnit, performance.timeOrigin + performance.now());
+            }
+            // Ensure original BPM is also constrained
+            this.#state.song.originalBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, this.#state.song.originalBpm));
+        }
     }
 
     #getCurrentTime(atTimestamp = performance.now()) {
@@ -58,10 +79,44 @@ class PlaybackManager {
             timeAtReference: this.#state.timeAtReference,
             referenceTime: this.#state.referenceTime,
             syncTime: performance.now(),
-            canUndo: !!this.#previousStateSnapshot, // ADDED: Flag for the undo button UI
+            canUndo: !!this.#previousStateSnapshot, // Flag for the undo button UI
             ...extraData, // Merge in any extra data, like interpolation info
         };
         this.#broadcast('playback:update', stateToSend);
+    }
+
+    /**
+     * Resets BPM to the original project default if the playback is located within the first measure,
+     * OR if the 'force' flag is explicitly passed (e.g. for any jump action).
+     * Automatically adjusts the timeline time reference to smoothly transition between tempos.
+     */
+    #resetBpmToDefault(force = false) {
+        if (!this.#state.song || this.#measureMap.length === 0 || this.#state.type !== 'synced') {
+            return false;
+        }
+
+        const quarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
+        const currentBeats = quarterNoteDuration > 0 ? this.#state.timeAtReference / quarterNoteDuration : 0;
+        
+        const firstMeasure = this.#measureMap[0];
+        const endOfFirstMeasure = firstMeasure.startTime + firstMeasure.duration;
+
+        // Reset to default BPM only if we are at or before the start of the 2nd measure.
+        const isInFirstMeasure = currentBeats < endOfFirstMeasure - 0.001;
+
+        if (force || isInFirstMeasure) {
+            if (this.#state.song.bpm !== this.#state.song.originalBpm || this.#state.song.bpmUnit !== this.#state.song.originalBpmUnit) {
+                this.#state.song.bpm = this.#state.song.originalBpm;
+                this.#state.song.bpmUnit = this.#state.song.originalBpmUnit;
+                
+                // Recalculate target MS interpolation to safely preserve musical position
+                const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
+                this.#state.timeAtReference = currentBeats * newQuarterNoteDuration;
+                
+                return true;
+            }
+        }
+        return false;
     }
 
     getCurrentSyncState() {
@@ -79,15 +134,20 @@ class PlaybackManager {
     loadSong(songMetadata, measureMap = [], songData = null) {
         this.#state.status = 'paused';
         this.#state.type = 'normal'; // Reset type on load
+        
+        // Ensure initial and original BPM are clamped immediately upon load
+        let initialBpm = songMetadata.bpm || 120;
+        initialBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, initialBpm));
+
         this.#state.song = {
             id: songMetadata.id,
             title: songMetadata.title,
             filePath: songMetadata.filePath,
-            bpm: songMetadata.bpm || 120,
+            bpm: initialBpm,
             bpmUnit: songMetadata.bpmUnit || 'q_note',
-            originalBpm: songMetadata.bpm || 120, // Store original
+            originalBpm: initialBpm, // Store original safely clamped
             originalBpmUnit: songMetadata.bpmUnit || 'q_note', // Store original
-            fonts: songMetadata.fonts || {}, // ADDED: Store font mapping to broadcast to renderers
+            fonts: songMetadata.fonts || {}, // Store font mapping to broadcast to renderers
         };
         this.#measureMap = measureMap; // Store the measure map
         this.#songData = songData; // Store the full song data
@@ -113,13 +173,16 @@ class PlaybackManager {
         this.#broadcastState();
     }
 
-    // ADDED: New method to get the current song data
+    // New method to get the current song data
     getCurrentSongData() {
         return this.#songData;
     }
 
     updateBpm(bpm, bpmUnit, absoluteTimestamp) {
         if (!this.#state.song) return;
+
+        // Apply clamping safely right before evaluating
+        bpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, bpm));
 
         const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
         const currentTime = this.#getCurrentTime(mainRelativeTimestamp);
@@ -150,8 +213,6 @@ class PlaybackManager {
         const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
     
         if (type === 'synced') {
-            // MODIFIED: Preserving the last BPM instead of resetting to default.
-            
             // Calculate the current musical time in beats using the CURRENT BPM.
             const currentQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
             const timeInBeats = currentQuarterNoteDuration > 0 ? this.#state.timeAtReference / currentQuarterNoteDuration : 0;
@@ -225,12 +286,23 @@ class PlaybackManager {
                 this.#state.referenceTime = 0;
                 this.#lastBeatTimestamp = 0;
                 this.#previousStateSnapshot = null;
+                
+                let finalStartMs = timeAtPause;
+                let finalEndMs = snappedTimeInMs;
+
+                // Restrict resets strictly to the 1st measure
+                if (this.#resetBpmToDefault(false)) {
+                    const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
+                    finalStartMs = timeInBeats * newQuarterNoteDuration;
+                    finalEndMs = targetMeasureTimeBeats * newQuarterNoteDuration;
+                    this.#state.timeAtReference = finalEndMs; // Ensure state accurately reflects conversion
+                }
     
                 this.#broadcastState({
                     interpolationOnPause: {
                         duration: 300,
-                        startMs: timeAtPause,
-                        endMs: snappedTimeInMs,
+                        startMs: finalStartMs,
+                        endMs: finalEndMs,
                     }
                 });
                 return;
@@ -243,6 +315,7 @@ class PlaybackManager {
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
         this.#previousStateSnapshot = null;
+        this.#resetBpmToDefault(false); 
         this.#broadcastState();
     }
 
@@ -250,6 +323,9 @@ class PlaybackManager {
         if (this.#state.status === 'unloaded') return;
         this.#state.timeAtReference = Math.max(0, timeInMs);
         const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
+
+        // Any jump forces an explicit default project BPM reset 
+        this.#resetBpmToDefault(true);
 
         if (this.#state.status === 'playing') {
             this.#state.referenceTime = mainRelativeTimestamp;
@@ -297,6 +373,9 @@ class PlaybackManager {
             const msPerBeat = intervalMs / beatsInMeasure;
             targetBpm = 60000 / msPerBeat;
         }
+
+        // Clamp dynamically predicted target BPM as well to secure synchronization 
+        targetBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, targetBpm));
     
         const newTimeInBeats = nextMeasure ? nextMeasure.startTime : (currentMeasure.startTime + currentMeasure.duration);
         const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(targetBpm, this.#state.song.bpmUnit);
@@ -369,21 +448,17 @@ class PlaybackManager {
         const targetMeasure = this.#measureMap[targetMeasureIndex];
         if (!targetMeasure) return;
 
-        let newTimeInMs;
+        // Apply new timeline ms calculation based on the pre-reset BPM to maintain positional accuracy
+        let newTimeInMs = targetMeasure.startTime * currentQuarterNoteDuration;
+        this.#state.timeAtReference = Math.max(0, newTimeInMs);
+
+        // A jump forces an explicit default project BPM reset 
+        this.#resetBpmToDefault(true);
 
         if (this.#state.status === 'playing') {
-            this.#state.song.bpm = this.#state.song.originalBpm;
-            this.#state.song.bpmUnit = this.#state.song.originalBpmUnit;
-
-            const newQuarterNoteDuration = this.#getQuarterNoteDurationMs(this.#state.song.bpm, this.#state.song.bpmUnit);
-            newTimeInMs = targetMeasure.startTime * newQuarterNoteDuration;
-
-            this.#state.timeAtReference = newTimeInMs;
             this.#state.referenceTime = mainRelativeTimestamp;
             this.#lastBeatTimestamp = mainRelativeTimestamp;
         } else {
-            newTimeInMs = targetMeasure.startTime * currentQuarterNoteDuration;
-            this.#state.timeAtReference = Math.max(0, newTimeInMs);
             this.#state.referenceTime = 0;
             this.#lastBeatTimestamp = 0;
         }
@@ -407,8 +482,13 @@ class PlaybackManager {
 
         this.#previousStateSnapshot = null;
 
+        if (this.#state.status === 'paused') {
+            this.#resetBpmToDefault(false); 
+        }
+
         this.#broadcastState();
     }
 }
 
 module.exports = { PlaybackManager };
+
