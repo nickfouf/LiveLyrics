@@ -7,12 +7,10 @@ export class ObjectPositionProperty extends VirtualProperty {
 
     constructor(options = {}) {
         super('objectPosition', 'Object Position');
-        // Handle options if passed as an object { x: 'left', y: 'top' }
-        // or potentially as individual arguments if serialized that way,
-        // but typically options come from deserialization.
-        const x = options.x || 'center';
-        const y = options.y || 'center';
-        this.batchUpdate({ x, y }, true);
+        // Support both shorthand (x, y) and serialized (xPosition, yPosition) formats
+        const x = options.xPosition !== undefined ? options.xPosition : (options.x || 'center');
+        const y = options.yPosition !== undefined ? options.yPosition : (options.y || 'center');
+        this.batchUpdate({ xPosition: x, yPosition: y }, true);
     }
 
     getX() { return this.#xPosition; }
@@ -21,13 +19,17 @@ export class ObjectPositionProperty extends VirtualProperty {
     getY() { return this.#yPosition; }
     setY(value, setAsDefault = false) { return this.#yPosition.setValue(value, setAsDefault); }
 
-    batchUpdate({ x, y }, setAsDefault = false) {
+    batchUpdate({ x, y, xPosition, yPosition }, setAsDefault = false) {
         let changed = false;
-        if (x !== undefined) {
-            if (this.setX(x, setAsDefault)) changed = true;
+        
+        const finalX = xPosition !== undefined ? xPosition : x;
+        const finalY = yPosition !== undefined ? yPosition : y;
+        
+        if (finalX !== undefined) {
+            if (this.setX(finalX, setAsDefault)) changed = true;
         }
-        if (y !== undefined) {
-            if (this.setY(y, setAsDefault)) changed = true;
+        if (finalY !== undefined) {
+            if (this.setY(finalY, setAsDefault)) changed = true;
         }
         return changed;
     }
@@ -62,4 +64,3 @@ export class ObjectPositionProperty extends VirtualProperty {
         }
     }
 }
-

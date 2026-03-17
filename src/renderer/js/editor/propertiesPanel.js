@@ -21,6 +21,7 @@ import {showLoadingDialog} from './loadingDialog.js';
 import {UnitValue} from "../renderer/values/unit.js";
 import {internalClipboard} from "./internalClipboard.js";
 import {copyStyle, pasteStyle, canPasteStyle} from "./styleClipboard.js";
+import { showAlertDialog } from './alertDialog.js';
 
 let scrollTimeout = null;
 
@@ -422,8 +423,9 @@ function buildSmartEffectSrcProperty(element, isCollapsed) {
                 renderPropertiesPanel(element);
             }
         } catch (error) {
+            hideLoading();
             console.error("Failed to add smart effect asset:", error);
-            alert("Failed to load Smart Effect. " + error.message);
+            await showAlertDialog('Error', "Failed to load Smart Effect. " + error.message);
         } finally {
             hideLoading();
         }
@@ -1694,7 +1696,7 @@ function buildProgressProperties(element, isCollapsed) {
             const switchToColor = btn.dataset.tab === 'color';
             if (switchToColor !== isFillColor) {
                 const newObj = switchToColor
-                    ? {mode: 'color', r: 0, g: 120, b: 215, a: 1}
+                    ? {mode: 'color', r: 0, 120: 215, b: 215, a: 1}
                     : {
                         mode: 'gradient',
                         type: 'linear',
@@ -2491,10 +2493,6 @@ function buildTransformProperties(element, isCollapsed2D, isCollapsed3D) {
  * Main function to build the entire properties panel for a given element.
  * @param {VirtualElement} [element=state.selectedElement] The selected virtual element.
  */
-/**
- * Main function to build the entire properties panel for a given element.
- * @param {VirtualElement} [element=state.selectedElement] The selected virtual element.
- */
 export function renderPropertiesPanel(element = state.selectedElement) {
     DOM.propertiesPanelBody.innerHTML = '';
 
@@ -2692,7 +2690,4 @@ export function renderPropertiesPanel(element = state.selectedElement) {
         }
     });
 }
-
-
-
 

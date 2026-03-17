@@ -3,6 +3,7 @@ import { makeDraggable } from './draggable.js';
 import { fontLoader } from '../renderer/fontLoader.js'; // ADDED
 import { showLoadingDialog, hideLoadingDialog } from './loadingDialog.js'; // ADDED
 import { markAsDirty } from './events.js'; // ADDED: To ensure saving after import
+import { showAlertDialog } from './alertDialog.js';
 
 let dialog, searchInput, previewTextInput, list, cancelBtn;
 let localState = {
@@ -97,8 +98,9 @@ export function initFontPicker() {
                 localState.callback(fontName);
                 dialog.classList.remove('visible');
             } catch (error) {
+                hideLoading();
                 console.error("Font import failed:", error);
-                alert(`Could not automatically import font file for "${fontName}".\nThe song will use the system font, but it may not display correctly on other computers.`);
+                await showAlertDialog('Font Import Failed', `Could not automatically import font file for "${fontName}".\nThe song will use the system font, but it may not display correctly on other computers.`);
                 
                 // Fallback: Select it anyway, relying on system font
                 localState.callback(fontName); 
@@ -172,6 +174,4 @@ export function openFontPicker(currentFont, callback, initialPreviewText = '') {
 
     dialog.classList.add('visible');
 }
-
-
 

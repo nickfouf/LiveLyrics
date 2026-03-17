@@ -13,6 +13,7 @@ import { generateUUID } from "../renderer/utils.js";
 import { generateCSSGradient } from "../renderer/utils.js";
 import { markAsDirty } from './events.js';
 import { makeDraggable } from './draggable.js';
+import { showAlertDialog } from './alertDialog.js'; // ADDED
 
 // --- START: NEW CACHE AND STATE MANAGEMENT ---
 /**
@@ -1170,7 +1171,7 @@ export function initEventsEditor() {
             const targetCapacity = getMeasureCapacity(targetMeasure.timeSignature);
 
             if (clipboardDuration > targetCapacity) {
-                alert('Paste failed: The copied notes do not fit in the target measure.');
+                showAlertDialog('Paste failed', 'The copied notes do not fit in the target measure.');
                 return;
             }
 
@@ -1377,3 +1378,4 @@ export function openEventsEditor(elementId, initialData, globalMeasureOffset, ca
         renderEventConnectors();
     }, { once: true });
 }
+
