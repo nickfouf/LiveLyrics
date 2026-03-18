@@ -388,7 +388,15 @@ function startEditingNoteText(textElement) {
                 }
             }
 
-        } else if (e.key === ' ') {
+        } else if (e.key === ' ' && e.shiftKey) {
+            // Write a literal space character when holding Shift
+            e.preventDefault();
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.substring(0, start) + ' ' + input.value.substring(end);
+            input.selectionStart = input.selectionEnd = start + 1;
+            updateInputWidth();
+        } else if (e.key === ' ' && !e.shiftKey) {
             e.preventDefault();
             note.isConnectedToNext = false;
             input.removeEventListener('blur', handleBlur);
