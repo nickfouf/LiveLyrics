@@ -334,7 +334,15 @@ function startEditingNoteText(textElement) {
             const measureBox = measuresContainer.querySelector(`.measure-box[data-index="${measureIndex}"]`);
             renderMeasureContent(measureBox, measure);
 
-        } else if (e.key === '-') {
+        } else if ((e.key === '-' || e.code === 'Minus' || e.code === 'NumpadSubtract') && e.shiftKey) {
+            // Write a literal "-" character when holding Shift
+            e.preventDefault();
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.substring(0, start) + '-' + input.value.substring(end);
+            input.selectionStart = input.selectionEnd = start + 1;
+            updateInputWidth();
+        } else if (e.key === '-' && !e.shiftKey) {
             e.preventDefault();
             input.removeEventListener('blur', handleBlur);
 
@@ -939,11 +947,11 @@ export function initLyricsEditor() {
     });
 }
 
-function buildEditorMeasure(measureStructure, ownMeasuresContent, foreignContent) {
+function buildEditorMeasure(measureStructure, ownMeasuresContent, foreignContent, currentElementId) {
     let content = [];
-    
+
     // 1. Check if this is one of our own measures
-    if (ownMeasuresContent.has(measureStructure.id)) {
+    if (measureStructure.elementId === currentElementId && ownMeasuresContent.has(measureStructure.id)) {
         content = ownMeasuresContent.get(measureStructure.id);
     } 
     // 2. Check if we have foreign content mapped to this measure ID (Suffixed ID)
@@ -990,13 +998,13 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
     const elementPageIndex = state.song.pages.indexOf(elementPage);
 
     const allSongMeasures = getSongMeasuresStructure();
-    
+
     const editorMeasures = [];
 
     // Construct the editor list directly from the song structure to ensure
     // measures appear in their correct, chronological positions (including gaps).
     allSongMeasures.forEach(measureStructure => {
-        editorMeasures.push(buildEditorMeasure(measureStructure, ownMeasuresContent, foreignContent));
+        editorMeasures.push(buildEditorMeasure(measureStructure, ownMeasuresContent, foreignContent, element.id));
     });
 
     lyricsState = {
