@@ -26,13 +26,10 @@ contextBridge.exposeInMainWorld('tempoSyncAPI', {
      * ADDED: Sends a synced jump signal to the main process.
      */
     jumpBackward: () => ipcRenderer.send('playback:jump-synced', { direction: -1, timestamp: performance.timeOrigin + performance.now() }),
-    jumpForward: () => ipcRenderer.send('playback:jump-synced', { direction: 1, timestamp: performance.timeOrigin + performance.now() }),
-
-
-    /**
-     * ADDED: Sends an undo signal to the main process to revert the last beat.
+    jumpForward: () => ipcRenderer.send('playback:jump-synced', { direction: 1, timestamp: performance.timeOrigin + performance.now() }),    /**
+     * Sends a slow-down signal to the main process to halve the calculated speed.
      */
-    undo: () => ipcRenderer.send('playback:undo-beat'),
+    slowDown: () => ipcRenderer.send('playback:slow-down', { timestamp: performance.timeOrigin + performance.now() }),
 
     /**
      * ADDED: Listens for playback state updates from the main process.
@@ -45,6 +42,8 @@ contextBridge.exposeInMainWorld('tempoSyncAPI', {
         return () => ipcRenderer.removeListener('playback:update', listener);
     }
 });
+
+
 
 
 

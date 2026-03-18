@@ -24,3 +24,4 @@ export class VirtualTitle extends VirtualText {
         this.setProperty('name', new NameProperty(name));
     }
 }
+

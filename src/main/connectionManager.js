@@ -49,10 +49,26 @@ class ConnectionManager extends EventEmitter {
     #pendingUiPairingRequests = new Set();
     
     #discoverySocket = null;
-    #deviceStore = null;
-
-    get deviceId() { return this.#deviceId; }
+    #deviceStore = null;        get deviceId() { return this.#deviceId; }
     get deviceName() { return this.#deviceName; }
+
+    forgetDevice(deviceId) {
+        this.#deviceStore.removeDevice(deviceId);
+        
+        const dev = this.#devices.get(deviceId);
+        if (dev) {
+            dev.destroyAllSockets('forgotten');
+        }
+        
+        this.#devices.delete(deviceId);
+        this.#midiDevices.delete(deviceId);
+        
+        if (this.#pairedConnector && this.#pairedConnector.deviceId === deviceId) {
+            this.#pairedConnector = null;
+        }
+        
+        this.emit('discoverableDeviceLost', { deviceId });
+    }
 
     getRttStats() {
         return this.#rttStats;
@@ -88,13 +104,12 @@ class ConnectionManager extends EventEmitter {
             let device = new SocketDevice(kd.deviceId, kd.deviceType, kd.deviceName);
             this.#devices.set(kd.deviceId, device);
             this.#setupSocketDevice(device);
-            device.updateRemoteInfo(kd.addresses, kd.tcpPort, -1, kd.deviceName);
-            
-            // Push to UI Immediately
+            device.updateRemoteInfo(kd.addresses, kd.tcpPort, -1, kd.deviceName);                // Push to UI Immediately
             this.emit('discoverableDeviceFound', {
                 deviceId: kd.deviceId,
                 deviceType: kd.deviceType,
                 deviceName: kd.deviceName,
+                lastSeen: kd.lastSeen
             });
         });
         
@@ -244,12 +259,11 @@ class ConnectionManager extends EventEmitter {
                 parseInt(data.tcpPort, 10), 
                 parseInt(data.version, 10), 
                 data.deviceName
-            );
-
-            this.emit('discoverableDeviceFound', {
+            );                this.emit('discoverableDeviceFound', {
                 deviceId: data.deviceId,
                 deviceType: data.deviceType,
                 deviceName: data.deviceName,
+                lastSeen: Date.now()
             });
 
             if ((this.#pairedConnector && this.#pairedConnector.deviceId === data.deviceId) || 
@@ -294,12 +308,11 @@ class ConnectionManager extends EventEmitter {
 
     #handleServiceUp(service) {
         const txt = service.txt;
-        if (!txt || !txt.deviceId || txt.deviceId === this.deviceId || !txt.deviceType || !this.canPairWith(txt.deviceType) || !txt.port || !txt.version || !txt.deviceName) return;
-
-        this.emit('discoverableDeviceFound', {
+        if (!txt || !txt.deviceId || txt.deviceId === this.deviceId || !txt.deviceType || !this.canPairWith(txt.deviceType) || !txt.port || !txt.version || !txt.deviceName) return;            this.emit('discoverableDeviceFound', {
             deviceId: txt.deviceId,
             deviceType: txt.deviceType,
             deviceName: txt.deviceName,
+            lastSeen: Date.now()
         });
 
         const addressesToTry = (txt.addresses || '').split(',').filter(Boolean);
@@ -533,11 +546,9 @@ class ConnectionManager extends EventEmitter {
                 this.#midiDevices.delete(dev.deviceId);
                 dev.destroyAllSockets('remote');
             }
-        });
-
-        device.on('message', (message, dev, remoteIp) => {
+        });        device.on('message', (message, dev, remoteIp) => {
             if (!message || !message.type) return;
-            const playbackCommands =['play', 'play-synced', 'pause', 'beat', 'jump-backward', 'jump-forward', 'undo', 'jump-to-start', 'jump'];
+            const playbackCommands =['play', 'play-synced', 'pause', 'beat', 'jump-backward', 'jump-forward', 'slow-down', 'jump-to-start', 'jump'];
         
             if (message.type === 'selectSong') {
                 const songId = message.payload?.songId;
@@ -841,4 +852,6 @@ function getAllRoutableIPv4Addresses() {
 }
 
 module.exports = { ConnectionManager };
+
+
 

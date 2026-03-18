@@ -1092,3 +1092,5 @@ export function openLyricsEditor(initialData, globalMeasureOffset, callback) {
 
 
 
+
+

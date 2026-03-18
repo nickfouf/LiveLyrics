@@ -503,3 +503,4 @@ export function openOrchestraEditor(initialData, globalMeasureOffset, callback) 
         }, 0);
     });
 }
+

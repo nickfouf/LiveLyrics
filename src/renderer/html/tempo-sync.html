@@ -56,16 +56,15 @@
         }
         #beat-btn:hover:not(:disabled) {
             background-color: #218838;
-        }
-        /* ADDED: Undo button style */
-        #undo-btn {
-            background-color: var(--secondary-color);
+        }        /* Slow Down button style */
+        #slow-down-btn {
+            background-color: #0dcaf0; /* Cyan/Teal to look like ice */
             color: white;
-            font-size: 18px; /* A bit smaller */
+            font-size: 18px;
             padding: 12px;
         }
-        #undo-btn:hover:not(:disabled) {
-            background-color: var(--secondary-hover-color);
+        #slow-down-btn:hover:not(:disabled) {
+            background-color: #0bacce;
         }
         button:disabled {
             background-color: var(--disabled-color);
@@ -136,13 +135,12 @@
 </head>
 <body>
     <h1>Tempo Sync</h1>
-    <button id="play-btn">Play</button>
-    <div class="jump-controls">
+    <button id="play-btn">Play</button>    <div class="jump-controls">
         <button id="backward-btn" disabled>Backward</button>
         <button id="beat-btn" disabled>Beat</button>
         <button id="forward-btn" disabled>Forward</button>
     </div>
-    <button id="undo-btn" disabled>Undo</button>
+    <button id="slow-down-btn" disabled>Slow Down</button>
     <div class="bpm-display">BPM: <span id="bpm-value" class="bpm-value">--</span></div>
     <!-- ADDED: Interpolation duration input -->
     <div class="interpolation-control">
@@ -150,10 +148,9 @@
         <input type="number" id="interpolation-duration" value="1.0" step="0.1" min="0">
     </div>
 
-    <script>
-        const playBtn = document.getElementById('play-btn');
+    <script>        const playBtn = document.getElementById('play-btn');
         const beatBtn = document.getElementById('beat-btn');
-        const undoBtn = document.getElementById('undo-btn');
+        const slowDownBtn = document.getElementById('slow-down-btn');
         const backwardBtn = document.getElementById('backward-btn');
         const forwardBtn = document.getElementById('forward-btn');
         const bpmValue = document.getElementById('bpm-value');
@@ -176,10 +173,8 @@
 
         beatBtn.addEventListener('click', () => {
             window.tempoSyncAPI.beat(getInterpolationDuration());
-        });
-
-        undoBtn.addEventListener('click', () => {
-            window.tempoSyncAPI.undo();
+        });        slowDownBtn.addEventListener('click', () => {
+            window.tempoSyncAPI.slowDown();
         });
 
         backwardBtn.addEventListener('click', () => {
@@ -239,13 +234,11 @@
             playBtn.textContent = isCurrentlyPlaying ? 'Pause' : 'Play';
 
             // Beat button is only enabled when actively playing in SYNC mode.
-            beatBtn.disabled = !(isCurrentlyPlaying && isSyncedMode);
-            
-            // Jump and Undo buttons are disabled if playing in NORMAL mode, or if no song is loaded.
+            beatBtn.disabled = !(isCurrentlyPlaying && isSyncedMode);            // Jump and Slow Down buttons are disabled if playing in NORMAL mode, or if no song is loaded.
             const enableSyncControls = isSongLoaded && (!isCurrentlyPlaying || isSyncedMode);
             backwardBtn.disabled = !enableSyncControls;
             forwardBtn.disabled = !enableSyncControls;
-            undoBtn.disabled = !state.canUndo || !enableSyncControls;
+            slowDownBtn.disabled = !enableSyncControls;
 
 
             if (isCurrentlyPlaying && isSyncedMode) {
@@ -257,6 +250,10 @@
     </script>
 </body>
 </html>
+
+
+
+
 
 
 

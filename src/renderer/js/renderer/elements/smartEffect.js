@@ -92,3 +92,4 @@ export class VirtualSmartEffect extends VirtualElement {
         super.render();
     }
 }
+

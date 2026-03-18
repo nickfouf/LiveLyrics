@@ -4,15 +4,13 @@ class PlaybackManager {
     #state = {
         status: 'unloaded', // 'unloaded', 'playing', 'paused'
         type: 'normal',     // 'normal', 'synced'
-        song: null,         // Will now store { id, title, filePath, bpm, bpmUnit, originalBpm, originalBpmUnit, fonts }
+        song: null,         // { uid, id, title, filePath, bpm, bpmUnit, originalBpm, originalBpmUnit, fonts }
         timeAtReference: 0,
         referenceTime: 0,
     };
-    #broadcast;
-    #measureMap = []; // To store the song's measure structure
+    #broadcast;    #measureMap =[]; // To store the song's measure structure
     #lastBeatTimestamp = 0; // For 'synced' mode
     #syncedMeasureIndex = 0; // For tracking progress in 'synced' mode
-    #previousStateSnapshot = null; // To store the state before the last beat for undo functionality.
     #songData = null; // To store the full song JSON
 
     // BPM Safety Limits
@@ -38,6 +36,13 @@ class PlaybackManager {
             // Ensure original BPM is also constrained
             this.#state.song.originalBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, this.#state.song.originalBpm));
         }
+    }
+
+    /**
+     * NEW: Returns the active UID so the background cleaner spares this folder.
+     */
+    getActiveSongUid() {
+        return this.#state.song ? this.#state.song.uid : null;
     }
 
     #getCurrentTime(atTimestamp = performance.now()) {
@@ -68,9 +73,7 @@ class PlaybackManager {
         if (quarterNotesPerMinute === 0) return 0;
 
         return 60000 / quarterNotesPerMinute;
-    }
-
-    #broadcastState(extraData = {}) {
+    }    #broadcastState(extraData = {}) {
         // The state object sent over IPC is always lean and never contains song content.
         const stateToSend = {
             status: this.#state.status,
@@ -79,7 +82,6 @@ class PlaybackManager {
             timeAtReference: this.#state.timeAtReference,
             referenceTime: this.#state.referenceTime,
             syncTime: performance.now(),
-            canUndo: !!this.#previousStateSnapshot, // Flag for the undo button UI
             ...extraData, // Merge in any extra data, like interpolation info
         };
         this.#broadcast('playback:update', stateToSend);
@@ -117,17 +119,14 @@ class PlaybackManager {
             }
         }
         return false;
-    }
-
-    getCurrentSyncState() {
+    }    getCurrentSyncState() {
         return {
             status: this.#state.status,
             type: this.#state.type,
             song: this.#state.song,
             timeAtReference: this.#state.timeAtReference,
             referenceTime: this.#state.referenceTime,
-            syncTime: performance.now(),
-            canUndo: !!this.#previousStateSnapshot,
+            syncTime: performance.now()
         };
     }
 
@@ -140,6 +139,7 @@ class PlaybackManager {
         initialBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, initialBpm));
 
         this.#state.song = {
+            uid: songData.uid || null, // Capture the persistent UID from the song JSON
             id: songMetadata.id,
             title: songMetadata.title,
             filePath: songMetadata.filePath,
@@ -147,15 +147,13 @@ class PlaybackManager {
             bpmUnit: songMetadata.bpmUnit || 'q_note',
             originalBpm: initialBpm, // Store original safely clamped
             originalBpmUnit: songMetadata.bpmUnit || 'q_note', // Store original
-            fonts: songMetadata.fonts || {}, // Store font mapping to broadcast to renderers
+            fonts: songData.fonts || {}, // Store font mapping to broadcast to renderers
         };
         this.#measureMap = measureMap; // Store the measure map
-        this.#songData = songData; // Store the full song data
-        this.#state.timeAtReference = 0;
+        this.#songData = songData; // Store the full song data        this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
         this.#syncedMeasureIndex = 0;
-        this.#previousStateSnapshot = null; // Clear undo state
         this.#broadcastState();
     }
 
@@ -163,13 +161,12 @@ class PlaybackManager {
         this.#state.status = 'unloaded';
         this.#state.type = 'normal';
         this.#state.song = null;
-        this.#measureMap = [];
+        this.#measureMap =[];
         this.#songData = null; // Clear the song data
         this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
         this.#syncedMeasureIndex = 0;
-        this.#previousStateSnapshot = null; // Clear undo state
         this.#broadcastState();
     }
 
@@ -230,13 +227,10 @@ class PlaybackManager {
     
             this.#syncedMeasureIndex = startingMeasureIndex;
             this.#lastBeatTimestamp = mainRelativeTimestamp;
-        }
-    
-        this.#state.status = 'playing';
+        }        this.#state.status = 'playing';
         this.#state.type = type;
         this.#state.referenceTime = mainRelativeTimestamp;
     
-        this.#previousStateSnapshot = null;
         this.#broadcastState();
     }
     
@@ -279,13 +273,10 @@ class PlaybackManager {
             }
     
             if (targetMeasureTimeBeats !== null) {
-                const snappedTimeInMs = targetMeasureTimeBeats * quarterNoteDuration;
-    
-                this.#state.status = 'paused';
+                const snappedTimeInMs = targetMeasureTimeBeats * quarterNoteDuration;                this.#state.status = 'paused';
                 this.#state.timeAtReference = snappedTimeInMs;
                 this.#state.referenceTime = 0;
                 this.#lastBeatTimestamp = 0;
-                this.#previousStateSnapshot = null;
                 
                 let finalStartMs = timeAtPause;
                 let finalEndMs = snappedTimeInMs;
@@ -307,14 +298,11 @@ class PlaybackManager {
                 });
                 return;
             }
-        }
-    
-        // Fallback for normal pauses or end-of-song pauses.
+        }        // Fallback for normal pauses or end-of-song pauses.
         this.#state.status = 'paused';
         this.#state.timeAtReference = timeAtPause;
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
-        this.#previousStateSnapshot = null;
         this.#resetBpmToDefault(false); 
         this.#broadcastState();
     }
@@ -331,25 +319,17 @@ class PlaybackManager {
             this.#state.referenceTime = mainRelativeTimestamp;
         } else {
             this.#state.status = 'paused';
-        }
-        this.#lastBeatTimestamp = 0;
+        }        this.#lastBeatTimestamp = 0;
         this.#syncedMeasureIndex = 0;
-        this.#previousStateSnapshot = null;
         this.#broadcastState();
     }
 
-    syncBeat(absoluteTimestamp, interpolationDuration) {
+    syncBeat(absoluteTimestamp, interpolationDuration, targetBpmMultiplier = 1.0) {
         if (this.#state.status !== 'playing' || this.#state.type !== 'synced' || !this.#state.song || this.#measureMap.length === 0) {
             return;
         }
     
         const mainRelativeTimestamp = absoluteTimestamp - performance.timeOrigin;
-    
-        this.#previousStateSnapshot = {
-            state: structuredClone(this.#state),
-            syncedMeasureIndex: this.#syncedMeasureIndex,
-            lastBeatTimestamp: this.#lastBeatTimestamp,
-        };
     
         const currentMeasure = this.#measureMap[this.#syncedMeasureIndex];
         const nextMeasure = this.#measureMap[this.#syncedMeasureIndex + 1];
@@ -365,14 +345,15 @@ class PlaybackManager {
         if (intervalMs <= 0) return;
     
         const timeAtStart = this.#getCurrentTime(mainRelativeTimestamp);
-        const bpmAtStart = this.#state.song.bpm;
-    
-        let targetBpm = bpmAtStart;
+        const bpmAtStart = this.#state.song.bpm;        let targetBpm = bpmAtStart;
         const beatsInMeasure = currentMeasure.duration;
         if (beatsInMeasure > 0) {
             const msPerBeat = intervalMs / beatsInMeasure;
             targetBpm = 60000 / msPerBeat;
         }
+
+        // Apply any speed multipliers (e.g., 0.5 for Slow Down feature)
+        targetBpm *= targetBpmMultiplier;
 
         // Clamp dynamically predicted target BPM as well to secure synchronization 
         targetBpm = Math.max(this.#minBpm, Math.min(this.#maxBpm, targetBpm));
@@ -461,34 +442,12 @@ class PlaybackManager {
         } else {
             this.#state.referenceTime = 0;
             this.#lastBeatTimestamp = 0;
-        }
-
-        this.#syncedMeasureIndex = targetMeasureIndex;
-        this.#previousStateSnapshot = null;
-        this.#broadcastState();
-    }
-
-    undoBeat() {
-        if (!this.#previousStateSnapshot) {
-            console.warn("[PlaybackManager] Undo called but no previous state available.");
-            return;
-        }
-
-        console.log("[PlaybackManager] Undoing last beat.");
-
-        this.#state = this.#previousStateSnapshot.state;
-        this.#syncedMeasureIndex = this.#previousStateSnapshot.syncedMeasureIndex;
-        this.#lastBeatTimestamp = this.#previousStateSnapshot.lastBeatTimestamp;
-
-        this.#previousStateSnapshot = null;
-
-        if (this.#state.status === 'paused') {
-            this.#resetBpmToDefault(false); 
-        }
-
+        }        this.#syncedMeasureIndex = targetMeasureIndex;
         this.#broadcastState();
     }
 }
 
 module.exports = { PlaybackManager };
+
+
 

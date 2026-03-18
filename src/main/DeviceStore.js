@@ -36,9 +36,7 @@ class DeviceStore {
         } catch(e) {
             console.error("[DeviceStore] Error saving:", e.message);
         }
-    }
-
-    updateDevice(deviceObj) {
+    }            updateDevice(deviceObj) {
         this.devices.set(deviceObj.deviceId, {
             ...deviceObj,
             lastSeen: Date.now()
@@ -46,10 +44,21 @@ class DeviceStore {
         this.save();
     }
 
+    removeDevice(deviceId) {
+        if (this.devices.has(deviceId)) {
+            this.devices.delete(deviceId);
+            this.save();
+        }
+    }
+
     getDevices() {
-        return Array.from(this.devices.values());
+    return Array.from(this.devices.values());
     }
 }
 
 module.exports = { DeviceStore };
+
+
+
+
 

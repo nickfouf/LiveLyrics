@@ -45,9 +45,7 @@ function scheduleAutoPairRetry(deviceId, deviceType) {
     }, 30000);
     
     autoPairRetries.set(deviceId, timeoutId);
-}
-
-function checkAndAutoPairDevice(deviceId, deviceType) {
+}    function checkAndAutoPairDevice(deviceId, deviceType) {
     const device = discoverableDevices.get(deviceId);
     if (!device) return;
 
@@ -62,8 +60,30 @@ function checkAndAutoPairDevice(deviceId, deviceType) {
     if (isConnector && connectedConnector && connectedConnector.id === deviceId) return;
     if (isMidi && connectedMidiDevices.has(deviceId)) return;
     
+    // Ensure we only automatically attempt to pair to ONE connector (the most recent one)
+    if (isConnector && !connectedConnector) {
+        let newerConnectorExists = false;
+        for (const d of discoverableDevices.values()) {
+            if (d.deviceType === 'connector' && d.deviceId !== deviceId) {
+                if ((d.lastSeen || 0) > (device.lastSeen || 0)) {
+                    newerConnectorExists = true;
+                    break;
+                }
+            }
+        }
+        if (newerConnectorExists) return; 
+    }
+
     // Check if it's already attempting to connect
     if (connectingDeviceIds.has(deviceId)) return;
+    
+    // Also if we are already connecting to ANOTHER connector, ignore this one
+    if (isConnector) {
+        for (const id of connectingDeviceIds) {
+            const d = discoverableDevices.get(id);
+            if (d && d.deviceType === 'connector') return;
+        }
+    }
     
     connectingDeviceIds.add(deviceId);
     renderDeviceList();
@@ -131,14 +151,15 @@ function renderDeviceList() {
             buttonClass = 'primary-btn';
             buttonText = 'Pair';
             buttonAction = 'pair';
-        }
-
-        li.innerHTML = `
+        }                li.innerHTML = `
             <div class="device-list-details">
                 <span class="device-name">${device.deviceName}</span>
                 <span class="device-id-secondary">${device.deviceId} [${device.deviceType}]</span>
             </div>
-            <button class="action-btn pair-btn ${buttonClass}" data-action="${buttonAction}">${buttonText}</button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="action-btn pair-btn ${buttonClass}" data-action="${buttonAction}">${buttonText}</button>
+                <button class="action-btn secondary-btn forget-btn" data-action="forget" style="padding: 4px 8px; font-size: 14px;" title="Forget Device">✕</button>
+            </div>
         `;
         DOM.deviceList.appendChild(li);
     });
@@ -350,10 +371,8 @@ function initDeviceController() {
     DOM.closeDeviceListBtn.addEventListener('click', hideDeviceListDialog);
     DOM.deviceListDialog.addEventListener('click', (e) => {
         if (e.target === DOM.deviceListDialog) hideDeviceListDialog();
-    });
-
-    DOM.deviceList.addEventListener('click', async (e) => {
-        const actionButton = e.target.closest('.pair-btn');
+    });        DOM.deviceList.addEventListener('click', async (e) => {
+        const actionButton = e.target.closest('.action-btn');
         const deviceItem = e.target.closest('.device-list-item');
         if (!actionButton || !deviceItem) return;
 
@@ -378,6 +397,10 @@ function initDeviceController() {
         } else if (action === 'cancel') {
             manualDisconnectIds.add(deviceId);
             sendMessageToMain('cancelPairing', { deviceId });
+        } else if (action === 'forget') {
+            window.playerAPI.forgetDevice(deviceId);
+            discoverableDevices.delete(deviceId);
+            renderDeviceList();
         }
     });
 
@@ -891,4 +914,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log("Player UI Initialized");
 });
+
+
+
+
 

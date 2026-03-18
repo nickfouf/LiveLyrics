@@ -45,3 +45,4 @@ export class BeatPointsProperty extends VirtualProperty {
         }
     }
 }
+

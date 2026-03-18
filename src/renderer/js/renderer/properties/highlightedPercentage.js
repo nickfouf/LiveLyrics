@@ -49,3 +49,5 @@ export class HighlightedPercentage extends VirtualProperty {
 
 
 
+
+

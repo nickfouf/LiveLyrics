@@ -25,8 +25,9 @@ autoUpdater.logger = log;
 autoUpdater.autoDownload = false;
 log.info('App starting...');
 
-const projectTempPath = path.join(app.getPath('temp'), 'live-lyrics-project');
-const assetsTempPath = path.join(projectTempPath, 'assets');
+const APP_TEMP_ROOT = path.join(app.getPath('temp'), 'LiveLyrics');
+const PROJECTS_CACHE_PATH = path.join(APP_TEMP_ROOT, 'projects');
+let activeAssetsPath = path.join(APP_TEMP_ROOT, 'editor-assets'); 
 
 let currentCopyOperation = { cancel: () => {} };
 let filePathToOpen = null;
@@ -46,11 +47,103 @@ let playbackManager;
 let connectionManager = null;
 let pendingPairingCallbacks = new Map();
 
+// --- Project UID Tracking ---
+const webContentsProjects = new Map(); // webContentsId -> Set<uid>
+
+function addProjectToWebContents(wcId, uid) {
+    if (!uid) return;
+    if (!webContentsProjects.has(wcId)) webContentsProjects.set(wcId, new Set());
+    webContentsProjects.get(wcId).add(uid);
+}
+
+function setProjectsForWebContents(wcId, uidsArray) {
+    const oldUids = webContentsProjects.get(wcId) || new Set();
+    const newUids = new Set(uidsArray.filter(Boolean));
+    
+    webContentsProjects.set(wcId, newUids);
+
+    for (const uid of oldUids) {
+        if (!newUids.has(uid)) {
+            checkAndCleanupUid(uid);
+        }
+    }
+}
+
+function clearWebContentsProjects(wcId) {
+    const uids = webContentsProjects.get(wcId);
+    if (uids) {
+        webContentsProjects.delete(wcId);
+        for (const uid of uids) {
+            checkAndCleanupUid(uid);
+        }
+    }
+}
+
+function checkAndCleanupUid(uid) {
+    for (const uids of webContentsProjects.values()) {
+        if (uids.has(uid)) return; // Still actively used by another view
+    }
+    const folderPath = path.join(PROJECTS_CACHE_PATH, uid);
+    safeRm(folderPath).catch(() => {});
+}
+
 /**
- * Attempts to remove a directory or file. If EBUSY/EPERM/EACCES/ENOTEMPTY errors occur,
- * it retries a few times with a delay before giving up.
+ * Background task to clean up old song folders.
+ * Runs every 5 seconds.
  */
-async function safeRm(targetPath, retries = 5, delay = 200) {
+function startBackgroundCleanup() {
+    setInterval(async () => {
+        if (!fs.existsSync(PROJECTS_CACHE_PATH)) return;
+
+        try {
+            const cachedFolders = await fs.promises.readdir(PROJECTS_CACHE_PATH);
+            const now = Date.now();
+
+            for (const folderName of cachedFolders) {
+                const folderPath = path.join(PROJECTS_CACHE_PATH, folderName);
+                
+                // 1. Never delete actively registered projects
+                let isProtected = false;
+                for (const uids of webContentsProjects.values()) {
+                    if (uids.has(folderName)) { isProtected = true; break; }
+                }
+                if (isProtected) continue;
+
+                // 2. Grace Period: Don't delete folders modified in the last 30 seconds.
+                // This prevents deleting a song that is still in the middle of being opened.
+                try {
+                    const stats = fs.statSync(folderPath);
+                    const ageInSeconds = (now - stats.mtimeMs) / 1000;
+                    if (ageInSeconds < 30) continue; 
+                } catch (e) { continue; }
+
+                // Silent background removal
+                await safeRm(folderPath);
+            }
+
+            // Also clean up the staging root if it exists
+            const stagingRoot = path.join(APP_TEMP_ROOT, 'staging');
+            if (fs.existsSync(stagingRoot)) {
+                const sessionFolders = await fs.promises.readdir(stagingRoot);
+                for (const sf of sessionFolders) {
+                    const sfPath = path.join(stagingRoot, sf);
+                    try {
+                        const stats = fs.statSync(sfPath);
+                        if ((now - stats.mtimeMs) / 1000 > 60) await safeRm(sfPath);
+                    } catch (e) {}
+                }
+            }
+        } catch (err) {
+            // Background errors are silent
+        }
+    }, 5000);
+}
+
+/**
+ * Attempts to remove a directory or file. 
+ * Retries on EBUSY but remains silent to the user.
+ */
+async function safeRm(targetPath, retries = 3, delay = 100) {
     if (!fs.existsSync(targetPath)) return;
 
     for (let i = 0; i < retries; i++) {
@@ -58,13 +151,11 @@ async function safeRm(targetPath, retries = 5, delay = 200) {
             await fs.promises.rm(targetPath, { recursive: true, force: true });
             return;
         } catch (err) {
-            const isLocked = err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'ENOTEMPTY' || err.code === 'EACCES';
-            if (isLocked && i < retries - 1) {
-                console.warn(`[Main] safeRm: File busy/locked at ${targetPath} (${err.code}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
+            if (i === retries - 1) {
+                // Silent failure - do not show alert to user
+                console.log(`[Main] Cleanup skipped for busy resource: ${path.basename(targetPath)}`);
             } else {
-                console.error(`[Main] safeRm failed to delete ${targetPath} after ${i + 1} attempts. Last error:`, err);
-                throw err;
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
     }
@@ -210,7 +301,7 @@ function assignWindowRoles() {
 
     // Get the Media Source ID for WebRTC capture from the Master
     const sourceId = masterWindow.getMediaSourceId();
-    
+
     const notify = (win, role, id) => {
         if (win && !win.isDestroyed()) {
             win.webContents.send('window:set-role', { role, sourceId: id });
@@ -481,16 +572,16 @@ function updateAudienceWindows() {
     for (const displayId of openWindowIds) {
         if (!audienceDisplayIds.has(displayId)) {
             const win = audienceWindows.get(displayId);
-            
+
             // PROACTIVE FIX: Remove from map immediately to update roles logic
             // This prevents the closing window from being selected as "Master"
             // during the asynchronous close process.
             audienceWindows.delete(displayId);
-            
+
             if (win && !win.isDestroyed()) {
                 win.close();
             }
-            
+
             // Re-assign roles immediately based on the updated map state
             assignWindowRoles();
         }
@@ -505,6 +596,14 @@ function updateAudienceWindows() {
 }
 
 app.whenReady().then(() => {
+    startBackgroundCleanup(); // Start the 5-second cleaner
+
+    app.on('web-contents-created', (e, wc) => {
+        wc.on('destroyed', () => {
+            clearWebContentsProjects(wc.id);
+        });
+    });
+
     const broadcastToAllWindows = (channel, ...args) => {
         const stateObject = args[0];
         // Inject GLOBAL LATENCY into the state object for all windows
@@ -560,12 +659,11 @@ app.whenReady().then(() => {
                 break;
             case 'jump-backward':
                 playbackManager.jumpSynced(-1, timestamp);
-                break;
-            case 'jump-forward':
+                break;            case 'jump-forward':
                 playbackManager.jumpSynced(1, timestamp);
                 break;
-            case 'undo':
-                playbackManager.undoBeat();
+            case 'slow-down':
+                playbackManager.syncBeat(timestamp, 1.0, 0.5); // Halve the BPM inside a 1-second interval
                 break;
             case 'jump-to-start':
                 playbackManager.jump(0, timestamp);
@@ -602,6 +700,11 @@ app.whenReady().then(() => {
             }
         });
 
+        // --- Immediate Active Project Unregistration ---
+        ipcMain.on('project:close-active', (event) => {
+            clearWebContentsProjects(event.sender.id);
+        });
+
         connectionManager.on('discoverableDeviceLost', (deviceInfo) => {
             if (discoverableDevices.has(deviceInfo.deviceId)) {
                 discoverableDevices.delete(deviceInfo.deviceId);
@@ -611,7 +714,7 @@ app.whenReady().then(() => {
 
         connectionManager.on('pairingRequest', (device, accept, reject) => {
             console.log(`[Main] Incoming pairing request from ${device.deviceName} (${device.deviceId})[Type: ${device.deviceType}].`);
-            
+
             // Logic for Android Connectors
             if (device.deviceType === 'connector' && autoAcceptConnections) {
                 console.log(`[Main] Auto-accept (Connector) enabled. Automatically accepting request from ${device.deviceId}.`);
@@ -629,8 +732,8 @@ app.whenReady().then(() => {
             pendingPairingCallbacks.set(device.deviceId, { accept, reject });
 
             if (playerWindow && !playerWindow.isDestroyed()) {
-                playerWindow.webContents.send('device-controller:pairing-request', { 
-                    deviceId: device.deviceId, 
+                playerWindow.webContents.send('device-controller:pairing-request', {
+                    deviceId: device.deviceId,
                     deviceName: device.deviceName,
                     deviceType: device.deviceType
                 });
@@ -691,7 +794,7 @@ app.whenReady().then(() => {
             // --- FIX: Immediately sync state with the newly connected device ---
             if (playbackManager) {
                 const currentSyncState = playbackManager.getCurrentSyncState();
-                
+
                 // 1. Send Playback State (BPM, Status)
                 connectionManager.sendMessageToPairedDevice({
                     type: 'playbackUpdate',
@@ -704,7 +807,7 @@ app.whenReady().then(() => {
                         type: 'songUpdateHint',
                         payload: { title: currentSyncState.song.title }
                     });
-                    
+
                     const currentSongData = playbackManager.getCurrentSongData();
                     if (currentSongData) {
                         connectionManager.sendMessageToPairedDevice({
@@ -757,10 +860,9 @@ app.whenReady().then(() => {
             if (playerWindow && !playerWindow.isDestroyed()) {
                 playerWindow.webContents.send('device-controller:error', err.message);
             }
-        });
-
-        ipcMain.on('device-controller:initiate-pairing', (event, deviceId) => connectionManager.pairWithDevice(deviceId));
+        });            ipcMain.on('device-controller:initiate-pairing', (event, deviceId) => connectionManager.pairWithDevice(deviceId));
         ipcMain.on('device-controller:cancel-pairing', (event, deviceId) => connectionManager.cancelPairing(deviceId));
+        ipcMain.on('device-controller:forget-device', (event, deviceId) => connectionManager.forgetDevice(deviceId));
         ipcMain.on('device-controller:respond-to-pairing', (event, { deviceId, accepted }) => {
             const callbacks = pendingPairingCallbacks.get(deviceId);
             if (callbacks) {
@@ -775,13 +877,13 @@ app.whenReady().then(() => {
                 console.warn(`[Main] No pending callbacks found for ${deviceId}. The request might have timed out.`);
             }
         });
-        
+
         ipcMain.on('device-controller:disconnect-device', (event, deviceId) => {
             if (connectionManager) {
                 connectionManager.disconnectDevice(deviceId);
             }
         });
-        
+
         ipcMain.on('device-controller:set-auto-accept', (event, enabled) => {
             autoAcceptConnections = enabled;
         });
@@ -959,6 +1061,7 @@ ipcMain.on('updater:quit-and-install', () => {
 });
 
 ipcMain.on('go-to-main-menu', (event) => {
+    clearWebContentsProjects(event.sender.id);
     const sourceWindow = BrowserWindow.fromWebContents(event.sender);
     createMainWindow();
     if (sourceWindow) {
@@ -1024,11 +1127,13 @@ ipcMain.handle('get-system-fonts', async () => {
 
 ipcMain.handle('project:init-temp-folder', async () => {
     try {
-        await safeRm(projectTempPath);
-        await fs.promises.mkdir(assetsTempPath, { recursive: true });
+        clearWebContentsProjects(event.sender.id);
+        // Initialize the dedicated editor temp folder
+        activeAssetsPath = path.join(APP_TEMP_ROOT, 'editor-assets');
+        await safeRm(activeAssetsPath);
+        await fs.promises.mkdir(activeAssetsPath, { recursive: true });
         return true;
     } catch (error) {
-        console.error("Failed to initialize temp project folder:", error);
         return false;
     }
 });
@@ -1037,15 +1142,19 @@ ipcMain.on('project:cancel-copy', () => {
     if (currentCopyOperation && typeof currentCopyOperation.cancel === 'function') {
         currentCopyOperation.cancel();
     }
-});
-
-ipcMain.handle('dialog:openSong', async (event) => {
+});        ipcMain.handle('dialog:openSong', async (event) => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
-    const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, { properties:['openFile'], filters: [{ name: 'LiveLyrics Project', extensions: ['lyx'] }] });
+    const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, { properties:['openFile'], filters: [{ name: 'LiveLyrics Project', extensions:['lyx'] }] });
     if (!canceled) return filePaths[0];
 });
 
-ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
+ipcMain.handle('dialog:openSongs', async (event) => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, { properties:['openFile', 'multiSelections'], filters: [{ name: 'LiveLyrics Project', extensions:['lyx'] }] });
+    if (!canceled) return filePaths;
+    return[];
+});
+    ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
     const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, options);
     if (!canceled && filePaths.length > 0) {
@@ -1069,14 +1178,15 @@ async function processAssetAddition(originalPath) {
         throw new Error('File does not exist at the provided path.');
     }
 
-    await fs.promises.mkdir(assetsTempPath, { recursive: true });
+    // We always use the activeAssetsPath (which is set to the isolated folder for opened songs or 'editor-assets' for new)
+    await fs.promises.mkdir(activeAssetsPath, { recursive: true });
 
     const checksum = await generateFileChecksum(originalPath);
     const extension = path.extname(originalPath).toLowerCase();
 
     if (extension === '.lyfx') {
         const effectFolderName = checksum;
-        const effectFolderPath = path.join(assetsTempPath, effectFolderName);
+        const effectFolderPath = path.join(activeAssetsPath, effectFolderName);
         const alias = path.basename(originalPath);
 
         if (!fs.existsSync(effectFolderPath)) {
@@ -1093,7 +1203,7 @@ async function processAssetAddition(originalPath) {
     }
 
     const newFileName = `${checksum}${extension}`;
-    const destPath = path.join(assetsTempPath, newFileName);
+    const destPath = path.join(activeAssetsPath, newFileName);
     const finalUrl = url.pathToFileURL(destPath).href;
     const alias = path.basename(originalPath);
 
@@ -1180,8 +1290,8 @@ ipcMain.handle('project:cleanUnusedAssets', async (event, usedAssets) => {
         const usedFileNames = new Set(usedAssets.map(assetUrl => {
             try {
                 const filePath = url.fileURLToPath(assetUrl);
-                if (filePath.startsWith(assetsTempPath)) {
-                    const relative = path.relative(assetsTempPath, filePath);
+                if (filePath.startsWith(activeAssetsPath)) {
+                    const relative = path.relative(activeAssetsPath, filePath);
                     const parts = relative.split(path.sep);
                     return parts[0];
                 }
@@ -1191,11 +1301,11 @@ ipcMain.handle('project:cleanUnusedAssets', async (event, usedAssets) => {
             }
         }).filter(Boolean));
 
-        const filesInTemp = await fs.promises.readdir(assetsTempPath);
+        const filesInTemp = await fs.promises.readdir(activeAssetsPath);
 
         for (const fileName of filesInTemp) {
             if (!usedFileNames.has(fileName)) {
-                const filePathToDelete = path.join(assetsTempPath, fileName);
+                const filePathToDelete = path.join(activeAssetsPath, fileName);
                 try {
                     await safeRm(filePathToDelete);
                 } catch (deleteError) {
@@ -1215,8 +1325,8 @@ async function saveProject(filePath, { songData, usedAssets }) {
             if (typeof obj[key] === 'string' && obj[key].startsWith('file:///')) {
                 try {
                     const assetPath = url.fileURLToPath(obj[key]);
-                    if (assetPath.startsWith(assetsTempPath)) {
-                        const relative = path.relative(assetsTempPath, assetPath);
+                    if (assetPath.startsWith(activeAssetsPath)) {
+                        const relative = path.relative(activeAssetsPath, assetPath);
                         obj[key] = `assets/${relative.replace(/\\/g, '/')}`;
                     }
                 } catch (e) {
@@ -1257,14 +1367,14 @@ async function saveProject(filePath, { songData, usedAssets }) {
         for (const assetUrl of usedAssets) {
             try {
                 const assetPath = url.fileURLToPath(assetUrl);
-                if (assetPath.startsWith(assetsTempPath) && fs.existsSync(assetPath)) {
-                    const relativePath = path.relative(assetsTempPath, assetPath);
+                if (assetPath.startsWith(activeAssetsPath) && fs.existsSync(assetPath)) {
+                    const relativePath = path.relative(activeAssetsPath, assetPath);
                     const pathParts = relativePath.split(path.sep);
 
                     if (pathParts.length > 1) {
                         const rootFolder = pathParts[0];
                         if (!addedFolders.has(rootFolder)) {
-                            const sourceDir = path.join(assetsTempPath, rootFolder);
+                            const sourceDir = path.join(activeAssetsPath, rootFolder);
                             archive.directory(sourceDir, `assets/${rootFolder}`);
                             addedFolders.add(rootFolder);
                         }
@@ -1296,12 +1406,14 @@ ipcMain.handle('dialog:showSaveAsDialog', async (event, options) => {
 
 ipcMain.handle('project:open', async (event, filePath) => {
     try {
-        await safeRm(projectTempPath);
-        await fs.promises.mkdir(projectTempPath, { recursive: true });
+        // Create a unique staging folder for extraction to avoid EBUSY collisions
+        const sessionId = crypto.randomBytes(4).toString('hex');
+        const stagingPath = path.join(APP_TEMP_ROOT, 'staging', sessionId);
+        await fs.promises.mkdir(stagingPath, { recursive: true });
 
-        await extract(filePath, { dir: projectTempPath });
+        await extract(filePath, { dir: stagingPath });
 
-        const songJsonPath = path.join(projectTempPath, 'song.json');
+        const songJsonPath = path.join(stagingPath, 'song.json');
         if (!fs.existsSync(songJsonPath)) {
             throw new Error("Project file is invalid or corrupt: 'song.json' not found.");
         }
@@ -1317,11 +1429,50 @@ ipcMain.handle('project:open', async (event, filePath) => {
             }
         }
 
+        // --- UID Isolation Logic ---
+        // Generate a fallback UID for legacy files based on path hash
+        const projectUid = songData.uid || crypto.createHash('md5').update(filePath).digest('hex');
+        const finalProjectPath = path.join(PROJECTS_CACHE_PATH, projectUid);
+
+        // Move the staging content to the isolated project folder
+        if (!fs.existsSync(finalProjectPath)) {
+            await fs.promises.mkdir(path.dirname(finalProjectPath), { recursive: true });
+            await fs.promises.rename(stagingPath, finalProjectPath);
+        } else {
+            // If the folder already exists, we must overwrite the assets 
+            // BUT we do it silently and skip files that are busy (like the currently playing video)
+            // Background cleanup will handle the old folder eventually.
+            const assetsSrc = path.join(stagingPath, 'assets');
+            const assetsDest = path.join(finalProjectPath, 'assets');
+            
+            if (fs.existsSync(assetsSrc)) {
+                await fs.promises.mkdir(assetsDest, { recursive: true });
+                const files = await fs.promises.readdir(assetsSrc);
+                for (const file of files) {
+                    try {
+                        await fs.promises.copyFile(path.join(assetsSrc, file), path.join(assetsDest, file));
+                    } catch (e) { /* Ignore busy files */ }
+                }
+            }
+            await fs.promises.copyFile(songJsonPath, path.join(finalProjectPath, 'song.json'));
+            safeRm(stagingPath).catch(() => {});
+        }
+        
+        // Track the newly resolved project
+        const isEditor = editorWindow && !editorWindow.isDestroyed() && event.sender.id === editorWindow.webContents.id;
+        if (isEditor) {
+            setProjectsForWebContents(event.sender.id, [projectUid]);
+            activeAssetsPath = path.join(finalProjectPath, 'assets');
+        } else {
+            addProjectToWebContents(event.sender.id, projectUid);
+        }
+
+
         function absolutizeAssetPaths(obj) {
             for (const key in obj) {
                 if (typeof obj[key] === 'string' && obj[key].startsWith('assets/')) {
                     const relativeAssetPath = obj[key];
-                    const assetPath = path.join(projectTempPath, relativeAssetPath);
+                    const assetPath = path.join(finalProjectPath, relativeAssetPath);
                     obj[key] = url.pathToFileURL(assetPath).href;
                 } else if (typeof obj[key] === 'object' && obj[key] !== null) {
                     absolutizeAssetPaths(obj[key]);
@@ -1459,13 +1610,21 @@ ipcMain.on('playback:sync-beat', (event, { timestamp, interpolationDuration }) =
 
 ipcMain.on('playback:jump-synced', (event, { direction, timestamp }) => {
     playbackManager.jumpSynced(direction, timestamp);
-});
-
-ipcMain.on('playback:undo-beat', (event) => {
-    playbackManager.undoBeat();
-});
+});    ipcMain.on('playback:slow-down', (event, { timestamp }) => {
+        playbackManager.syncBeat(timestamp, 1.0, 0.5); // Halve the BPM inside a 1-second interval
+    });
 
 ipcMain.on('playlist:updated', (event, { songs, activeSongId }) => {
+    // --- ONLY REGISTER THE ACTIVE SONG FOR THE PLAYER ---
+    const activeSong = songs.find(s => s.id === activeSongId);
+    const activeUid = activeSong && activeSong.songData ? activeSong.songData.uid : null;
+    
+    if (activeUid) {
+        setProjectsForWebContents(event.sender.id, [activeUid]);
+    } else {
+        clearWebContentsProjects(event.sender.id);
+    }
+
     if (connectionManager) {
         const payload = {
             songs: songs.map(s => ({ id: s.id, title: s.title })),

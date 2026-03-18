@@ -284,3 +284,4 @@ function applyRecursive(element, propGroupKey, valueObj) {
     
     return didChange;
 }
+

@@ -99,3 +99,4 @@ export class TextShadowProperty extends VirtualProperty {
         this.#blur.updatePixelValue(dimensions);
     }
 }
+

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('editorAPI', {
 
     // Project & File Operations
     initTempFolder: () => ipcRenderer.invoke('project:init-temp-folder'),
+    closeProject: () => ipcRenderer.send('project:close-active'),
     cancelFileCopy: () => ipcRenderer.send('project:cancel-copy'),
     openSong: () => ipcRenderer.invoke('dialog:openSong'),
     showOpenDialog: (options) => ipcRenderer.invoke('dialog:showOpenDialog', options),
@@ -28,6 +29,10 @@ contextBridge.exposeInMainWorld('editorAPI', {
     onFileOpen: (callback) => ipcRenderer.on('file:open', (_event, { filePath }) => callback(filePath)),
     notifyReady: () => ipcRenderer.send('editor:ready'),
 });
+
+
+
+
 
 
 

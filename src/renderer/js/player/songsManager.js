@@ -25,7 +25,6 @@ function syncPlaylistWithMain() {
     }
 }
 
-// ... (Persistence logic functions: savePlaylistPaths, saveActiveSongPath, restorePlaylist remain unchanged) ...
 function savePlaylistPaths() {
     try {
         const paths = songPlaylist.map(s => s.filePath);
@@ -89,7 +88,6 @@ async function restorePlaylist() {
     hideLoading();
 }
 
-// ... (Helper functions: pageDataHasMeasures, songDataHasMeasures, showDefaultPlayerView remain unchanged) ...
 function pageDataHasMeasures(pageData) {
     if (!pageData) return false;
     function findMusicElements(element) {
@@ -293,7 +291,6 @@ export async function handleSongActivated(songMetadata, songData) {
     }
 }
 
-// ... (Rest of file: handleSongUnloaded, renderPlaylist, handleAddSong, addSongFromPath, initSongsManager remain unchanged) ...
 export function handleSongUnloaded() {
     updateState({ activeSongId: null });
     renderPlaylist();
@@ -321,48 +318,65 @@ function renderPlaylist() {
         `;
         playlistElement.appendChild(li);
     });
-}
-
-async function handleAddSong() {
-    const filePath = await window.playerAPI.openSong();
-    if (!filePath) return;
-    const existingSong = songPlaylist.find(song => song.filePath === filePath);
-    if (existingSong) {
-        const songItemElement = playlistElement.querySelector(`[data-song-id="${existingSong.id}"]`);
-        if (songItemElement) {
-            songItemElement.classList.add('highlight-duplicate');
-            setTimeout(() => {
-                songItemElement.classList.remove('highlight-duplicate');
-            }, 1000);
-        }
-        return;
-    }
+}        async function handleAddSong() {
+    const filePaths = await window.playerAPI.openSongs();
+    if (!filePaths || filePaths.length === 0) return;
+    
     hideAlertDialog();
-    showLoadingDialog("Opening project...");
-    try {
-        const result = await window.playerAPI.openProject(filePath);
-        if (!result.success) throw new Error(result.error);
-        const songData = result.data;
-        if (!songDataHasMeasures(songData)) {
-            await showAlertDialog('Loading song failed', 'The selected song project does not contain any measures and cannot be played.');
-            hideLoadingDialog();
-            return;
+    showLoadingDialog(filePaths.length > 1 ? "Opening projects..." : "Opening project...");
+    
+    let addedSongs = [];
+    let errors =[];
+
+    for (const filePath of filePaths) {
+        const existingSong = songPlaylist.find(song => song.filePath === filePath);
+        if (existingSong) {
+            const songItemElement = playlistElement.querySelector(`[data-song-id="${existingSong.id}"]`);
+            if (songItemElement) {
+                songItemElement.classList.add('highlight-duplicate');
+                setTimeout(() => {
+                    if (songItemElement) songItemElement.classList.remove('highlight-duplicate');
+                }, 1000);
+            }
+            continue;
         }
-        const songId = `song-${Date.now()}`;
-        const fileNameWithExt = filePath.split(/[\\/]/).pop();
-        const title = fileNameWithExt.replace(/\.lyx$/, '');
-        const newSong = { id: songId, title, filePath, songData };
-        songPlaylist.push(newSong);
+        try {
+            const result = await window.playerAPI.openProject(filePath);
+            if (!result.success) throw new Error(result.error);
+            const songData = result.data;
+            if (!songDataHasMeasures(songData)) {
+                errors.push(`"${filePath.split(/[\\/]/).pop()}" does not contain any measures and cannot be played.`);
+                continue;
+            }
+            const songId = `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const fileNameWithExt = filePath.split(/[\\/]/).pop();
+            const title = fileNameWithExt.replace(/\.lyx$/, '');
+            const newSong = { id: songId, title, filePath, songData };
+            songPlaylist.push(newSong);
+            addedSongs.push(songId);
+        } catch (error) {
+            console.error('Failed to open project:', error);
+            errors.push(`Failed to open "${filePath.split(/[\\/]/).pop()}": ${error.message}`);
+        }
+    }
+
+    if (addedSongs.length > 0) {
         savePlaylistPaths();
-        await loadSong(songId);
-    } catch (error) {
-        hideLoadingDialog();
-        console.error('Failed to open project:', error);
-        await showAlertDialog('Failed to Open Project', error.message);
+        renderPlaylist();
+        syncPlaylistWithMain();
+        
+        if (addedSongs.length === 1 || !state.activeSongId) {
+            await loadSong(addedSongs[0]);
+        }
+    }
+
+    hideLoadingDialog();
+
+    if (errors.length > 0) {
+        await showAlertDialog('Failed to Open Project(s)', errors.join('\n\n'));
     }
 }
-
-export async function addSongFromPath(filePath) {
+    export async function addSongFromPath(filePath) {
     if (!filePath) return;
     hideAlertDialog();
     const existingSong = songPlaylist.find(song => song.filePath === filePath);
@@ -426,7 +440,6 @@ export function initSongsManager() {
             if (songId !== state.activeSongId) loadSong(songId);
         }
     });
-    // ... Drag and Drop setup omitted for brevity but is unchanged ...
     let draggedId = null;
     playlistElement.addEventListener('dragstart', e => {
         const item = e.target.closest('.song-item');
@@ -476,6 +489,10 @@ export function initSongsManager() {
         savePlaylistPaths();
     });
 }
+
+
+
+
 
 
 

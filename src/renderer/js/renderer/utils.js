@@ -695,5 +695,3 @@ export function getAvailablePropertiesForElement(element) {
     return props;
 }
 
-
-

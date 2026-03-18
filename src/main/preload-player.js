@@ -7,12 +7,10 @@ contextBridge.exposeInMainWorld('playerAPI', {
     maximizeWindow: () => ipcRenderer.send('maximize-player-window'),
     closeWindow: () => ipcRenderer.send('close-player-window'),
     goToMainMenu: () => ipcRenderer.send('go-to-main-menu'),
-    onWindowStateChange: (callback) => ipcRenderer.on('window-maximized-state', (_event, value) => callback(value)),
-    
-    openTempoSync: () => ipcRenderer.send('player:open-tempo-sync'),
+    onWindowStateChange: (callback) => ipcRenderer.on('window-maximized-state', (_event, value) => callback(value)),            openTempoSync: () => ipcRenderer.send('player:open-tempo-sync'),
     openSong: () => ipcRenderer.invoke('dialog:openSong'),
+    openSongs: () => ipcRenderer.invoke('dialog:openSongs'),
     openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
-    
     setPresenterDisplay: (displayId) => ipcRenderer.send('player:set-presenter-display', displayId),
     setGlobalLatency: (latency) => ipcRenderer.send('player:set-global-latency', latency),
     setBpmLimits: (min, max) => ipcRenderer.send('player:set-bpm-limits', { min, max }),
@@ -45,16 +43,17 @@ contextBridge.exposeInMainWorld('playerAPI', {
     onDiscoverableInfoUpdate: (callback) => ipcRenderer.on('device-controller:discoverable-info-update', (_event, info) => callback(info)),
 
     setAutoAccept: (enabled) => ipcRenderer.send('device-controller:set-auto-accept', enabled),
-    setMidiAutoAccept: (enabled) => ipcRenderer.send('device-controller:set-midi-auto-accept', enabled),
-    
-    initiatePairing: (deviceId) => ipcRenderer.send('device-controller:initiate-pairing', deviceId),
+    setMidiAutoAccept: (enabled) => ipcRenderer.send('device-controller:set-midi-auto-accept', enabled),        initiatePairing: (deviceId) => ipcRenderer.send('device-controller:initiate-pairing', deviceId),
     cancelPairing: (deviceId) => ipcRenderer.send('device-controller:cancel-pairing', deviceId),
+    forgetDevice: (deviceId) => ipcRenderer.send('device-controller:forget-device', deviceId),
     respondToPairing: (deviceId, accepted) => ipcRenderer.send('device-controller:respond-to-pairing', { deviceId, accepted }),
     disconnectDevice: (deviceId) => ipcRenderer.send('device-controller:disconnect-device', deviceId),
     readyForDevices: () => ipcRenderer.send('player:ready-for-devices'),
 
     onSetRole: (callback) => ipcRenderer.on('window:set-role', (_event, data) => callback(data)),
 });
+
+
 
 
 

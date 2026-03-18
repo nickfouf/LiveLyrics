@@ -34,9 +34,17 @@ import {
 } from '../player/events.js';
 import { fontLoader } from '../renderer/fontLoader.js';
 
+/**
+ * NEW: Generates a persistent UID for the song.
+ */
+function generatePersistentUid() {
+    if (window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+    return 'song-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
 
 export function updateWindowTitle() {
-    // ... (rest of function)
     const fileName = state.song.currentFilePath ? state.song.currentFilePath.split(/[\\/]/).pop() : 'Untitled.lyx';
     const dirtyMarker = state.song.isDirty ? '*' : '';
     const titleString = `LiveLyrics - ${fileName}${dirtyMarker}`;
@@ -50,16 +58,13 @@ export function updateWindowTitle() {
 }
 
 export function markAsDirty() {
-    // ... (rest of function)
     if (!state.song.isDirty) {
         updateState({ song: { ...state.song, isDirty: true } });
         updateWindowTitle();
     }
 }
 
-// ... (setPropertyAsDefaultValue implementation)
 export function setPropertyAsDefaultValue(element, propKey, newValue) {
-    // ... (existing implementation)
     if (!element) return;
 
     const keyToPath = {
@@ -273,13 +278,11 @@ function animationLoop(timestamp) {
         }
     }
 
-    // Switch visible pages based on timeline requirements
     const allPossiblePages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
     for (const page of allPossiblePages) {
         if (pagesToKeepInDom.has(page)) {
             const wasAdded = page.addedInDom;
             state.domManager.addToDom(page);
-            // ADDED: Notify page if it was just added so A/V triggers work
             if (!wasAdded) {
                 page.handlePlaybackStateChange(true);
             }
@@ -320,7 +323,6 @@ function animationLoop(timestamp) {
     state.playback.animationFrameId = requestAnimationFrame(animationLoop);
 }
 
-// ... (rest of file remains the same)
 function play() {
     if (state.playback.songHasEnded) {
         state.playback.timeAtPause = 0;
@@ -372,18 +374,15 @@ function pause() {
     }
 
     if (pageToShow) {
-        // Enforce visibility of just this page
         const allPages = [state.song.thumbnailPage, ...state.song.pages].filter(Boolean);
         for (const p of allPages) {
             if (p === pageToShow) state.domManager.addToDom(p);
             else state.domManager.removeFromDom(p);
         }
-
         if (pageToShow !== state.activePage) {
             setActivePage(pageToShow);
         }
     }
-
     updateTimelineAndEditorView();
 }
 
@@ -392,13 +391,7 @@ function stop() {
         cancelAnimationFrame(state.playback.animationFrameId);
     }
     updateState({
-        playback: {
-            ...state.playback,
-            isPlaying: false,
-            animationFrameId: null,
-            timeAtPause: 0,
-            songHasEnded: true,
-        }
+        playback: { ...state.playback, isPlaying: false, animationFrameId: null, timeAtPause: 0, songHasEnded: true, }
     });
     document.getElementById('play-pause-btn').classList.remove('is-playing');
     document.body.classList.remove('is-playing');
@@ -735,7 +728,7 @@ function setupPropertiesPanelDelegation() {
 }
 
 function setupMainMenu() {
-    DOM.newSongBtn.addEventListener('click', () => showPage('new-song-page'));
+    DOM.newSongBtn.addEventListener('click', () => showPage('main-menu-page'));
     DOM.openSongBtn.addEventListener('click', async () => {
         const filePath = await window.editorAPI.openSong();
         if (filePath) {
@@ -784,6 +777,7 @@ function setupNewSongMenu() {
             stagingDomManager,
             timelineManager,
             song: {
+                uid: generatePersistentUid(), // Persistent UID for new songs
                 title: songTitle,
                 thumbnailPage: thumbnailPage,
                 pages: [firstPage],
@@ -814,6 +808,10 @@ function setupEditorHeader() {
             return;
         }
         if(state.playback.isPlaying) stop();
+
+        if (window.editorAPI && window.editorAPI.closeProject) {
+            window.editorAPI.closeProject();
+        }
 
         DOM.songTitleInput.value = '';
         DOM.createSongBtn.disabled = true;
@@ -892,7 +890,13 @@ function setupCustomSelects() {
 }
 
 function serializeSong() {
+    // ENSURE PERSISTENT UID ON SAVE
+    if (!state.song.uid) {
+        state.song.uid = generatePersistentUid();
+    }
+
     return {
+        uid: state.song.uid,
         title: state.song.title,
         bpm: state.song.bpm,
         bpmUnit: state.song.bpmUnit,
@@ -998,6 +1002,7 @@ async function loadSong(filePath) {
             stagingDomManager,
             timelineManager,
             song: {
+                uid: songData.uid || null, // Restore existing UID
                 title: songData.title,
                 thumbnailPage: thumbnailPage,
                 pages: pages,
