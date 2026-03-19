@@ -932,6 +932,11 @@ body.is-dragging .slide-wrapper [data-element-type]:not([data-element-type$="con
     opacity: 0;
 }
 
+/* --- Highlight for dropping elements from layers panel --- */
+.page-thumbnail.drag-over-page-target {
+    border-color: #ff00e5;
+    background-color: rgba(255, 0, 229, 0.2);
+}
 
 .segmented-tabs {
     display: flex;

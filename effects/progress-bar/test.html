@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixiJS LinearBurnBlend Example</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #ffffff; /* White background to emphasize linear burn */
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+    <!-- Import Maps allow us to use modern ES modules in the browser directly -->
+    <script type="importmap">
+        {
+            "imports": {
+                "pixi.js": "https://unpkg.com/pixi.js@8.x/dist/pixi.mjs",
+                "pixi.js/advanced-blend-modes": "https://unpkg.com/pixi.js@8.x/dist/advanced-blend-modes.mjs"
+            }
+        }
+    </script>
+</head>
+<body>
+<script type="module">
+    // Import required classes from PixiJS
+    import { Application, Sprite, Assets, Graphics, Text, TextStyle, LinearBurnBlend } from 'pixi.js';
+
+    // Importing this extension is required to register advanced blend mode WebGL/WebGPU shaders
+    import 'pixi.js/advanced-blend-modes';
+
+    (async () => {
+        // 1. Initialize the PixiJS Application
+        const app = new Application();
+        await app.init({
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: 0xffffff,
+            resizeTo: window
+        });
+        document.body.appendChild(app.canvas);
+
+        // 2. Create a colorful backdrop
+        // Linear Burn looks at color info and darkens the base color to reflect the blend color.
+        // Bright base colors show the effect off the best!
+        const bgContainer = new Graphics();
+        bgContainer.circle(app.screen.width * 0.3, app.screen.height * 0.5, 250).fill(0xff0055); // Pink/Red
+        bgContainer.circle(app.screen.width * 0.7, app.screen.height * 0.5, 250).fill(0x00aaff); // Light Blue
+        bgContainer.rect(app.screen.width * 0.2, app.screen.height * 0.2, app.screen.width * 0.6, 100).fill(0xffee00); // Yellow
+        app.stage.addChild(bgContainer);
+
+        // 3. Load a texture for our foreground sprite
+        // We use a sample image provided globally by Pixi
+        const texture = await Assets.load('https://pixijs.com/assets/panda.png');
+
+        // 4. Create the Sprite
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.x = app.screen.width / 2;
+        sprite.y = app.screen.height / 2;
+        sprite.scale.set(1.5);
+
+        // -----------------------------------------------------------
+        // METHOD A: Using the Class Explicitly (as per your doc link)
+        // -----------------------------------------------------------
+        const linearBurnFilter = new LinearBurnBlend();
+        sprite.filters = [linearBurnFilter];
+
+        // -----------------------------------------------------------
+        // METHOD B: Using the Blend Mode string alias
+        // (Does the exact same thing behind the scenes in v8)
+        // -----------------------------------------------------------
+        // sprite.blendMode = 'linear-burn';
+
+        app.stage.addChild(sprite);
+
+        // Add instruction text so you know what you are looking at
+        const style = new TextStyle({
+            fontFamily: 'Arial',
+            fontSize: 24,
+            fill: 0x000000,
+            fontWeight: 'bold',
+            dropShadow: { alpha: 0.8, blur: 2, color: 0xffffff, distance: 2 }
+        });
+        const text = new Text({ text: 'LinearBurnBlend Filter in Action\n(Notice how it darkens the shapes beneath it)', style });
+        text.x = 20;
+        text.y = 20;
+        app.stage.addChild(text);
+
+        // 5. Animate the sprite to see the dynamic blending effect over the background
+        let time = 0;
+        app.ticker.add((ticker) => {
+            time += 0.02 * ticker.deltaTime;
+
+            // Float the panda back and forth over the colors
+            sprite.x = app.screen.width / 2 + Math.cos(time) * 350;
+            sprite.y = app.screen.height / 2 + Math.sin(time * 0.7) * 200;
+            sprite.rotation = Math.sin(time * 0.5) * 0.15;
+        });
+    })();
+</script>
+</body>
+</html>

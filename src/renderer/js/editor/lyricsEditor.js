@@ -652,6 +652,7 @@ export function initLyricsEditor() {
                     <div class="form-group">
                         <label for="le-time-signature">Time Signature</label>
                         <select id="le-time-signature" class="form-select">
+                            <option value="1/4">1/4</option>
                             <option value="2/4">2/4</option>
                             <option value="3/4">3/4</option>
                             <option value="4/4" selected>4/4</option>

@@ -228,6 +228,7 @@ export function initOrchestraEditor() {
                     <div class="form-group">
                         <label for="oe-time-signature">Time Signature</label>
                         <select id="oe-time-signature" class="form-select">
+                            <option value="1/4">1/4</option>
                             <option value="2/4">2/4</option>
                             <option value="3/4">3/4</option>
                             <option value="4/4" selected>4/4</option>

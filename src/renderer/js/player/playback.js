@@ -110,13 +110,23 @@ function renderLoop() {
         } else {
             // Handle syncBeat interpolation (the normal 'playing' interpolation)
             const authoritativeTime = getAuthoritativeTime();
-            const remainingOffset = activeInterpolation.initialOffset * (1 - progress);
-            currentTime = authoritativeTime - remainingOffset;
-
+            
             const interpolatedBpm = activeInterpolation.startBpm + (activeInterpolation.endBpm - activeInterpolation.startBpm) * progress;
             if (state.song.bpm !== interpolatedBpm) {
                 updateState({ song: { ...state.song, bpm: interpolatedBpm } });
             }
+
+            // Calculate current authoritative beat and subtract the interpolated beat offset
+            const authoritativeBeats = activeInterpolation.targetBeatDurationMs > 0 
+                ? authoritativeTime / activeInterpolation.targetBeatDurationMs 
+                : 0;
+            
+            const remainingOffsetBeats = activeInterpolation.initialOffsetBeats * (1 - progress);
+            const currentBeats = authoritativeBeats - remainingOffsetBeats;
+            
+            // Reconstruct a perfectly linear currentTime using the changing currentBeatDurationMs
+            const currentBeatDurationMs = getQuarterNoteDurationMs();
+            currentTime = currentBeats * currentBeatDurationMs;
 
             if (elapsed >= activeInterpolation.duration) {
                 activeInterpolation = null;
@@ -391,14 +401,24 @@ export async function handlePlaybackUpdate(newState) {
         startRenderLoop();
     } else if (newState.type === 'synced' && newState.interpolation) {
         const authoritativeTimeNow = getAuthoritativeTime();
-        const offset = authoritativeTimeNow - visualTimeBeforeUpdate;
+        
+        // Calculate the exact beat position before the update occurred
+        const oldBeatDurationMs = getQuarterNoteDurationMs({ bpm: state.song.bpm, bpmUnit: state.song.bpmUnit });
+        const startBeats = oldBeatDurationMs > 0 ? visualTimeBeforeUpdate / oldBeatDurationMs : 0;
+        
+        // Calculate the target authoritative beat position in the new time scale
+        const newBeatDurationMs = getQuarterNoteDurationMs(newState.song);
+        const authoritativeBeatsNow = newBeatDurationMs > 0 ? authoritativeTimeNow / newBeatDurationMs : 0;
+        
+        const offsetBeats = authoritativeBeatsNow - startBeats;
 
         activeInterpolation = {
             localStartTime: performance.now(),
             duration: newState.interpolation.duration,
-            initialOffset: offset,
+            initialOffsetBeats: offsetBeats,
             startBpm: state.song.bpm,
             endBpm: newState.interpolation.endBpm,
+            targetBeatDurationMs: newBeatDurationMs,
             isPausing: false,
         };
         startRenderLoop();

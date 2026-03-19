@@ -7,8 +7,8 @@ import { updateTimelineAndEditorView, rebuildAllEventTimelines, reprogramAllPage
 import { renderLayersPanel } from "./layersPanel.js";
 import { renderPropertiesPanel } from "./propertiesPanel.js";
 import { renderEventsPanel } from "./eventsPanel.js";
-import { buildMeasureMap, pageHasMeasures, findVirtualElementById, serializeElement, deserializeElement, buildLyricsTimingMap, duplicateAndRemap } from './utils.js';
-import { updateEmptyPageHintVisibility } from './rendering.js';
+import { buildMeasureMap, pageHasMeasures, findVirtualElementById, serializeElement, deserializeElement, buildLyricsTimingMap, duplicateAndRemap, findMusicElementsRecursively } from './utils.js';
+import { updateEmptyPageHintVisibility, updateContainerPlaceholder, updateZIndex } from './rendering.js';
 import { generateUUID } from '../renderer/utils.js';
 
 /**
@@ -448,13 +448,32 @@ function handlePageDragStart(e) {
 }
 
 function handlePageDragEnd() {
-    document.querySelectorAll('.page-thumbnail.dragging-page, .drag-over-left, .drag-over-right')
-        .forEach(t => t.classList.remove('dragging-page', 'drag-over-left', 'drag-over-right'));
+    document.querySelectorAll('.page-thumbnail.dragging-page, .drag-over-left, .drag-over-right, .drag-over-page-target')
+        .forEach(t => t.classList.remove('dragging-page', 'drag-over-left', 'drag-over-right', 'drag-over-page-target'));
     updateState({ draggedPageIndex: null, currentDragOperation: null });
 }
 
 function handlePageDragOver(e) {
     e.preventDefault();
+    
+    // Support moving an element from the layers panel directly into a page
+    if (state.currentDragOperation?.type === 'move') {
+        const targetThumb = e.currentTarget;
+        let targetPage;
+        if (targetThumb.classList.contains('thumbnail-page')) {
+            targetPage = state.song.thumbnailPage;
+        } else {
+            const dropIndex = parseInt(targetThumb.dataset.pageIndex, 10);
+            targetPage = state.song.pages[dropIndex];
+        }
+
+        if (!targetPage || targetPage === state.activePage) return;
+
+        document.querySelectorAll('.page-thumbnail.drag-over-page-target').forEach(t => t.classList.remove('drag-over-page-target'));
+        targetThumb.classList.add('drag-over-page-target');
+        return;
+    }
+
     if (state.currentDragOperation?.type !== 'reorder-page' || e.currentTarget.classList.contains('thumbnail-page')) return;
 
     const targetThumb = e.currentTarget;
@@ -470,11 +489,59 @@ function handlePageDragOver(e) {
 }
 
 function handlePageDragLeave(e) {
-    e.currentTarget.classList.remove('drag-over-left', 'drag-over-right');
+    e.currentTarget.classList.remove('drag-over-left', 'drag-over-right', 'drag-over-page-target');
 }
 
 function handlePageDrop(e) {
     e.preventDefault();
+
+    // Handle dropping an element from the layers panel
+    if (state.currentDragOperation?.type === 'move') {
+        const dropTarget = e.currentTarget;
+        dropTarget.classList.remove('drag-over-page-target');
+
+        const draggedElementId = state.currentDragOperation.elementId;
+        const draggedElement = findVirtualElementById(state.activePage, draggedElementId);
+        if (!draggedElement) return;
+
+        let targetPage;
+        if (dropTarget.classList.contains('thumbnail-page')) {
+            targetPage = state.song.thumbnailPage;
+        } else {
+            const dropIndex = parseInt(dropTarget.dataset.pageIndex, 10);
+            targetPage = state.song.pages[dropIndex];
+        }
+
+        if (!targetPage || targetPage === state.activePage) return;
+        const oldParent = draggedElement.parent;
+        if (!oldParent) return;
+
+        const musicElementsToMove = findMusicElementsRecursively(draggedElement);
+        if (['lyrics', 'orchestra', 'audio'].includes(draggedElement.type)) {
+            musicElementsToMove.push(draggedElement);
+        }
+
+        musicElementsToMove.forEach(el => state.activePage.removeMusicElementFromOrder(el));
+        oldParent.removeElement(draggedElement);
+        targetPage.addElement(draggedElement);
+        musicElementsToMove.forEach(el => targetPage.addMusicElementToOrder(el));
+
+        updateContainerPlaceholder(oldParent.domElement);
+        updateZIndex(oldParent.domElement);
+        updateContainerPlaceholder(targetPage.domElement);
+        updateZIndex(targetPage.domElement);
+
+        state.ui.lastSelectedElementIdByPageId[targetPage.id] = draggedElement.id;
+        updateState({ currentDragOperation: null });
+        markAsDirty();
+        rebuildAllEventTimelines();
+        reprogramAllPageTransitions();
+        jumpToPage(targetPage);
+        document.querySelectorAll('.layer-content.drag-invalid, .layer-content.drag-over-before, .layer-content.drag-over-after, .layer-content.drag-over-inside').forEach(el => el.classList.remove('drag-invalid', 'drag-over-before', 'drag-over-after', 'drag-over-inside'));
+        if (state.highlightManager) state.highlightManager.hide();
+        return;
+    }
+
     if (state.currentDragOperation?.type !== 'reorder-page' || state.draggedPageIndex === null || e.currentTarget.classList.contains('thumbnail-page')) return;
 
     const dropTarget = e.currentTarget;

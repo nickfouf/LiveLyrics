@@ -728,7 +728,7 @@ function setupPropertiesPanelDelegation() {
 }
 
 function setupMainMenu() {
-    DOM.newSongBtn.addEventListener('click', () => showPage('main-menu-page'));
+    DOM.newSongBtn.addEventListener('click', () => showPage('new-song-page'));
     DOM.openSongBtn.addEventListener('click', async () => {
         const filePath = await window.editorAPI.openSong();
         if (filePath) {

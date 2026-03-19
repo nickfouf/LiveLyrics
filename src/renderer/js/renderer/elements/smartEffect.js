@@ -8,7 +8,11 @@ import { SmartEffectSrcProperty } from "../properties/smartEffectSrcProperty.js"
 import { TransformProperty } from "../properties/transform.js";
 import { BorderProperty } from "../properties/border.js"; 
 import { BoxShadowProperty } from "../properties/boxShadow.js"; 
-import { BeatPointsProperty } from "../properties/beatPoints.js"; // <--- IMPORTED
+import { BeatPointsProperty } from "../properties/beatPoints.js";
+
+// FIXED IMPORTS: These utilities live in the editor directory
+import { buildMeasureMap, findVirtualElementById } from "../../editor/utils.js";
+import { state } from "../../editor/state.js";
 
 export class VirtualSmartEffect extends VirtualElement {
     #addedInDom = false;
@@ -41,15 +45,16 @@ export class VirtualSmartEffect extends VirtualElement {
         this.iframe.style.display = 'block';
         this.iframe.style.pointerEvents = 'none'; 
 
+        // Send measure map on load
+        this.iframe.addEventListener('load', () => {
+            this.#sendMeasureMap();
+        });
+
         this.domElement.appendChild(this.iframe);
 
         // Add properties
         this.setProperty('src', new SmartEffectSrcProperty(options.src));
-        
-        // --- ADDED: Initialize BeatPointsProperty ---
-        // Defaults to '0' (beat at the start of measure)
         this.setProperty('beatPoints', new BeatPointsProperty(options.beatPoints || '0')); 
-        
         this.setProperty('dimensions', new DimensionsProperty(options.dimensions));
         this.setProperty('margin', new MarginProperty(options.margin));
         this.setProperty('effects', new EffectsProperty(options.effects));
@@ -58,19 +63,54 @@ export class VirtualSmartEffect extends VirtualElement {
         this.setProperty('boxShadow', new BoxShadowProperty(options.boxShadow));
     }
 
-    /**
-     * Intercept the timeline loop to pass the current frame data to the iframe.
-     */
+    #getPage() {
+        let current = this.parent;
+        while (current && current.type !== 'page') {
+            current = current.parent;
+        }
+        return current;
+    }
+
+    #sendMeasureMap() {
+        if (!this.iframe || !this.iframe.contentWindow) return;
+
+        const page = this.#getPage();
+        if (!page) return;
+
+        // Get the globally calculated measure map
+        const globalMeasureMap = buildMeasureMap();
+        const pageIndex = state.song.pages.indexOf(page);
+
+        // We use an Object (Dictionary) so the global index serves as the direct key
+        const measureMapToSend = {};
+
+        // Filter out measures that belong to the page this Smart Effect is on
+        const pageMeasures = globalMeasureMap.filter(m => m.pageIndex === pageIndex);
+
+        pageMeasures.forEach(m => {
+            const el = findVirtualElementById(page, m.elementId);
+            // Key the map by the GLOBAL index so it perfectly matches the timeline progress
+            measureMapToSend[m.globalIndex] = {
+                index: m.globalIndex,
+                type: el ? el.type : 'unknown',
+                numerator: m.timeSignature.numerator,
+                denominator: m.timeSignature.denominator
+            };
+        });
+
+        this.iframe.contentWindow.postMessage({
+            type: 'page-measure-map',
+            measures: measureMapToSend
+        }, '*');
+    }
+
     applyEvents(measureIndex, measureProgress, timingData) {
         super.applyEvents(measureIndex, measureProgress, timingData);
 
-        // Push data to the iframe if it's rendered in the DOM
         if (this.addedInDom && this.iframe && this.iframe.contentWindow) {
             const beatPointsProp = this.getProperty('beatPoints');
             if (beatPointsProp) {
                 const beatPointsStr = beatPointsProp.getBeatPoints().getValue() || '';
-                
-                // Safely parse the comma separated string "0, 0.5, 0.75" into [0.0, 0.5, 0.75]
                 const beatPoints = beatPointsStr
                     .split(',')
                     .map(s => parseFloat(s.trim()))
@@ -79,7 +119,7 @@ export class VirtualSmartEffect extends VirtualElement {
                 this.iframe.contentWindow.postMessage({
                     type: 'timeline-progress',
                     measure: {
-                        index: measureIndex,
+                        index: measureIndex, // This is the Global Index
                         progress: measureProgress,
                         beatPoints: beatPoints
                     }
@@ -92,4 +132,3 @@ export class VirtualSmartEffect extends VirtualElement {
         super.render();
     }
 }
-

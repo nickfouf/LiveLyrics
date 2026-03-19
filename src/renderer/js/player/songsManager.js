@@ -62,13 +62,11 @@ async function restorePlaylist() {
             if (songPlaylist.some(s => s.filePath === filePath)) continue;
             const result = await window.playerAPI.openProject(filePath);
             if (result.success && result.data) {
-                if (songDataHasMeasures(result.data)) {
-                    const songId = `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-                    const fileNameWithExt = filePath.split(/[\\/]/).pop();
-                    const title = fileNameWithExt.replace(/\.lyx$/, '');
-                    songPlaylist.push({ id: songId, title, filePath, songData: result.data });
-                    changed = true;
-                }
+                const songId = `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                const fileNameWithExt = filePath.split(/[\\/]/).pop();
+                const title = fileNameWithExt.replace(/\.lyx$/, '');
+                songPlaylist.push({ id: songId, title, filePath, songData: result.data });
+                changed = true;
             }
         } catch (e) { console.warn(`[SongsManager] Error restoring ${filePath}:`, e); }
     }
@@ -86,35 +84,6 @@ async function restorePlaylist() {
         if (songToLoad) await loadSong(songToLoad.id);
     }
     hideLoading();
-}
-
-function pageDataHasMeasures(pageData) {
-    if (!pageData) return false;
-    function findMusicElements(element) {
-        let elements = [];
-        if (element.type === 'lyrics' || element.type === 'orchestra' || element.type === 'audio') {
-            elements.push(element);
-        }
-        if (element.children && element.children.length > 0) {
-            for (const child of element.children) {
-                elements = elements.concat(findMusicElements(child));
-            }
-        }
-        return elements;
-    }
-    const musicElements = findMusicElements(pageData);
-    for (const el of musicElements) {
-        if (el.type === 'lyrics' && el.properties?.lyricsContent?.measures?.length > 0) return true;
-        if ((el.type === 'orchestra' || el.type === 'audio') && el.properties?.orchestraContent?.measures?.length > 0) {
-            if (el.properties.orchestraContent.measures.some(m => (m.count || 0) > 0)) return true;
-        }
-    }
-    return false;
-}
-
-function songDataHasMeasures(songData) {
-    if (!songData || !songData.pages || songData.pages.length === 0) return false;
-    return songData.pages.some(page => pageDataHasMeasures(page));
 }
 
 function showDefaultPlayerView() {
@@ -318,7 +287,9 @@ function renderPlaylist() {
         `;
         playlistElement.appendChild(li);
     });
-}        async function handleAddSong() {
+}
+
+async function handleAddSong() {
     const filePaths = await window.playerAPI.openSongs();
     if (!filePaths || filePaths.length === 0) return;
     
@@ -344,10 +315,7 @@ function renderPlaylist() {
             const result = await window.playerAPI.openProject(filePath);
             if (!result.success) throw new Error(result.error);
             const songData = result.data;
-            if (!songDataHasMeasures(songData)) {
-                errors.push(`"${filePath.split(/[\\/]/).pop()}" does not contain any measures and cannot be played.`);
-                continue;
-            }
+            
             const songId = `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
             const fileNameWithExt = filePath.split(/[\\/]/).pop();
             const title = fileNameWithExt.replace(/\.lyx$/, '');
@@ -376,7 +344,8 @@ function renderPlaylist() {
         await showAlertDialog('Failed to Open Project(s)', errors.join('\n\n'));
     }
 }
-    export async function addSongFromPath(filePath) {
+
+export async function addSongFromPath(filePath) {
     if (!filePath) return;
     hideAlertDialog();
     const existingSong = songPlaylist.find(song => song.filePath === filePath);
@@ -396,9 +365,7 @@ function renderPlaylist() {
         const result = await window.playerAPI.openProject(filePath);
         if (!result.success) throw new Error(result.error);
         const songData = result.data;
-        if (!songDataHasMeasures(songData)) {
-            throw new Error('The selected song project does not contain any measures and cannot be played.');
-        }
+        
         const songId = `song-${Date.now()}`;
         const title = filePath.split(/[\\/]/).pop().replace(/\.lyx$/, '');
         const newSong = { id: songId, title, filePath, songData };
@@ -489,13 +456,3 @@ export function initSongsManager() {
         savePlaylistPaths();
     });
 }
-
-
-
-
-
-
-
-
-
-
