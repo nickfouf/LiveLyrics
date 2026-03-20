@@ -385,7 +385,14 @@ export async function handlePlaybackUpdate(newState) {
 
     // Update global state for other parts of the app
     const isPlaying = newState.status === 'playing' || !!newState.interpolationOnPause;
-    updateState({ playback: { ...state.playback, isPlaying } });
+    updateState({ 
+        playback: { 
+            ...state.playback, 
+            isPlaying,
+            // Keep the local visual tracker strictly synced to the backend when paused
+            timeAtPause: isPlaying ? state.playback.timeAtPause : newState.timeAtReference
+        } 
+    });
     state.timelineManager.notifyPlaybackState(isPlaying);
 
 

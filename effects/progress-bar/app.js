@@ -3,7 +3,7 @@ const app = new PIXI.Application({
     resizeTo: window,
     antialias: true,
     resolution: window.devicePixelRatio || 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000',
 });
 document.body.appendChild(app.view);
 
@@ -151,13 +151,16 @@ function initScene() {
         uniform sampler2D bgSampler;    
         
         uniform vec2 bgScale;
+        uniform vec2 bgOffset; // NEW: Added offset uniform
         uniform float res;
         uniform float canvasHeight;
         
         void main() {
             vec4 ui = texture2D(uSampler, vTextureCoord);
             vec2 fragCoordPhysical = vec2(gl_FragCoord.x, canvasHeight - gl_FragCoord.y);
-            vec2 bgUV = fragCoordPhysical / bgScale;
+            
+            // NEW: Subtract the offset before dividing by scale
+            vec2 bgUV = (fragCoordPhysical - bgOffset) / bgScale; 
             vec4 bg = texture2D(bgSampler, bgUV);
             
             vec3 burned = max(bg.rgb * ui.a + ui.rgb - ui.a, 0.0);
@@ -168,6 +171,7 @@ function initScene() {
     const burnFilter = new PIXI.Filter(null, linearBurnShader, {
         bgSampler: bgTexture,
         bgScale: [window.innerWidth, window.innerHeight],
+        bgOffset: [0, 0], // NEW: Initialize offset
         res: app.renderer.resolution,
         canvasHeight: app.view.height
     });
@@ -178,13 +182,18 @@ function initScene() {
     function resize() {
         let scale = 1;
         if (bgTexture.width > 1) {
+            // This already achieves object-fit: cover
             scale = Math.max(app.screen.width / bgTexture.width, app.screen.height / bgTexture.height);
             bgSprite.scale.set(scale);
         } else {
             bgTexture.baseTexture.once('loaded', resize);
         }
 
-        bgSprite.x = 0;
+        // NEW: Calculate horizontal center offset
+        const bgX = (app.screen.width - (bgTexture.width * scale)) / 2;
+
+        // Apply object-position: center top
+        bgSprite.x = bgX;
         bgSprite.y = 0;
 
         whiteBgSprite.width = app.screen.width;
@@ -192,6 +201,10 @@ function initScene() {
 
         const res = app.renderer.resolution;
         burnFilter.uniforms.bgScale = [bgTexture.width * scale * res, bgTexture.height * scale * res];
+
+        // NEW: Pass the physical pixel offset to the shader
+        burnFilter.uniforms.bgOffset = [bgX * res, 0];
+
         burnFilter.uniforms.res = res;
         burnFilter.uniforms.canvasHeight = app.view.height;
 
@@ -255,7 +268,7 @@ function initScene() {
     }
 
     window.addEventListener('resize', scheduleResize);
-    resize(); 
+    resize();
 
     // 9. API Integration
     let measureMap = {};
@@ -296,8 +309,8 @@ function initScene() {
                     break;
                 }
             }
-        } 
-        
+        }
+
         // B. Update Timeline Progress - Map it to our specific block
         else if (data.type === 'timeline-progress') {
             if (orchestraStartIndex === -1) {
@@ -342,19 +355,19 @@ function initScene() {
             const note = activeNotes[i];
             const data = note.animData;
 
-            data.life -= 0.009 * delta; 
+            data.life -= 0.009 * delta;
             data.offsetY -= data.speedY * delta;
-            data.time += 0.04 * delta; 
+            data.time += 0.04 * delta;
 
             const t = Math.max(0, (0.8 - data.life) / 0.8);
 
             note.x = titleText.x + data.offsetX + Math.sin(data.time) * 12 * t;
             note.y = titleText.y + data.offsetY;
-            note.rotation = Math.sin(data.time * 0.8) * 0.4 * t; 
+            note.rotation = Math.sin(data.time * 0.8) * 0.4 * t;
 
             if (data.life > 0.8) {
-                note.alpha = (1.0 - data.life) / 0.4; 
-            } else if (data.life < 0.4) { 
+                note.alpha = (1.0 - data.life) / 0.4;
+            } else if (data.life < 0.4) {
                 note.alpha = data.life / 0.4;
             } else {
                 note.alpha = 1;

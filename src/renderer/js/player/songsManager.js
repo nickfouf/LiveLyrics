@@ -218,6 +218,11 @@ export async function handleSongActivated(songMetadata, songData) {
                 bpmUnit: songMetadata.bpmUnit,
                 fonts: songData.fonts || {},
             },
+            playback: {
+                ...state.playback,
+                timeAtPause: 0,
+                songHasEnded: false
+            },
             activePage: null,
             selectedElement: null,
             activeSongId: songMetadata.id,

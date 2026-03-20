@@ -1012,6 +1012,11 @@ async function loadSong(filePath) {
                 bpmUnit: songData.bpmUnit || 'q_note',
                 fonts: songData.fonts || {}
             },
+            playback: {
+                ...state.playback,
+                timeAtPause: 0,
+                songHasEnded: false
+            },
             activePage: null,
             selectedElement: null,
         });

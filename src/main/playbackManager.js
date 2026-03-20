@@ -150,7 +150,8 @@ class PlaybackManager {
             fonts: songData.fonts || {}, // Store font mapping to broadcast to renderers
         };
         this.#measureMap = measureMap; // Store the measure map
-        this.#songData = songData; // Store the full song data        this.#state.timeAtReference = 0;
+        this.#songData = songData; // Store the full song data
+        this.#state.timeAtReference = 0;
         this.#state.referenceTime = 0;
         this.#lastBeatTimestamp = 0;
         this.#syncedMeasureIndex = 0;
@@ -448,6 +449,3 @@ class PlaybackManager {
 }
 
 module.exports = { PlaybackManager };
-
-
-
